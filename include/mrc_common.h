@@ -1,21 +1,19 @@
 #ifndef MRC_COMMON_H
 #define MRC_COMMON_H
 
-#include "prism.h" // in lib/prism/include
 #include <stdint.h>
 
 #ifdef MRC_CUSTOM_ALLOC
   #include <mrc_custom_alloc.h>
 #else
+  #include <stdlib.h>
   #define xmalloc   malloc
+  #define xrealloc  realloc
+  #define xcalloc   calloc
   #define xfree     free
 #endif
 
 typedef void mrb_state;
-
-/* Prism */
-typedef pm_node_t node;
-typedef struct pm_parser_t parser_state;
 
 #ifdef MRB_USE_CXX_ABI
 #define MRC_USE_CXX_ABI

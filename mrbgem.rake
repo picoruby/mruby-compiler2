@@ -1,7 +1,7 @@
 MRuby::Gem::Specification.new('mruby-compiler2') do |spec|
   spec.license = 'MIT'
   spec.author  = 'HASUMI Hitoshi'
-  spec.summary = 'mruby compiler using Prism'
+  spec.summary = 'mruby compiler using a universal parser'
 
   lib_dir = "#{dir}/lib"
   prism_dir = "#{lib_dir}/prism"

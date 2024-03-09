@@ -1,5 +1,6 @@
 #include "prism.h" // in lib/prism/include
 #include "../include/mrc_common.h"
+#include "../include/mrc_parser.h"
 #include "../include/mrc_irep.h"
 #include "../include/mrc_ccontext.h"
 #include "../include/opcode.h"
@@ -9,13 +10,6 @@
 #endif
 
 #define MAXARG_S (1<<16)
-
-typedef struct {
-    pm_parser_t parser;
-    pm_options_t options;
-    pm_string_t input;
-    bool parsed;
-} pm_parse_result_t;
 
 enum looptype {
   LOOP_NORMAL,
@@ -184,57 +178,20 @@ scope_new(codegen_scope *prev, pm_constant_id_list_t *nlv)
   return s;
 }
 
-mrc_code *
-mrc_compile(const char *src)
-{
-  pm_parse_result_t result = { 0 };
-  pm_parser_t *parser = &result.parser;
-  pm_parser_init(parser, pm_string_source(&result.input), pm_string_length(&result.input), &result.options);
-  const pm_node_t *node = pm_parse(parser);
-  // todo: check error
-  // todo: check warnings
-  pm_program_node_t *cast = (pm_program_node_t *)node;
-  codegen_scope *scope = scope_new(NULL, &cast->locals);
-  return scope->iseq;
-}
-
 /*------------------------------------*/
 
 mrc_irep *
-mrc_load_exec(mrb_state *mrb, struct mrc_parser_state *p, mrc_ccontext *c)
+mrc_load_exec(mrc_ccontext *c)
 {
   return NULL;
 }
 
-struct mrc_parser_state*
-mrc_parser_new(mrb_state *mrb)
-{
-  struct mrc_parser_state *p;
-  static const struct mrc_parser_state parser_state_zero = { 0 };
-  p = (struct mrc_parser_state *)xmalloc(sizeof(struct mrc_parser_state));
-  *p = parser_state_zero;
-  p->mrb = mrb;
-  return p;
-}
-
 #ifndef MRC_NO_STDIO
-static struct mrc_parser_state *
-mrc_parse_file_continue(mrb_state *mrb, const char *filename, const void *prebuf, size_t prebufsize, mrc_ccontext *c)
+static mrc_ccontext *
+mrc_parse_file_cxt(const char *filename, mrc_ccontext *c)
 {
-  struct mrc_parser_state *p;
-
-  p = mrc_parser_new(mrb);
-  if (!p) return NULL;
-  if (prebuf) {
-    p->s = (const char*)prebuf;
-    p->send = (const char*)prebuf + prebufsize;
-  }
-  else {
-    p->s = p->send = NULL;
-  }
-  p->filename = filename;
-
   pm_parser_t parser;
+  c->p = &parser;
   pm_string_t string;
 
   pm_string_mapped_init(&string, filename);
@@ -250,30 +207,21 @@ mrc_parse_file_continue(mrb_state *mrb, const char *filename, const void *prebuf
   pm_node_destroy(&parser, root);
   pm_parser_free(&parser);
 
-  return p;
-}
-
-struct mrc_parser_state*
-mrc_parse_file(mrb_state *mrb, const char *filename, mrc_ccontext *c)
-{
-  return mrc_parse_file_continue(mrb, filename, NULL, 0, c);
+  return c;
 }
 
 mrc_irep *
-mrc_load_file_cxt(mrb_state *mrb, const char *filename, mrc_ccontext *c)
+mrc_load_file_cxt(const char *filename, mrc_ccontext *c)
 {
-  return mrc_load_exec(mrb, mrc_parse_file(mrb, filename, c), c);
+  return mrc_load_exec(mrc_parse_file_cxt(filename, c));
 }
 #endif
 
-struct mrc_parser_state*
-mrc_parse_string(mrb_state *mrb, const uint8_t *source, size_t length, mrc_ccontext *c)
+static struct mrc_ccontext *
+mrc_parse_string_cxt(const uint8_t *source, size_t length, mrc_ccontext *c)
 {
-  struct mrc_parser_state *p;
-  p = mrc_parser_new(mrb);
-  p->filename = c->filename;
-
   pm_parser_t parser;
+  c->p = &parser;
   pm_string_t string;
 
   pm_string_owned_init(&string, (uint8_t *)source, length);
@@ -289,12 +237,11 @@ mrc_parse_string(mrb_state *mrb, const uint8_t *source, size_t length, mrc_ccont
   pm_node_destroy(&parser, root);
   pm_parser_free(&parser);
 
-  return p;
+  return c;
 }
 
 mrc_irep *
-mrc_load_string_cxt(mrb_state *mrb, const uint8_t *source, size_t length, mrc_ccontext *c)
+mrc_load_string_cxt(const uint8_t *source, size_t length, mrc_ccontext *c)
 {
-  return mrc_load_exec(mrb, mrc_parse_string(mrb, source, length, c), c);
+  return mrc_load_exec(mrc_parse_string_cxt(source, length, c));
 }
-
