@@ -4,6 +4,13 @@
 #include "prism.h" // in lib/prism/include
 #include <stdint.h>
 
+#ifdef MRC_CUSTOM_ALLOC
+  #include <mrc_custom_alloc.h>
+#else
+  #define xmalloc   malloc
+  #define xfree     free
+#endif
+
 typedef void mrb_state;
 
 /* Prism */

@@ -200,13 +200,101 @@ mrc_compile(const char *src)
 
 /*------------------------------------*/
 
-void
-mrc_parser_set_filename(struct mrc_parser_state *p, const char *f)
-{
-}
-
 mrc_irep *
-mrc_load_file_cxt(mrb_state *mrb, FILE *f, mrc_ccontext *c)
+mrc_load_exec(mrb_state *mrb, struct mrc_parser_state *p, mrc_ccontext *c)
 {
   return NULL;
 }
+
+struct mrc_parser_state*
+mrc_parser_new(mrb_state *mrb)
+{
+  struct mrc_parser_state *p;
+  static const struct mrc_parser_state parser_state_zero = { 0 };
+  p = (struct mrc_parser_state *)xmalloc(sizeof(struct mrc_parser_state));
+  *p = parser_state_zero;
+  p->mrb = mrb;
+  return p;
+}
+
+#ifndef MRC_NO_STDIO
+static struct mrc_parser_state *
+mrc_parse_file_continue(mrb_state *mrb, const char *filename, const void *prebuf, size_t prebufsize, mrc_ccontext *c)
+{
+  struct mrc_parser_state *p;
+
+  p = mrc_parser_new(mrb);
+  if (!p) return NULL;
+  if (prebuf) {
+    p->s = (const char*)prebuf;
+    p->send = (const char*)prebuf + prebufsize;
+  }
+  else {
+    p->s = p->send = NULL;
+  }
+  p->filename = filename;
+
+  pm_parser_t parser;
+  pm_string_t string;
+
+  pm_string_mapped_init(&string, filename);
+  pm_parser_init(&parser, string.source, string.length, NULL);
+  pm_node_t *root = pm_parse(&parser);
+  { // Debug print
+    pm_buffer_t buffer = { 0 };
+    pm_prettyprint(&buffer, &parser, root);
+    printf("length: %ld\n%s\n", buffer.length, buffer.value);
+    pm_buffer_free(&buffer);
+  }
+  pm_string_free(&string);
+  pm_node_destroy(&parser, root);
+  pm_parser_free(&parser);
+
+  return p;
+}
+
+struct mrc_parser_state*
+mrc_parse_file(mrb_state *mrb, const char *filename, mrc_ccontext *c)
+{
+  return mrc_parse_file_continue(mrb, filename, NULL, 0, c);
+}
+
+mrc_irep *
+mrc_load_file_cxt(mrb_state *mrb, const char *filename, mrc_ccontext *c)
+{
+  return mrc_load_exec(mrb, mrc_parse_file(mrb, filename, c), c);
+}
+#endif
+
+struct mrc_parser_state*
+mrc_parse_string(mrb_state *mrb, const uint8_t *source, size_t length, mrc_ccontext *c)
+{
+  struct mrc_parser_state *p;
+  p = mrc_parser_new(mrb);
+  p->filename = c->filename;
+
+  pm_parser_t parser;
+  pm_string_t string;
+
+  pm_string_owned_init(&string, (uint8_t *)source, length);
+  pm_parser_init(&parser, string.source, string.length, NULL);
+  pm_node_t *root = pm_parse(&parser);
+  { // Debug print
+    pm_buffer_t buffer = { 0 };
+    pm_prettyprint(&buffer, &parser, root);
+    printf("length: %ld\n%s\n", buffer.length, buffer.value);
+    pm_buffer_free(&buffer);
+  }
+  pm_string_free(&string);
+  pm_node_destroy(&parser, root);
+  pm_parser_free(&parser);
+
+  return p;
+}
+
+mrc_irep *
+mrc_load_string_cxt(mrb_state *mrb, const uint8_t *source, size_t length, mrc_ccontext *c)
+{
+  return mrc_load_exec(mrb, mrc_parse_string(mrb, source, length, c), c);
+}
+

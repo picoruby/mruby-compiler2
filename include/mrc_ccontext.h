@@ -28,8 +28,10 @@ typedef struct mrc_ccontext {
 
 // TODO: move somewhere else
 struct mrc_parser_state {
+  mrb_state *mrb;
   mrc_ccontext *cxt;
-  FILE *f;
+  const char *filename;
+  const char *s, *send;
 };
 
 // TODO: FIX
