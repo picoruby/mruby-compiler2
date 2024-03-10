@@ -7,11 +7,9 @@
 
 MRC_BEGIN_DECL
 
-struct mrc_parser_state;
-
 typedef struct mrc_ccontext {
-  parser_state *p;
   mrb_state *mrb;
+  mrc_parser_state *p;
   mrc_sym *syms;
   int slen;
   char *filename;

@@ -64,7 +64,7 @@ typedef struct scope {
 
   int debug_start_pos;
   uint16_t filename_index;
-  parser_state* parser;
+  mrc_ccontext* c;
 
   int rlev;                     /* recursion levels */
 } codegen_scope;
@@ -172,7 +172,7 @@ scope_new(codegen_scope *prev, pm_constant_id_list_t *nlv)
   else {
     s->irep->debug_info = NULL;
   }
-  s->parser = prev->parser;
+  s->c = prev->c;
   s->filename_index = prev->filename_index;
   s->rlev = prev->rlev + 1;
   return s;
@@ -181,67 +181,52 @@ scope_new(codegen_scope *prev, pm_constant_id_list_t *nlv)
 /*------------------------------------*/
 
 mrc_irep *
-mrc_load_exec(mrc_ccontext *c)
+mrc_load_exec(mrc_node *root, mrc_ccontext *c)
 {
+  { // Debug print
+    pm_buffer_t buffer = { 0 };
+    pm_prettyprint(&buffer, c->p, root);
+    printf("buffer length: %ld\n%s\n", buffer.length, buffer.value);
+    pm_buffer_free(&buffer);
+  }
+
   return NULL;
 }
 
 #ifndef MRC_NO_STDIO
-static mrc_ccontext *
+static mrc_node *
 mrc_parse_file_cxt(const char *filename, mrc_ccontext *c)
 {
-  pm_parser_t parser;
-  c->p = &parser;
   pm_string_t string;
-
   pm_string_mapped_init(&string, filename);
-  pm_parser_init(&parser, string.source, string.length, NULL);
-  pm_node_t *root = pm_parse(&parser);
-  { // Debug print
-    pm_buffer_t buffer = { 0 };
-    pm_prettyprint(&buffer, &parser, root);
-    printf("length: %ld\n%s\n", buffer.length, buffer.value);
-    pm_buffer_free(&buffer);
-  }
-  pm_string_free(&string);
-  pm_node_destroy(&parser, root);
-  pm_parser_free(&parser);
-
-  return c;
+  pm_parser_init(c->p, string.source, string.length, NULL);
+  return pm_parse(c->p);
 }
 
 mrc_irep *
 mrc_load_file_cxt(const char *filename, mrc_ccontext *c)
 {
-  return mrc_load_exec(mrc_parse_file_cxt(filename, c));
+  mrc_node *root = mrc_parse_file_cxt(filename, c);
+  mrc_irep *irep = mrc_load_exec(root, c);
+  pm_node_destroy(c->p, root);
+  return irep;
 }
 #endif
 
-static struct mrc_ccontext *
+static mrc_node *
 mrc_parse_string_cxt(const uint8_t *source, size_t length, mrc_ccontext *c)
 {
-  pm_parser_t parser;
-  c->p = &parser;
   pm_string_t string;
-
   pm_string_owned_init(&string, (uint8_t *)source, length);
-  pm_parser_init(&parser, string.source, string.length, NULL);
-  pm_node_t *root = pm_parse(&parser);
-  { // Debug print
-    pm_buffer_t buffer = { 0 };
-    pm_prettyprint(&buffer, &parser, root);
-    printf("length: %ld\n%s\n", buffer.length, buffer.value);
-    pm_buffer_free(&buffer);
-  }
-  pm_string_free(&string);
-  pm_node_destroy(&parser, root);
-  pm_parser_free(&parser);
-
-  return c;
+  pm_parser_init(c->p, string.source, string.length, NULL);
+  return pm_parse(c->p);
 }
 
 mrc_irep *
 mrc_load_string_cxt(const uint8_t *source, size_t length, mrc_ccontext *c)
 {
-  return mrc_load_exec(mrc_parse_string_cxt(source, length, c));
+  mrc_node *root = mrc_parse_string_cxt(source, length, c);
+  mrc_irep *irep = mrc_load_exec(root, c);
+  pm_node_destroy(c->p, root);
+  return irep;
 }
