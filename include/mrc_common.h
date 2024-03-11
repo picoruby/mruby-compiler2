@@ -20,20 +20,28 @@ typedef void mrb_state;
 #endif
 
 #ifdef __cplusplus
-#ifdef MRC_USE_CXX_ABI
-#define MRC_BEGIN_DECL
-#define MRC_END_DECL
+  #ifdef MRC_USE_CXX_ABI
+    #define MRC_BEGIN_DECL
+    #define MRC_END_DECL
+  #else
+    #define MRC_BEGIN_DECL extern "C" {
+    #define MRC_END_DECL }
+  #endif
 #else
-# define MRC_BEGIN_DECL extern "C" {
-# define MRC_END_DECL }
-#endif
-#else
-/** Start declarations in C mode */
-# define MRC_BEGIN_DECL
-/** End declarations in C mode */
-# define MRC_END_DECL
+  /** Start declarations in C mode */
+  # define MRC_BEGIN_DECL
+  /** End declarations in C mode */
+  # define MRC_END_DECL
 #endif
 
+#ifdef MRC_DEBUG
+  #include <assert.h>
+  #define mrc_assert(p) assert(p)
+  #define mrc_assert_int_fit(t1,n,t2,max) assert((n)>=0 && ((sizeof(n)<=sizeof(t2))||(n<=(t1)(max))))
+#else
+  #define mrc_assert(p) ((void)0)
+  #define mrc_assert_int_fit(t1,n,t2,max) ((void)0)
+#endif
 
 #if defined(__cplusplus) || (defined(__bool_true_false_are_defined) && __bool_true_false_are_defined)
 typedef bool mrc_bool;
@@ -57,6 +65,26 @@ typedef uint8_t mrc_bool;
 # ifndef TRUE
 #  define TRUE 1
 # endif
+#endif
+
+#if defined(MRC_INT64)
+  typedef int64_t mrc_int;
+  typedef uint64_t mrb_uint;
+  #define MRC_INT_BIT 64
+  #define MRC_INT_MIN INT64_MIN
+  #define MRC_INT_MAX INT64_MAX
+  #define MRC_PRIo PRIo64
+  #define MRC_PRId PRId64
+  #define MRC_PRIx PRIx64
+#else
+  typedef int32_t mrc_int;
+  typedef uint32_t mrc_uint;
+  #define MRC_INT_BIT 32
+  #define MRC_INT_MIN INT32_MIN
+  #define MRC_INT_MAX INT32_MAX
+  #define MRC_PRIo PRIo32
+  #define MRC_PRId PRId32
+  #define MRC_PRIx PRIx32
 #endif
 
 #ifdef MRB_NO_FLOAT

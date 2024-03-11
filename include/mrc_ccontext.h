@@ -1,14 +1,16 @@
-#ifndef MRC_CONTEXT_H
-#define MRC_CONTEXT_H
+#ifndef MRC_CCONTEXT_H
+#define MRC_CCONTEXT_H
 
 #include "mrc_common.h"
 #include "mrc_parser.h"
+#include "mrc_throw.h"
 #include <stddef.h>
 
 MRC_BEGIN_DECL
 
 typedef struct mrc_ccontext {
   mrb_state *mrb;
+  struct mrc_jmpbuf *jmp;
   mrc_parser_state *p;
   mrc_sym *syms;
   int slen;
@@ -32,4 +34,4 @@ void mrc_ccontext_free(mrc_ccontext *c);
 
 MRC_END_DECL
 
-#endif // MRC_CONTEXT_H
+#endif // MRC_CCONTEXT_H
