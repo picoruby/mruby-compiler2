@@ -1,10 +1,10 @@
 
 #include <string.h>
-#include "mrc_irep.h"
-#include "mrc_ccontext.h"
-#include "mrc_parser.h"
-#include "mrc_throw.h"
-#include "mrc_opcode.h"
+#include "../include/mrc_irep.h"
+#include "../include/mrc_ccontext.h"
+#include "../include/mrc_parser_util.h"
+#include "../include/mrc_throw.h"
+#include "../include/mrc_opcode.h"
 
 #ifndef MRC_CODEGEN_LEVEL_MAX
 #define MRC_CODEGEN_LEVEL_MAX 256

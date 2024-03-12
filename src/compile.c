@@ -1,6 +1,6 @@
 #include "prism.h" // in lib/prism/include
 #include "../include/mrc_common.h"
-#include "../include/mrc_parser.h"
+#include "../include/mrc_parser_util.h"
 #include "../include/mrc_irep.h"
 #include "../include/mrc_ccontext.h"
 #include "../include/mrc_codegen.h"
@@ -16,7 +16,7 @@
 //  }
 //}
 
-mrc_irep *
+static mrc_irep *
 mrc_load_exec(mrc_ccontext *c, mrc_node *root)
 {
   mrc_irep *irep;
@@ -39,7 +39,7 @@ mrc_load_exec(mrc_ccontext *c, mrc_node *root)
     mrc_codedump_all(c, irep);
   }
 
-  return NULL; // ?????
+  return irep;
 }
 
 #ifndef MRC_NO_STDIO

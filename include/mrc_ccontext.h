@@ -2,11 +2,27 @@
 #define MRC_CCONTEXT_H
 
 #include "mrc_common.h"
-#include "mrc_parser.h"
 #include "mrc_throw.h"
 #include <stddef.h>
 
 MRC_BEGIN_DECL
+
+#if defined(MRC_PARSER_PRISM)
+  #include "prism.h" // in lib/prism/include
+  typedef pm_node_t mrc_node;
+  typedef pm_parser_t mrc_parser_state;
+  typedef pm_constant_id_list_t mrc_constant_id_list;
+  typedef struct {
+    pm_parser_t parser;
+    pm_options_t options;
+    pm_string_t input;
+    bool parsed;
+  } pm_parse_result_t;
+#elif defined(MRC_PARSER_KANEKO)
+  // TODO
+#else
+  #error "No parser defined. Please define MRC_PARSER_PRISM or MRC_PARSER_KANEKO."
+#endif
 
 typedef struct mrc_ccontext {
   mrb_state *mrb;

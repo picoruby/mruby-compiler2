@@ -1,8 +1,10 @@
-#include <mrc_common.h>
-#include <mrc_ccontext.h>
-#include <mrc_irep.h>
-#include <mrc_dump.h>
-#include <mrc_opcode.h>
+#include <stdio.h>
+#include <inttypes.h>
+#include "../include/mrc_common.h"
+#include "../include/mrc_ccontext.h"
+#include "../include/mrc_irep.h"
+#include "../include/mrc_dump.h"
+#include "../include/mrc_opcode.h"
 
 const char *
 mrc_sym_dump(mrc_ccontext *c, mrc_sym sym)
