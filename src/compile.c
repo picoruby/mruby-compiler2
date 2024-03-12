@@ -16,7 +16,7 @@
 //}
 
 mrc_irep *
-mrc_load_exec(mrc_node *root, mrc_ccontext *c)
+mrc_load_exec(mrc_ccontext *c, mrc_node *root)
 {
   { // Debug print for development
     pm_buffer_t buffer = { 0 };
@@ -42,7 +42,7 @@ mrc_load_exec(mrc_node *root, mrc_ccontext *c)
 
 #ifndef MRC_NO_STDIO
 static mrc_node *
-mrc_parse_file_cxt(const char *filename, mrc_ccontext *c)
+mrc_parse_file_cxt(mrc_ccontext *c, const char *filename)
 {
   pm_string_t string;
   pm_string_mapped_init(&string, filename);
@@ -51,17 +51,17 @@ mrc_parse_file_cxt(const char *filename, mrc_ccontext *c)
 }
 
 mrc_irep *
-mrc_load_file_cxt(const char *filename, mrc_ccontext *c)
+mrc_load_file_cxt(mrc_ccontext *c, const char *filename)
 {
-  mrc_node *root = mrc_parse_file_cxt(filename, c);
-  mrc_irep *irep = mrc_load_exec(root, c);
+  mrc_node *root = mrc_parse_file_cxt(c, filename);
+  mrc_irep *irep = mrc_load_exec(c, root);
   pm_node_destroy(c->p, root);
   return irep;
 }
 #endif
 
 static mrc_node *
-mrc_parse_string_cxt(const uint8_t *source, size_t length, mrc_ccontext *c)
+mrc_parse_string_cxt(mrc_ccontext *c, const uint8_t *source, size_t length)
 {
   pm_string_t string;
   pm_string_owned_init(&string, (uint8_t *)source, length);
@@ -70,10 +70,10 @@ mrc_parse_string_cxt(const uint8_t *source, size_t length, mrc_ccontext *c)
 }
 
 mrc_irep *
-mrc_load_string_cxt(const uint8_t *source, size_t length, mrc_ccontext *c)
+mrc_load_string_cxt(mrc_ccontext *c, const uint8_t *source, size_t length)
 {
-  mrc_node *root = mrc_parse_string_cxt(source, length, c);
-  mrc_irep *irep = mrc_load_exec(root, c);
+  mrc_node *root = mrc_parse_string_cxt(c, source, length);
+  mrc_irep *irep = mrc_load_exec(c, root);
   pm_node_destroy(c->p, root);
   return irep;
 }
