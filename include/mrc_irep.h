@@ -82,11 +82,22 @@ struct mrc_insn_data {
   uint8_t insn;
   uint32_t a;
   uint16_t b;
-  uint16_t c;
+  uint16_t cc;
   const mrc_code *addr;
 };
 
+#define mrc_irep_catch_handler_pack(n, v)   uint32_to_bin(n, v)
+#define mrc_irep_catch_handler_unpack(v)    bin_to_uint32(v)
+
 void mrc_irep_remove_lv(mrb_state *mrb, mrc_irep *irep);
+
+#define MRC_ASPEC_REQ(a)          (((a) >> 18) & 0x1f)
+#define MRC_ASPEC_OPT(a)          (((a) >> 13) & 0x1f)
+#define MRC_ASPEC_REST(a)         (((a) >> 12) & 0x1)
+#define MRC_ASPEC_POST(a)         (((a) >> 7) & 0x1f)
+#define MRC_ASPEC_KEY(a)          (((a) >> 2) & 0x1f)
+#define MRC_ASPEC_KDICT(a)        (((a) >> 1) & 0x1)
+#define MRC_ASPEC_BLOCK(a)        ((a) & 1)
 
 MRC_END_DECL
 

@@ -9,7 +9,7 @@
 
 enum mrb_insn {
 #define OPCODE(x,_) OP_ ## x,
-#include "ops.h"
+#include "mrc_ops.h"
 #undef OPCODE
 };
 
@@ -30,9 +30,9 @@ enum mrb_insn {
 #define FETCH_Z() /* nothing */
 #define FETCH_B() do {a=READ_B();} while (0)
 #define FETCH_BB() do {a=READ_B(); b=READ_B();} while (0)
-#define FETCH_BBB() do {a=READ_B(); b=READ_B(); c=READ_B();} while (0)
+#define FETCH_BBB() do {a=READ_B(); b=READ_B(); cc=READ_B();} while (0)
 #define FETCH_BS() do {a=READ_B(); b=READ_S();} while (0)
-#define FETCH_BSS() do {a=READ_B(); b=READ_S(); c=READ_S();} while (0)
+#define FETCH_BSS() do {a=READ_B(); b=READ_S(); cc=READ_S();} while (0)
 #define FETCH_S() do {a=READ_S();} while (0)
 #define FETCH_W() do {a=READ_W();} while (0)
 
@@ -40,9 +40,9 @@ enum mrb_insn {
 #define FETCH_Z_1() FETCH_Z()
 #define FETCH_B_1() FETCH_S()
 #define FETCH_BB_1() do {a=READ_S(); b=READ_B();} while (0)
-#define FETCH_BBB_1() do {a=READ_S(); b=READ_B(); c=READ_B();} while (0)
+#define FETCH_BBB_1() do {a=READ_S(); b=READ_B(); cc=READ_B();} while (0)
 #define FETCH_BS_1() do {a=READ_S(); b=READ_S();} while (0)
-#define FETCH_BSS_1() do {a=READ_S(); b=READ_S();c=READ_S();} while (0)
+#define FETCH_BSS_1() do {a=READ_S(); b=READ_S();cc=READ_S();} while (0)
 #define FETCH_S_1() FETCH_S()
 #define FETCH_W_1() FETCH_W()
 
@@ -50,7 +50,7 @@ enum mrb_insn {
 #define FETCH_Z_2() FETCH_Z()
 #define FETCH_B_2() FETCH_B()
 #define FETCH_BB_2() do {a=READ_B(); b=READ_S();} while (0)
-#define FETCH_BBB_2() do {a=READ_B(); b=READ_S(); c=READ_B();} while (0)
+#define FETCH_BBB_2() do {a=READ_B(); b=READ_S(); cc=READ_B();} while (0)
 #define FETCH_BS_2() FETCH_BS()
 #define FETCH_BSS_2() FETCH_BSS()
 #define FETCH_S_2() FETCH_S()
@@ -60,7 +60,7 @@ enum mrb_insn {
 #define FETCH_Z_3() FETCH_Z()
 #define FETCH_B_3() FETCH_B()
 #define FETCH_BB_3() do {a=READ_S(); b=READ_S();} while (0)
-#define FETCH_BBB_3() do {a=READ_S(); b=READ_S(); c=READ_B();} while (0)
+#define FETCH_BBB_3() do {a=READ_S(); b=READ_S(); cc=READ_B();} while (0)
 #define FETCH_BS_3() do {a=READ_S(); b=READ_S();} while (0)
 #define FETCH_BSS_3() FETCH_BSS_1()
 #define FETCH_S_3() FETCH_S()

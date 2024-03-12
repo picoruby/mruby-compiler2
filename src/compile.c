@@ -5,7 +5,8 @@
 #include "../include/mrc_ccontext.h"
 #include "../include/mrc_codegen.h"
 #include "../include/mrc_dump.h"
-#include "../include/opcode.h"
+#include "../include/mrc_codedump.h"
+#include "../include/mrc_opcode.h"
 
 //static void
 //mrc_assert(int cond)
@@ -18,13 +19,6 @@
 mrc_irep *
 mrc_load_exec(mrc_ccontext *c, mrc_node *root)
 {
-  { // Debug print for development
-    pm_buffer_t buffer = { 0 };
-    pm_prettyprint(&buffer, c->p, root);
-    printf("buffer length: %ld\n%s\n", buffer.length, buffer.value);
-    pm_buffer_free(&buffer);
-  }
-
   mrc_irep *irep;
   //if (parse error) {
   //  print error message
@@ -35,7 +29,15 @@ mrc_load_exec(mrc_ccontext *c, mrc_node *root)
   //  print error message
   //  return NULL;
   //}
-  mrc_codedump_all(c, irep);
+  if (c->dump_result) {
+    {
+      pm_buffer_t buffer = { 0 };
+      pm_prettyprint(&buffer, c->p, root);
+      printf("\n(ast buffer length: %ld)\n%s\n", buffer.length, buffer.value);
+      pm_buffer_free(&buffer);
+    }
+    mrc_codedump_all(c, irep);
+  }
 
   return NULL; // ?????
 }

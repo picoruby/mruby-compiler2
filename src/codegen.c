@@ -4,7 +4,7 @@
 #include "mrc_ccontext.h"
 #include "mrc_parser.h"
 #include "mrc_throw.h"
-#include "opcode.h"
+#include "mrc_opcode.h"
 
 #ifndef MRC_CODEGEN_LEVEL_MAX
 #define MRC_CODEGEN_LEVEL_MAX 256
@@ -321,7 +321,7 @@ static mrc_codegen_scope *
 scope_new(mrc_codegen_scope *prev, mrc_constant_id_list *nlv)
 {
   static const mrc_codegen_scope codegen_scope_zero = { 0 };
-  mrc_codegen_scope *s = (mrc_codegen_scope *)xcalloc(1, sizeof(mrc_codegen_scope));
+  mrc_codegen_scope *s = (mrc_codegen_scope *)xmalloc(sizeof(mrc_codegen_scope));
   if (!s) {
     if (prev)
       codegen_error(prev, "unexpected scope");
@@ -381,6 +381,116 @@ no_optimize(mrc_codegen_scope *s)
   return FALSE;
 }
 
+struct mrc_insn_data
+mrc_decode_insn(const mrc_code *pc)
+{
+  struct mrc_insn_data data = { 0 };
+  if (pc == 0) return data;
+  data.addr = pc;
+  mrc_code insn = READ_B();
+  uint16_t a = 0;
+  uint16_t b = 0;
+  uint16_t cc = 0;
+
+  switch (insn) {
+#define FETCH_Z() /* empty */
+#define OPCODE(i,x) case OP_ ## i: FETCH_ ## x (); break;
+#include "mrc_ops.h"
+#undef OPCODE
+  }
+  switch (insn) {
+  case OP_EXT1:
+    insn = READ_B();
+    switch (insn) {
+#define OPCODE(i,x) case OP_ ## i: FETCH_ ## x ## _1 (); break;
+#include "mrc_ops.h"
+#undef OPCODE
+    }
+    break;
+  case OP_EXT2:
+    insn = READ_B();
+    switch (insn) {
+#define OPCODE(i,x) case OP_ ## i: FETCH_ ## x ## _2 (); break;
+#include "mrc_ops.h"
+#undef OPCODE
+    }
+    break;
+  case OP_EXT3:
+    insn = READ_B();
+    switch (insn) {
+#define OPCODE(i,x) case OP_ ## i: FETCH_ ## x ## _3 (); break;
+#include "mrc_ops.h"
+#undef OPCODE
+    }
+    break;
+  default:
+    break;
+  }
+  data.insn = insn;
+  data.a = a;
+  data.b = b;
+  data.cc = cc;
+  return data;
+}
+
+#undef OPCODE
+#define Z 1
+#define S 3
+#define W 4
+#define OPCODE(_,x) x,
+/* instruction sizes */
+static uint8_t mrc_insn_size[] = {
+#define B 2
+#define BB 3
+#define BBB 4
+#define BS 4
+#define BSS 6
+#include "mrc_ops.h"
+#undef B
+#undef BB
+#undef BBB
+#undef BS
+#undef BSS
+};
+/* EXT1 instruction sizes */
+static uint8_t mrc_insn_size1[] = {
+#define B 3
+#define BB 4
+#define BBB 5
+#define BS 5
+#define BSS 7
+#include "mrc_ops.h"
+#undef B
+#undef BS
+#undef BSS
+};
+/* EXT2 instruction sizes */
+static uint8_t mrc_insn_size2[] = {
+#define B 2
+#define BS 4
+#define BSS 6
+#include "mrc_ops.h"
+#undef B
+#undef BB
+#undef BBB
+#undef BS
+#undef BSS
+};
+/* EXT3 instruction sizes */
+#define B 3
+#define BB 5
+#define BBB 6
+#define BS 5
+#define BSS 7
+static uint8_t mrc_insn_size3[] = {
+#include "mrc_ops.h"
+};
+#undef B
+#undef BB
+#undef BBB
+#undef BS
+#undef BSS
+#undef OPCODE
 static mrc_bool
 no_peephole(mrc_codegen_scope *s)
 {
@@ -475,7 +585,7 @@ gen_return(mrc_codegen_scope *s, uint8_t op, uint16_t src)
     genop_1(s, op, src);
 //  }
 //  else {
-//    struct mrb_insn_data data = mrb_last_insn(s);
+//    struct mrc_insn_data data = mrc_last_insn(s);
 //
 //    if (data.insn == OP_MOVE && src == data.a) {
 //      rewind_pc(s);
@@ -490,9 +600,42 @@ gen_return(mrc_codegen_scope *s, uint8_t op, uint16_t src)
 static void
 scope_finish(mrc_codegen_scope *s)
 {
-  for (int i=0; i<s->pc; i++) {
-    printf("%02x ", s->iseq[i]);
+  mrc_irep *irep = s->irep;
+
+  if (0xff < s->nlocals) {
+    codegen_error(s, "too many local variables");
   }
+  irep->flags = 0;
+  if (s->iseq) {
+    size_t catchsize = sizeof(struct mrc_irep_catch_handler) * irep->rlen;
+    irep->iseq = (const mrc_code *)codegen_realloc(s, s->iseq, sizeof(mrc_code)*s->pc + catchsize);
+    irep->ilen = s->pc;
+    if (0 < irep->clen) {
+      memcpy((void *)(irep->iseq + irep->ilen), s->catch_table, catchsize);
+    }
+  }
+  else {
+    irep->clen = 0;
+  }
+  xfree(s->catch_table);
+  s->catch_table = NULL;
+  irep->pool = (const mrc_pool_value *)codegen_realloc(s, s->pool, sizeof(mrc_pool_value)*irep->plen);
+  irep->syms = (const mrc_sym *)codegen_realloc(s, s->syms, sizeof(mrc_sym)*irep->slen);
+  irep->reps = (const mrc_irep **)codegen_realloc(s, s->reps, sizeof(mrc_irep *)*irep->rlen);
+  if (s->filename_sym) {
+    // todo
+    //mrc_sym fname = mrc_parser_get_filename(s->parser, s->filename_index);
+    //const char *filename = mrc_sym_name_len(s->mrb, fname, NULL);
+
+    //mrc_debug_info_append_file(s->mrb, s->irep->debug_info,
+    //                           filename, s->lines, s->debug_start_pos, s->pc);
+  }
+  xfree(s->lines);
+  irep->nlocals = s->nlocals;
+  irep->nregs = s->nregs;
+
+  //mrb_gc_arena_restore(mrb, s->ai);
+  //mrb_pool_close(s->mpool);
 }
 
 static int
@@ -603,7 +746,6 @@ generate_code(mrc_ccontext *c, mrc_node *node, int val)
   mrc_codegen_scope *scope = scope_new(NULL, NULL);
   struct mrc_jmpbuf *prev_jmp = c->jmp; // FIXME: c->jmp is not initialized
   struct mrc_jmpbuf jmpbuf;
-  mrc_irep *irep;
 
   c->jmp = &jmpbuf;
 
@@ -612,15 +754,13 @@ generate_code(mrc_ccontext *c, mrc_node *node, int val)
   //scppe->filename_index = c->filename_index;
 
   MRC_TRY(c->jmp) {
-    /* prepare irep */
     codegen(scope, node, val);
-//    irep = mrc_irep_new(c, scope->irep);
     //proc->c = NULL;
     //if (mrb->c->cibase && mrb->c->cibase->proc == proc->upper) {
     //  proc->upper = NULL;
     //}
     c->jmp = prev_jmp;
-    return irep;
+    return scope->irep;
   }
   MRC_CATCH(c->jmp) {
     c->jmp = prev_jmp;
