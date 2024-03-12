@@ -554,6 +554,7 @@ gen_assignment(mrc_codegen_scope *s, mrc_node *tree, mrc_node *rhs, int sp, int 
       break;
     }
   }
+  if (val) push();
 }
 
 static void
@@ -675,7 +676,6 @@ scope_body(mrc_codegen_scope *s, mrc_node *tree, int val)
 static void
 codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
 {
-//  int nt;
   int rlev = s->rlev;
 
   if (!tree) {
@@ -701,9 +701,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
   //  s->filename_sym = mrc_parser_get_filename(s->c->p, tree->filename_index);
   //}
 
-//  nt = nint(tree->car);
 //  s->lineno = tree->lineno;
-//  tree = tree->cdr;
   switch (PM_NODE_TYPE(tree)) {
     case PM_PROGRAM_NODE: {
       // todo: lvar
@@ -723,6 +721,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     {
       pm_local_variable_write_node_t *cast = (pm_local_variable_write_node_t *)tree;
       gen_assignment(s, tree, (mrc_node *)cast->value, 0, val);
+      break;
     }
     case PM_INTEGER_NODE:
     {
