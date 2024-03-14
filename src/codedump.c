@@ -5,11 +5,26 @@
 #include "../include/mrc_irep.h"
 #include "../include/mrc_dump.h"
 #include "../include/mrc_opcode.h"
+#include "../include/mrc_parser_util.h"
 
 const char *
 mrc_sym_dump(mrc_ccontext *c, mrc_sym sym)
 {
-  return "TODO";
+  mrc_int lenp;
+  const char *name = mrc_sym_name_len(c, sym, &lenp);
+  if (!name) {
+    return NULL;
+  }
+  if (strlen(name) == (size_t)lenp) {
+    return name;
+  }
+  else {
+    // FIXME: memory leak
+    char *buf = (char*)xmalloc(lenp+1);
+    memcpy(buf, name, lenp);
+    buf[lenp] = '\0';
+    return buf;
+  }
 }
 
 int32_t
