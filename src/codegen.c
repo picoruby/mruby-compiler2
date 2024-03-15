@@ -7,11 +7,101 @@
 #include "../include/mrc_opcode.h"
 #include "../include/mrc_presym.h"
 
+#if defined(MRC_INT64)
+  typedef int64_t mrc_int;
+  typedef uint64_t mrc_uint;
+# define MRC_INT_BIT 64
+# define MRC_INT_MIN INT64_MIN
+# define MRC_INT_MAX INT64_MAX
+# define MRC_PRIo PRIo64
+# define MRC_PRId PRId64
+# define MRC_PRIx PRIx64
+#else
+  typedef int32_t mrc_int;
+  typedef uint32_t mrc_uint;
+# define MRC_INT_BIT 32
+# define MRC_INT_MIN INT32_MIN
+# define MRC_INT_MAX INT32_MAX
+# define MRC_PRIo PRIo32
+# define MRC_PRId PRId32
+# define MRC_PRIx PRIx32
+#endif
+
+static inline mrc_bool
+mrc_int_mul_overflow(mrc_int a, mrc_int b, mrc_int *c)
+{
+#ifdef MRC_INT32
+  int64_t n = (int64_t)a * b;
+  *c = (mrc_int)n;
+  return n > MRC_INT_MAX || n < MRC_INT_MIN;
+#else /* MRC_INT64 */
+  if (a > 0 && b > 0 && a > MRC_INT_MAX / b) return TRUE;
+  if (a < 0 && b > 0 && a < MRC_INT_MIN / b) return TRUE;
+  if (a > 0 && b < 0 && b < MRC_INT_MIN / a) return TRUE;
+  if (a < 0 && b < 0 && (a <= MRC_INT_MIN || b <= MRC_INT_MIN || -a > MRC_INT_MAX / -b))
+    return TRUE;
+  *c = a * b;
+  return FALSE;
+#endif
+}
+
+static mrc_int
+mrc_div_int(mrc_int x, mrc_int y)
+{
+  mrc_int div = x / y;
+
+  if ((x ^ y) < 0 && x != div * y) {
+    div -= 1;
+  }
+  return div;
+}
+
+#define NUMERIC_SHIFT_WIDTH_MAX (MRC_INT_BIT-1)
+
+static mrc_bool
+mrc_num_shift(mrc_int val, mrc_int width, mrc_int *num)
+{
+  if (width < 0) {              /* rshift */
+    if (width == MRC_INT_MIN || -width >= NUMERIC_SHIFT_WIDTH_MAX) {
+      if (val < 0) {
+        *num = -1;
+      }
+      else {
+        *num = 0;
+      }
+    }
+    else {
+      *num = val >> -width;
+    }
+  }
+  else if (val > 0) {
+    if ((width > NUMERIC_SHIFT_WIDTH_MAX) ||
+        (val   > (MRC_INT_MAX >> width))) {
+      return FALSE;
+    }
+    *num = val << width;
+  }
+  else {
+    if ((width > NUMERIC_SHIFT_WIDTH_MAX) ||
+        (val   < (MRC_INT_MIN >> width))) {
+      return FALSE;
+    }
+    if (width == NUMERIC_SHIFT_WIDTH_MAX)
+      *num = MRC_INT_MIN;
+    else
+      *num = val * ((mrc_int)1 << width);
+  }
+  return TRUE;
+}
+
+#ifdef MRC_ENDIAN_BIG
+# define MRC_ENDIAN_LOHI(a,b) a b
+#else
+# define MRC_ENDIAN_LOHI(a,b) b a
+#endif
 #ifndef MRC_CODEGEN_LEVEL_MAX
 #define MRC_CODEGEN_LEVEL_MAX 256
 #endif
-
-#define MAXARG_S (1<<16)
 
 enum looptype {
   LOOP_NORMAL,
@@ -492,11 +582,194 @@ static uint8_t mrc_insn_size3[] = {
 #undef BS
 #undef BSS
 #undef OPCODE
+
+static const mrc_code*
+mrc_prev_pc(mrc_codegen_scope *s, const mrc_code *pc)
+{
+  const mrc_code *prev_pc = NULL;
+  const mrc_code *i = s->iseq;
+
+  while (i<pc) {
+    uint8_t insn = i[0];
+    prev_pc = i;
+    switch (insn) {
+    case OP_EXT1:
+      i += mrc_insn_size1[i[1]] + 1;
+      break;
+    case OP_EXT2:
+      i += mrc_insn_size2[i[1]] + 1;
+      break;
+    case OP_EXT3:
+      i += mrc_insn_size3[i[1]] + 1;
+      break;
+    default:
+      i += mrc_insn_size[insn];
+      break;
+    }
+  }
+  return prev_pc;
+}
+
+#define pc_addr(s) &((s)->iseq[(s)->pc])
+#define addr_pc(s, addr) (uint32_t)((addr) - s->iseq)
+#define rewind_pc(s) s->pc = s->lastpc
+
+static struct mrc_insn_data
+mrc_last_insn(mrc_codegen_scope *s)
+{
+  if (s->pc == 0) {
+    struct mrc_insn_data data = { OP_NOP, 0 };
+    return data;
+  }
+  return mrc_decode_insn(&s->iseq[s->lastpc]);
+}
+
+static mrc_bool
+get_int_operand(mrc_codegen_scope *s, struct mrc_insn_data *data, mrc_int *n)
+{
+  switch (data->insn) {
+  case OP_LOADI__1:
+    *n = -1;
+    return TRUE;
+
+  case OP_LOADINEG:
+    *n = -data->b;
+    return TRUE;
+
+  case OP_LOADI_0: case OP_LOADI_1: case OP_LOADI_2: case OP_LOADI_3:
+  case OP_LOADI_4: case OP_LOADI_5: case OP_LOADI_6: case OP_LOADI_7:
+    *n = data->insn - OP_LOADI_0;
+    return TRUE;
+
+  case OP_LOADI:
+  case OP_LOADI16:
+    *n = (int16_t)data->b;
+    return TRUE;
+
+  case OP_LOADI32:
+    *n = (int32_t)((uint32_t)data->b<<16)+data->cc;
+    return TRUE;
+
+  case OP_LOADL:
+    {
+      // TODO
+      //mrb_pool_value *pv = &s->pool[data->b];
+
+      //if (pv->tt == IREP_TT_INT32) {
+      //  *n = (mrc_int)pv->u.i32;
+      //}
+#ifdef MRC_INT64
+      //else if (pv->tt == IREP_TT_INT64) {
+      //  *n = (mrc_int)pv->u.i64;
+      //}
+#endif
+      //else {
+        return FALSE;
+      //}
+    }
+    return TRUE;
+
+  default:
+    return FALSE;
+  }
+}
+
 static mrc_bool
 no_peephole(mrc_codegen_scope *s)
 {
   return no_optimize(s) || s->lastlabel == s->pc || s->pc == 0 || s->pc == s->lastpc;
 }
+
+#define JMPLINK_START UINT32_MAX
+
+static void
+gen_jmpdst(mrc_codegen_scope *s, uint32_t pc)
+{
+
+  if (pc == JMPLINK_START) {
+    pc = 0;
+  }
+  uint32_t pos2 = s->pc+2;
+  int32_t off = pc - pos2;
+
+  if (off > INT16_MAX || INT16_MIN > off) {
+    codegen_error(s, "too big jump offset");
+  }
+  gen_S(s, (uint16_t)off);
+}
+
+static uint32_t
+genjmp(mrc_codegen_scope *s, mrc_code i, uint32_t pc)
+{
+  uint32_t pos;
+
+  genop_0(s, i);
+  pos = s->pc;
+  gen_jmpdst(s, pc);
+  return pos;
+}
+
+#define genjmp_0(s,i) genjmp(s,i,JMPLINK_START)
+
+static uint32_t
+genjmp2(mrc_codegen_scope *s, mrc_code i, uint16_t a, uint32_t pc, int val)
+{
+  uint32_t pos;
+
+  if (!no_peephole(s) && !val) {
+    struct mrc_insn_data data = mrc_last_insn(s);
+
+    switch (data.insn) {
+    case OP_MOVE:
+      if (data.a == a && data.a > s->nlocals) {
+        rewind_pc(s);
+        a = data.b;
+      }
+      break;
+    case OP_LOADNIL:
+    case OP_LOADF:
+      if (data.a == a || data.a > s->nlocals) {
+        s->pc = addr_pc(s, data.addr);
+        if (i == OP_JMPNOT || (i == OP_JMPNIL && data.insn == OP_LOADNIL)) {
+          return genjmp(s, OP_JMP, pc);
+        }
+        else {                  /* OP_JMPIF */
+          return JMPLINK_START;
+        }
+      }
+      break;
+    case OP_LOADT: case OP_LOADI: case OP_LOADINEG: case OP_LOADI__1:
+    case OP_LOADI_0: case OP_LOADI_1: case OP_LOADI_2: case OP_LOADI_3:
+    case OP_LOADI_4: case OP_LOADI_5: case OP_LOADI_6: case OP_LOADI_7:
+      if (data.a == a || data.a > s->nlocals) {
+        s->pc = addr_pc(s, data.addr);
+        if (i == OP_JMPIF) {
+          return genjmp(s, OP_JMP, pc);
+        }
+        else {                  /* OP_JMPNOT and OP_JMPNIL */
+          return JMPLINK_START;
+        }
+      }
+      break;
+    }
+  }
+
+  if (a > 0xff) {
+    check_no_ext_ops(s, a, 0);
+    gen_B(s, OP_EXT1);
+    genop_0(s, i);
+    gen_S(s, a);
+  }
+  else {
+    genop_0(s, i);
+    gen_B(s, (uint8_t)a);
+  }
+  pos = s->pc;
+  gen_jmpdst(s, pc);
+  return pos;
+}
+
+#define genjmp2_0(s,i,a,val) genjmp2(s,i,a,JMPLINK_START,val)
 
 static void
 gen_move(mrc_codegen_scope *s, uint16_t dst, uint16_t src, int nopeep)
@@ -583,20 +856,20 @@ static void
 gen_return(mrc_codegen_scope *s, uint8_t op, uint16_t src)
 {
   // todo: peephole
-//  if (no_peephole(s)) {
+  if (no_peephole(s)) {
     genop_1(s, op, src);
-//  }
-//  else {
-//    struct mrc_insn_data data = mrc_last_insn(s);
-//
-//    if (data.insn == OP_MOVE && src == data.a) {
-//      rewind_pc(s);
-//      genop_1(s, op, data.b);
-//    }
-//    else if (data.insn != OP_RETURN) {
-//      genop_1(s, op, src);
-//    }
-//  }
+  }
+  else {
+    struct mrc_insn_data data = mrc_last_insn(s);
+
+    if (data.insn == OP_MOVE && src == data.a) {
+      rewind_pc(s);
+      genop_1(s, op, data.b);
+    }
+    else if (data.insn != OP_RETURN) {
+      genop_1(s, op, src);
+    }
+  }
 }
 
 static void
@@ -627,9 +900,9 @@ scope_finish(mrc_codegen_scope *s)
   if (s->filename_sym) {
     // todo
     //mrc_sym fname = mrc_parser_get_filename(s->parser, s->filename_index);
-    //const char *filename = mrc_sym_name_len(s->mrb, fname, NULL);
+    //const char *filename = mrc_sym_name_len(fname, NULL);
 
-    //mrc_debug_info_append_file(s->mrb, s->irep->debug_info,
+    //mrc_debug_info_append_file(s->irep->debug_info,
     //                           filename, s->lines, s->debug_start_pos, s->pc);
   }
   xfree(s->lines);
@@ -699,78 +972,79 @@ new_sym(mrc_codegen_scope *s, mrc_sym sym)
 static void
 gen_addsub(mrc_codegen_scope *s, uint8_t op, uint16_t dst)
 {
-//  if (no_peephole(s)) {
-//  normal:
+  if (no_peephole(s)) {
+  normal:
     genop_1(s, op, dst);
-//    return;
-//  }
-//  else {
-//    struct mrc_insn_data data = mrc_last_insn(s);
-//    mrc_int n;
-//
-//    if (!get_int_operand(s, &data, &n)) {
-//      /* not integer immediate */
-//      goto normal;
-//    }
-//    struct mrc_insn_data data0 = mrc_decode_insn(mrc_prev_pc(s, data.addr));
-//    mrc_int n0;
-//    if (addr_pc(s, data.addr) == s->lastlabel || !get_int_operand(s, &data0, &n0)) {
-//      /* OP_ADDI/OP_SUBI takes upto 8bits */
-//      if (n > INT8_MAX || n < INT8_MIN) goto normal;
-//      rewind_pc(s);
-//      if (n == 0) return;
-//      if (n > 0) {
-//        if (op == OP_ADD) genop_2(s, OP_ADDI, dst, (uint16_t)n);
-//        else genop_2(s, OP_SUBI, dst, (uint16_t)n);
-//      }
-//      else {                    /* n < 0 */
-//        n = -n;
-//        if (op == OP_ADD) genop_2(s, OP_SUBI, dst, (uint16_t)n);
-//        else genop_2(s, OP_ADDI, dst, (uint16_t)n);
-//      }
-//      return;
-//    }
-//    if (op == OP_ADD) {
+    return;
+  }
+  else {
+    struct mrc_insn_data data = mrc_last_insn(s);
+    mrc_int n;
+
+    if (!get_int_operand(s, &data, &n)) {
+      /* not integer immediate */
+      goto normal;
+    }
+    struct mrc_insn_data data0 = mrc_decode_insn(mrc_prev_pc(s, data.addr));
+    mrc_int n0;
+    if (addr_pc(s, data.addr) == s->lastlabel || !get_int_operand(s, &data0, &n0)) {
+      /* OP_ADDI/OP_SUBI takes upto 8bits */
+      if (n > INT8_MAX || n < INT8_MIN) goto normal;
+      rewind_pc(s);
+      if (n == 0) return;
+      if (n > 0) {
+        if (op == OP_ADD) genop_2(s, OP_ADDI, dst, (uint16_t)n);
+        else genop_2(s, OP_SUBI, dst, (uint16_t)n);
+      }
+      else {                    /* n < 0 */
+        n = -n;
+        if (op == OP_ADD) genop_2(s, OP_SUBI, dst, (uint16_t)n);
+        else genop_2(s, OP_ADDI, dst, (uint16_t)n);
+      }
+      return;
+    }
+    if (op == OP_ADD) {
+//TODO
 //      if (mrc_int_add_overflow(n0, n, &n)) goto normal;
-//    }
-//    else { /* OP_SUB */
+    }
+    else { /* OP_SUB */
 //      if (mrc_int_sub_overflow(n0, n, &n)) goto normal;
-//    }
-//    s->pc = addr_pc(s, data0.addr);
-//    gen_int(s, dst, n);
-//  }
+    }
+    s->pc = addr_pc(s, data0.addr);
+    gen_int(s, dst, n);
+  }
 }
 
 static void
 gen_muldiv(mrc_codegen_scope *s, uint8_t op, uint16_t dst)
 {
-//  if (no_peephole(s)) {
-//  normal:
+  if (no_peephole(s)) {
+  normal:
     genop_1(s, op, dst);
-//    return;
-//  }
-//  else {
-//    struct mrc_insn_data data = mrc_last_insn(s);
-//    mrc_int n, n0;
-//    if (addr_pc(s, data.addr) == s->lastlabel || !get_int_operand(s, &data, &n)) {
-//      /* not integer immediate */
-//      goto normal;
-//    }
-//    struct mrc_insn_data data0 = mrc_decode_insn(mrc_prev_pc(s, data.addr));
-//    if (!get_int_operand(s, &data0, &n0)) {
-//      goto normal;
-//    }
-//    if (op == OP_MUL) {
-//      if (mrc_int_mul_overflow(n0, n, &n)) goto normal;
-//    }
-//    else { /* OP_DIV */
-//      if (n == 0) goto normal;
-//      if (n0 == mrc_INT_MIN && n == -1) goto normal;
-//      n = mrc_div_int(n0, n);
-//    }
-//    s->pc = addr_pc(s, data0.addr);
-//    gen_int(s, dst, n);
-//  }
+    return;
+  }
+  else {
+    struct mrc_insn_data data = mrc_last_insn(s);
+    mrc_int n, n0;
+    if (addr_pc(s, data.addr) == s->lastlabel || !get_int_operand(s, &data, &n)) {
+      /* not integer immediate */
+      goto normal;
+    }
+    struct mrc_insn_data data0 = mrc_decode_insn(mrc_prev_pc(s, data.addr));
+    if (!get_int_operand(s, &data0, &n0)) {
+      goto normal;
+    }
+    if (op == OP_MUL) {
+      if (mrc_int_mul_overflow(n0, n, &n)) goto normal;
+    }
+    else { /* OP_DIV */
+      if (n == 0) goto normal;
+      if (n0 == MRC_INT_MIN && n == -1) goto normal;
+      n = mrc_div_int(n0, n);
+    }
+    s->pc = addr_pc(s, data0.addr);
+    gen_int(s, dst, n);
+  }
 }
 
 static mrc_bool
@@ -781,14 +1055,14 @@ gen_uniop(mrc_codegen_scope *s, mrc_sym sym, uint16_t dst)
 //  mrc_int n;
 //
 //  if (!get_int_operand(s, &data, &n)) return FALSE;
-//  if (sym == MRC_OPSYM_2(s->mrb, plus)) {
+//  if (sym == MRC_OPSYM_2(plus)) {
 //    /* unary plus does nothing */
 //  }
-//  else if (sym == MRC_OPSYM_2(s->mrb, minus)) {
+//  else if (sym == MRC_OPSYM_2(minus)) {
 //    if (n == MRC_INT_MIN) return FALSE;
 //    n = -n;
 //  }
-//  else if (sym == MRC_OPSYM_2(s->mrb, neg)) {
+//  else if (sym == MRC_OPSYM_2(neg)) {
 //    n = ~n;
 //  }
 //  else {
@@ -803,56 +1077,56 @@ static mrc_bool
 gen_binop(mrc_codegen_scope *s, mrc_sym op, uint16_t dst)
 {
   if (no_peephole(s)) return FALSE;
-//  else if (op == MRB_OPSYM_2(s->mrb, aref)) {
-//    genop_1(s, OP_GETIDX, dst);
-//    return TRUE;
-//  }
-//  else {
-//    struct mrb_insn_data data = mrb_last_insn(s);
-//    mrb_int n, n0;
-//    if (addr_pc(s, data.addr) == s->lastlabel || !get_int_operand(s, &data, &n)) {
-//      /* not integer immediate */
-//      return FALSE;
-//    }
-//    struct mrb_insn_data data0 = mrb_decode_insn(mrb_prev_pc(s, data.addr));
-//    if (!get_int_operand(s, &data0, &n0)) {
-//      return FALSE;
-//    }
-//    if (op == MRB_OPSYM_2(s->mrb, lshift)) {
-//      if (!mrb_num_shift(s->mrb, n0, n, &n)) return FALSE;
-//    }
-//    else if (op == MRB_OPSYM_2(s->mrb, rshift)) {
-//      if (n == MRB_INT_MIN) return FALSE;
-//      if (!mrb_num_shift(s->mrb, n0, -n, &n)) return FALSE;
-//    }
-//    else if (op == MRB_OPSYM_2(s->mrb, mod) && n != 0) {
-//      if (n0 == MRB_INT_MIN && n == -1) {
-//        n = 0;
-//      }
-//      else {
-//        mrb_int n1 = n0 % n;
-//        if ((n0 < 0) != (n < 0) && n1 != 0) {
-//          n1 += n;
-//        }
-//        n = n1;
-//      }
-//    }
-//    else if (op == MRB_OPSYM_2(s->mrb, and)) {
-//      n = n0 & n;
-//    }
-//    else if (op == MRB_OPSYM_2(s->mrb, or)) {
-//      n = n0 | n;
-//    }
-//    else if (op == MRB_OPSYM_2(s->mrb, xor)) {
-//      n = n0 ^ n;
-//    }
-//    else {
-//      return FALSE;
-//    }
-//    s->pc = addr_pc(s, data0.addr);
-//    gen_int(s, dst, n);
-//    return TRUE;
-//  }
+  else if (op == MRC_OPSYM_2(aref)) {
+    genop_1(s, OP_GETIDX, dst);
+    return TRUE;
+  }
+  else {
+    struct mrc_insn_data data = mrc_last_insn(s);
+    mrc_int n, n0;
+    if (addr_pc(s, data.addr) == s->lastlabel || !get_int_operand(s, &data, &n)) {
+      /* not integer immediate */
+      return FALSE;
+    }
+    struct mrc_insn_data data0 = mrc_decode_insn(mrc_prev_pc(s, data.addr));
+    if (!get_int_operand(s, &data0, &n0)) {
+      return FALSE;
+    }
+    if (op == MRC_OPSYM_2(lshift)) {
+      if (!mrc_num_shift(n0, n, &n)) return FALSE;
+    }
+    else if (op == MRC_OPSYM_2(rshift)) {
+      if (n == MRC_INT_MIN) return FALSE;
+      if (!mrc_num_shift(n0, -n, &n)) return FALSE;
+    }
+    else if (op == MRC_OPSYM_2(mod) && n != 0) {
+      if (n0 == MRC_INT_MIN && n == -1) {
+        n = 0;
+      }
+      else {
+        mrc_int n1 = n0 % n;
+        if ((n0 < 0) != (n < 0) && n1 != 0) {
+          n1 += n;
+        }
+        n = n1;
+      }
+    }
+    else if (op == MRC_OPSYM_2(and)) {
+      n = n0 & n;
+    }
+    else if (op == MRC_OPSYM_2(or)) {
+      n = n0 | n;
+    }
+    else if (op == MRC_OPSYM_2(xor)) {
+      n = n0 ^ n;
+    }
+    else {
+      return FALSE;
+    }
+    s->pc = addr_pc(s, data0.addr);
+    gen_int(s, dst, n);
+    return TRUE;
+  }
 }
 
 #define JMPLINK_START UINT32_MAX
@@ -900,12 +1174,11 @@ gen_call(mrc_codegen_scope *s, mrc_node *tree, int val, int safe)
   else {
     codegen(s, cast->receiver, VAL); /* receiver */
   }
-  // TODO &. safe navigation
-  //if (safe) {
-  //  int recv = cursp()-1;
-  //  gen_move(s, cursp(), recv, 1);
-  //  skip = genjmp2_0(s, OP_JMPNIL, cursp(), val);
-  //}
+  if (safe) {
+    int recv = cursp()-1;
+    gen_move(s, cursp(), recv, 1);
+    skip = genjmp2_0(s, OP_JMPNIL, cursp(), val);
+  }
   pm_arguments_node_t *arguments = (pm_arguments_node_t *)cast->arguments;
   if (arguments) {
     if (0 < arguments->arguments.size && PM_NODE_TYPE(arguments->arguments.nodes[0]) != PM_KEYWORD_HASH_NODE) {            /* positional arguments */
@@ -923,13 +1196,12 @@ gen_call(mrc_codegen_scope *s, mrc_node *tree, int val, int safe)
     //  if (nk < 0) nk = 15;
     //}
   }
-  // TODO Block
-  //if (tree && tree->cdr && tree->cdr->cdr) {
-  //  codegen(s, tree->cdr->cdr, VAL);
-  //  pop();
-  //  noop = 1;
-  //  blk = 1;
-  //}
+  if (cast->block) {
+    codegen(s, cast->block, VAL);
+    pop();
+    noop = 1;
+    blk = 1;
+  }
   push();pop();
   s->sp = sp_save;
   if (!noop && sym == MRC_OPSYM_2(add) && n == 1)  {
