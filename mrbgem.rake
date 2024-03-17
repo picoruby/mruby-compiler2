@@ -5,9 +5,16 @@ MRuby::Gem::Specification.new('mruby-compiler2') do |spec|
 
   lib_dir = "#{dir}/lib"
   prism_dir = "#{lib_dir}/prism"
+  prism_templates_dir = "#{lib_dir}/prism/templates"
   static_prism = "#{prism_dir}/build/libprism.a"
   cc.include_paths << "#{dir}/include"
   cc.include_paths << "#{prism_dir}/include"
+
+  task :deep_clean do
+    rm_rf prism_dir
+  end
+
+  next if Rake.application.top_level_tasks.first == "deep_clean"
 
   directory prism_dir do
     FileUtils.cd lib_dir do
@@ -24,20 +31,23 @@ MRuby::Gem::Specification.new('mruby-compiler2') do |spec|
     end
   end
 
-  Rake::Task[:prism_templates].invoke
+  TEMPLATE_GENERATES = %w(node prettyprint serialize token_type)
 
-  Dir.glob(["#{prism_dir}/src/**/*.c", "#{dir}/src/.c"]).map do |src|
-    obj = objfile(src.pathmap("#{build_dir}/lib/%n"))
-    build.libmruby_objs << obj
-    task obj => [src] do |f|
-      cc.run f.name, f.prerequisites.first
+  TEMPLATE_GENERATES.each do |name|
+    dst = "#{prism_dir}/src/#{name}.c"
+    # file task does not work when dst does not exist. why?
+    Rake::Task[:prism_templates].invoke unless File.exist?(dst)
+    file dst => ["#{prism_templates_dir}/src/#{name}.c.erb", "#{prism_templates_dir}/template.rb"] do |t|
+      Rake::Task[:prism_templates].invoke
     end
   end
 
-  build.libmruby_objs << objs
-
-  task :deep_clean do
-    rm_rf prism_dir
+  Dir.glob("#{prism_dir}/src/**/*.c").map do |src|
+    obj = objfile(src.pathmap("#{build_dir}/lib/%n"))
+    objs << obj
+    file obj => [src] do |f|
+      cc.run f.name, f.prerequisites.first
+    end
   end
 
 end
