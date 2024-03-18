@@ -40,7 +40,13 @@ int mrc_dump_irep_binary(mrc_ccontext *c, const mrc_irep *irep, uint8_t flags, F
 #define RITE_BINARY_MAJOR_VER          "03"
 #define RITE_BINARY_MINOR_VER          "00"
 #define RITE_BINARY_FORMAT_VER         RITE_BINARY_MAJOR_VER RITE_BINARY_MINOR_VER
-#define RITE_COMPILER_NAME             "HSMK"
+#if defined(MRC_PARSER_PRISM)
+  #define RITE_COMPILER_NAME           "HAPR"
+#elif defined(MRC_PARSER_KANEKO)
+  #define RITE_COMPILER_NAME           "HALR"
+#else
+  #error "You must define MRC_PARSER_PRISM or MRC_PARSER_KANEKO"
+#endif
 #define RITE_COMPILER_VERSION          "0000"
 
 #define RITE_VM_VER                    "0300"

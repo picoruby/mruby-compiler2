@@ -1152,8 +1152,181 @@ dispatch(mrc_codegen_scope *s, uint32_t pos0)
   return pos1+newpos;
 }
 
+#define CALL_MAXARGS 15
+#define GEN_LIT_ARY_MAX 64
+#define GEN_VAL_STACK_MAX 99
 
-#define nsym(x) ((mrc_sym)(intptr_t)(x))
+static int
+gen_values(mrc_codegen_scope *s, mrc_node *tree, int val, int limit)
+{
+  pm_arguments_node_t *cast = (pm_arguments_node_t *)tree;
+  mrc_node *t = (mrc_node *)cast->arguments.nodes[0];
+
+  int n = 0;
+  int first = 1;
+  int slimit = GEN_VAL_STACK_MAX;
+
+  if (limit == 0) limit = GEN_LIT_ARY_MAX;
+  if (cursp() >= slimit) slimit = INT16_MAX;
+
+  if (!val) {
+    for (int i = 0; i < cast->arguments.size; i++) {
+      t = (mrc_node *)cast->arguments.nodes[i];
+      codegen(s, t, NOVAL);
+      n++;
+    }
+    return n;
+  }
+
+  for (int i = 0; i < cast->arguments.size; i++) {
+    t = (mrc_node *)cast->arguments.nodes[i];
+    if (PM_NODE_TYPE(t) == PM_KEYWORD_HASH_NODE) break;
+    int is_splat = PM_NODE_TYPE(t) == PM_SPLAT_NODE;
+
+    if (is_splat || cursp() >= slimit) { /* flush stack */
+      pop_n(n);
+      if (first) {
+        if (n == 0) {
+          genop_1(s, OP_LOADNIL, cursp());
+        }
+        else {
+          genop_2(s, OP_ARRAY, cursp(), n);
+        }
+        push();
+        first = 0;
+        limit = GEN_LIT_ARY_MAX;
+      }
+      else if (n > 0) {
+        pop();
+        genop_2(s, OP_ARYPUSH, cursp(), n);
+        push();
+      }
+      n = 0;
+    }
+    if (is_splat) {
+      pm_array_node_t *a = (pm_array_node_t *)((pm_splat_node_t *)t)->expression;
+      codegen(s, (mrc_node *)a, VAL);
+      pop(); pop();
+      genop_1(s, OP_ARYCAT, cursp());
+      push();
+    }
+    else {
+      codegen(s, t, val);
+      n++;
+    }
+  }
+  if (!first) {
+    pop();
+    if (n > 0) {
+      pop_n(n);
+      genop_2(s, OP_ARYPUSH, cursp(), n);
+    }
+    return -1;                  /* variable length */
+  }
+  else if (n > limit) {
+    pop_n(n);
+    genop_2(s, OP_ARRAY, cursp(), n);
+    return -1;
+  }
+  return n;
+}
+
+
+static int
+gen_hash(mrc_codegen_scope *s, mrc_node *tree, int val, int limit)
+{
+  struct pm_node_list elements;
+  if (PM_NODE_TYPE(tree) == PM_HASH_NODE) {
+    pm_hash_node_t *cast = (pm_hash_node_t *)tree;
+    elements = cast->elements;
+  }
+  else {
+    pm_keyword_hash_node_t *cast = (pm_keyword_hash_node_t *)tree;
+    elements = cast->elements;
+  }
+
+  int slimit = GEN_VAL_STACK_MAX;
+  if (cursp() >= GEN_LIT_ARY_MAX) slimit = INT16_MAX;
+  int len = 0;
+  mrc_bool update = FALSE;
+  mrc_bool first = TRUE;
+
+  //while (tree) {
+  for (int i = 0; i < elements.size; i++) {
+    if (PM_NODE_TYPE(elements.nodes[i]) == PM_ASSOC_SPLAT_NODE) {
+      pm_assoc_splat_node_t *assocsplat = (pm_assoc_splat_node_t *)elements.nodes[i];
+      if (val && first) {
+        genop_2(s, OP_HASH, cursp(), 0);
+        push();
+        update = TRUE;
+      }
+      else if (val && len > 0) {
+        pop_n(len*2);
+        if (!update) {
+          genop_2(s, OP_HASH, cursp(), len);
+        }
+        else {
+          pop();
+          genop_2(s, OP_HASHADD, cursp(), len);
+        }
+        push();
+      }
+      codegen(s, assocsplat->value, val);
+      if (val && (len > 0 || update)) {
+        pop(); pop();
+        genop_1(s, OP_HASHCAT, cursp());
+        push();
+      }
+      update = TRUE;
+      len = 0;
+    }
+    else {
+      pm_assoc_node_t *assoc = (pm_assoc_node_t *)elements.nodes[i];
+      codegen(s, assoc->key, val);
+      codegen(s, assoc->value, val);
+      len++;
+    }
+    if (val && cursp() >= slimit) {
+      pop_n(len*2);
+      if (!update) {
+        genop_2(s, OP_HASH, cursp(), len);
+      }
+      else {
+        pop();
+        genop_2(s, OP_HASHADD, cursp(), len);
+      }
+      push();
+      update = TRUE;
+      len = 0;
+    }
+    first = FALSE;
+  }
+  if (val && len > limit) {
+    pop_n(len*2);
+    genop_2(s, OP_HASH, cursp(), len);
+    push();
+    return -1;
+  }
+  if (update) {
+    if (val && len > 0) {
+      pop_n(len*2+1);
+      genop_2(s, OP_HASHADD, cursp(), len);
+      push();
+    }
+    return -1;                  /* variable length */
+  }
+  return len;
+}
+
+static mrc_sym
+nsym(mrc_parser_state *p, const uint8_t *start, size_t length)
+{
+  mrc_sym pm_sym = pm_constant_pool_find(&p->constant_pool, start, length);
+  if (pm_sym == 0) {
+    pm_sym = pm_constant_pool_insert_shared(&p->constant_pool, start, length);
+  }
+  return pm_sym;
+}
 
 static void
 gen_call(mrc_codegen_scope *s, mrc_node *tree, int val, int safe)
@@ -1162,9 +1335,7 @@ gen_call(mrc_codegen_scope *s, mrc_node *tree, int val, int safe)
   pm_constant_t *constant = pm_constant_pool_id_to_constant(&s->c->p->constant_pool, (const pm_constant_id_t)cast->name);
   mrc_sym sym = mrc_find_presym(constant->start, constant->length);
   mrc_sym pm_sym = 0;
-  if (sym == 0) {
-    pm_sym = pm_constant_pool_find(&s->c->p->constant_pool, constant->start, constant->length);
-  }
+  if (sym == 0) pm_sym = nsym(s->c->p, constant->start, constant->length);
   int skip = 0, n = 0, nk = 0, noop = no_optimize(s), noself = 0, blk = 0, sp_save = cursp();
 
   if (cast->receiver == NULL) {
@@ -1181,20 +1352,22 @@ gen_call(mrc_codegen_scope *s, mrc_node *tree, int val, int safe)
   }
   pm_arguments_node_t *arguments = (pm_arguments_node_t *)cast->arguments;
   if (arguments) {
-    if (0 < arguments->arguments.size && PM_NODE_TYPE(arguments->arguments.nodes[0]) != PM_KEYWORD_HASH_NODE) {            /* positional arguments */
-      n = 1;// gen_values(s, arguments, VAL, 14);
+    if (0 < arguments->arguments.size) {            /* positional arguments */
+      n = gen_values(s, (mrc_node *)arguments, VAL, 14);
       if (n < 0) {              /* variable length */
         noop = 1;               /* not operator */
         n = 15;
         push();
       }
     }
-    // TODO keyword arguments
-    //if (tree->cdr->car) {       /* keyword arguments */
-    //  noop = 1;
-    //  nk = gen_hash(s, tree->cdr->car->cdr, VAL, 14);
-    //  if (nk < 0) nk = 15;
-    //}
+    for (int i = 0; i < arguments->arguments.size; i++) {
+      mrc_node *t = (mrc_node *)arguments->arguments.nodes[i];
+      if (PM_NODE_TYPE(t) == PM_KEYWORD_HASH_NODE) {       /* keyword arguments */
+        noop = 1;
+        nk = gen_hash(s, t, VAL, 14);
+        if (nk < 0) nk = 15;
+      }
+    }
   }
   if (cast->block) {
     codegen(s, cast->block, VAL);
@@ -1254,6 +1427,49 @@ gen_call(mrc_codegen_scope *s, mrc_node *tree, int val, int safe)
   }
 }
 
+static mrc_pool_value*
+lit_pool_extend(mrc_codegen_scope *s)
+{
+  if (s->irep->plen == s->pcapa) {
+    s->pcapa *= 2;
+    s->pool = (mrc_pool_value*)codegen_realloc(s, s->pool, sizeof(mrc_pool_value)*s->pcapa);
+  }
+
+  return &s->pool[s->irep->plen++];
+}
+
+static int
+new_lit_str(mrc_codegen_scope *s, const char *str, mrc_int len)
+{
+  int i;
+  mrc_pool_value *pv;
+
+  for (i=0; i<s->irep->plen; i++) {
+    pv = &s->pool[i];
+    if (pv->tt & IREP_TT_NFLAG) continue;
+    mrc_int plen = pv->tt>>2;
+    if (len != plen) continue;
+    if (memcmp(pv->u.str, str, plen) == 0)
+      return i;
+  }
+
+  pv = lit_pool_extend(s);
+
+  //if (mrb_ro_data_p(str)) {
+  //  pv->tt = (uint32_t)(len<<2) | IREP_TT_SSTR;
+  //  pv->u.str = str;
+  //}
+  //else {
+    char *p;
+    pv->tt = (uint32_t)(len<<2) | IREP_TT_STR;
+    p = (char*)codegen_realloc(s, NULL, len+1);
+    memcpy(p, str, len);
+    p[len] = '\0';
+    pv->u.str = p;
+  //}
+
+  return i;
+}
 static void
 codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
 {
@@ -1318,6 +1534,54 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       gen_call(s, tree, val, (cast->base.flags & PM_CALL_NODE_FLAGS_SAFE_NAVIGATION) ? 1 : 0);
       break;
     }
+    case PM_ARRAY_NODE:
+    {
+      int n;
+      n = gen_values(s, tree, val, 0);
+      if (val) {
+        if (n >= 0) {
+          pop_n(n);
+          genop_2(s, OP_ARRAY, cursp(), n);
+        }
+        push();
+      }
+      break;
+    }
+    case PM_SYMBOL_NODE:
+    {
+      if (val) {
+        pm_symbol_node_t *cast = (pm_symbol_node_t *)tree;
+        int sym = new_sym(s, nsym(s->c->p, cast->unescaped.source, cast->unescaped.length));
+
+        genop_2(s, OP_LOADSYM, cursp(), sym);
+        push();
+      }
+      break;
+    }
+    case PM_KEYWORD_HASH_NODE:
+    case PM_HASH_NODE:
+    {
+      int nk = gen_hash(s, tree, val, GEN_LIT_ARY_MAX);
+      if (val && nk >= 0) {
+        pop_n(nk*2);
+        genop_2(s, OP_HASH, cursp(), nk);
+        push();
+      }
+      break;
+    }
+    case PM_STRING_NODE:
+    {
+      if (val) {
+        pm_string_node_t *cast = (pm_string_node_t *)tree;
+        char *p = (char*)cast->unescaped.source;
+        mrc_int len = cast->unescaped.length;
+        int off = new_lit_str(s, p, len);
+
+        genop_2(s, OP_STRING, cursp(), off);
+        push();
+      }
+      break;
+    }
     default:
     {
       printf("Not implemented %s\n", pm_node_type_to_str(PM_NODE_TYPE(tree)));
@@ -1329,6 +1593,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
 static mrc_irep *
 generate_code(mrc_ccontext *c, mrc_node *node, int val)
 {
+  // FIXME: memory leak of scope
   mrc_codegen_scope *scope = scope_new(NULL, NULL);
   struct mrc_jmpbuf *prev_jmp = c->jmp; // FIXME: c->jmp is not initialized
   struct mrc_jmpbuf jmpbuf;
