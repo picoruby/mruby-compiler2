@@ -6,6 +6,7 @@
 #include "../include/mrc_throw.h"
 #include "../include/mrc_opcode.h"
 #include "../include/mrc_presym.h"
+#include "../include/mrc_pool.h"
 
 #if defined(MRC_INT64)
   typedef int64_t mrc_int;
@@ -121,7 +122,7 @@ struct loopinfo {
 };
 
 typedef struct scope {
-//  mrb_pool *mpool; // -> *page
+  mrc_pool *mpool; // -> *page
 
   struct scope *prev;
 
@@ -177,7 +178,7 @@ codegen_error(mrc_codegen_scope *s, const char *message)
 static void*
 codegen_palloc(mrc_codegen_scope *s, size_t len)
 {
-  void *p = xmalloc(len);
+  void *p = mrc_pool_alloc(s->mpool, len);
 
   if (!p) codegen_error(s, "pool memory allocation");
   return p;
@@ -409,16 +410,18 @@ scope_add_irep(mrc_codegen_scope *s)
 }
 
 static mrc_codegen_scope *
-scope_new(mrc_codegen_scope *prev, mrc_constant_id_list *nlv)
+scope_new(mrc_ccontext *c, mrc_codegen_scope *prev, mrc_constant_id_list *nlv)
 {
   static const mrc_codegen_scope codegen_scope_zero = { 0 };
-  mrc_codegen_scope *s = (mrc_codegen_scope *)xmalloc(sizeof(mrc_codegen_scope));
+  mrc_pool *pool = mrc_pool_open(c);
+  mrc_codegen_scope *s = (mrc_codegen_scope *)mrc_pool_alloc(pool, sizeof(mrc_codegen_scope));
   if (!s) {
     if (prev)
       codegen_error(prev, "unexpected scope");
     return NULL;
   }
   *s = codegen_scope_zero;
+  s->mpool = pool;
   if (!prev) return s;
   s->prev = prev;
   s->ainfo = 0;
@@ -910,7 +913,7 @@ scope_finish(mrc_codegen_scope *s)
   irep->nregs = s->nregs;
 
   //mrb_gc_arena_restore(mrb, s->ai);
-  //mrb_pool_close(s->mpool);
+  mrc_pool_close(s->mpool);
 }
 
 static int
@@ -932,7 +935,7 @@ scope_body(mrc_codegen_scope *s, mrc_node *tree, int val)
       break;
     }
   }
-  mrc_codegen_scope *scope = scope_new(s, nlv);
+  mrc_codegen_scope *scope = scope_new(s->c, s, nlv);
 
   codegen(scope, node, VAL);
   gen_return(scope, OP_RETURN, scope->sp-1);
@@ -1594,7 +1597,7 @@ static mrc_irep *
 generate_code(mrc_ccontext *c, mrc_node *node, int val)
 {
   // FIXME: memory leak of scope
-  mrc_codegen_scope *scope = scope_new(NULL, NULL);
+  mrc_codegen_scope *scope = scope_new(c, NULL, NULL);
   struct mrc_jmpbuf *prev_jmp = c->jmp; // FIXME: c->jmp is not initialized
   struct mrc_jmpbuf jmpbuf;
 
@@ -1610,10 +1613,15 @@ generate_code(mrc_ccontext *c, mrc_node *node, int val)
     //if (mrb->c->cibase && mrb->c->cibase->proc == proc->upper) {
     //  proc->upper = NULL;
     //}
+    //mrc_irep_free(c, scope->irep);
+    mrc_irep *irep = scope->irep;
+    mrc_pool_close(scope->mpool);
     c->jmp = prev_jmp;
-    return scope->irep;
+    return irep;
   }
   MRC_CATCH(c->jmp) {
+    //mrc_irep_free(c, scope->irep);
+    mrc_pool_close(scope->mpool);
     c->jmp = prev_jmp;
     return NULL;
   }

@@ -4,3 +4,38 @@ void
 mrc_irep_remove_lv(mrb_state *mrb, mrc_irep *irep)
 {
 }
+
+void
+mrc_irep_free(mrc_ccontext *c, mrc_irep *irep)
+{
+  printf("mrc_irep_free %p\n", irep);
+  int i;
+
+  if (irep->flags & MRC_IREP_NO_FREE) return;
+  if (!(irep->flags & MRC_ISEQ_NO_FREE))
+    xfree((void*)irep->iseq);
+  if (irep->pool) {
+    for (i=0; i<irep->plen; i++) {
+      if ((irep->pool[i].tt & 3) == IREP_TT_STR ||
+          irep->pool[i].tt == IREP_TT_BIGINT) {
+        xfree((void*)irep->pool[i].u.str);
+      }
+    }
+    xfree((void*)irep->pool);
+  }
+  xfree((void*)irep->syms);
+  if (irep->reps) {
+    for (i=0; i<irep->rlen; i++) {
+//      if (irep->reps[i])
+//        mrb_irep_decref((mrb_irep*)irep->reps[i]);
+      mrc_irep_free(c, (mrc_irep*)irep->reps[i]);
+    }
+    xfree((void*)irep->reps);
+  }
+  xfree((void*)irep->lv);
+//  mrb_debug_info_free(irep->debug_info);
+#ifdef MRC_DEBUG
+  memset(irep, -1, sizeof(*irep));
+#endif
+  xfree(irep);
+}

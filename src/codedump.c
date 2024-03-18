@@ -6,6 +6,7 @@
 #include "../include/mrc_dump.h"
 #include "../include/mrc_opcode.h"
 #include "../include/mrc_parser_util.h"
+#include "../include/mrc_pool.h"
 
 const char *
 mrc_sym_dump(mrc_ccontext *c, mrc_sym sym)
@@ -20,7 +21,7 @@ mrc_sym_dump(mrc_ccontext *c, mrc_sym sym)
   }
   else {
     // FIXME: memory leak
-    char *buf = (char*)xmalloc(lenp+1);
+    char *buf = (char*)mrc_pool_alloc(c, lenp+1);
     memcpy(buf, name, lenp);
     buf[lenp] = '\0';
     return buf;

@@ -8,7 +8,7 @@
 #define MRC_IREP_H
 
 #include "mrc_common.h"
-//#include <mruby/compile.h>
+#include "mrc_ccontext.h"
 
 /**
  * Compiled mruby scripts.
@@ -78,6 +78,9 @@ typedef struct mrc_irep {
   uint16_t refcnt;
 } mrc_irep;
 
+#define MRC_ISEQ_NO_FREE 1
+#define MRC_IREP_NO_FREE 2
+
 struct mrc_insn_data {
   uint8_t insn;
   uint32_t a;
@@ -90,6 +93,7 @@ struct mrc_insn_data {
 #define mrc_irep_catch_handler_unpack(v)    bin_to_uint32(v)
 
 void mrc_irep_remove_lv(mrb_state *mrb, mrc_irep *irep);
+void mrc_irep_free(mrc_ccontext *c, mrc_irep *irep);
 
 #define MRC_ASPEC_REQ(a)          (((a) >> 18) & 0x1f)
 #define MRC_ASPEC_OPT(a)          (((a) >> 13) & 0x1f)
