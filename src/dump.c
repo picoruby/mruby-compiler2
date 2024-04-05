@@ -464,7 +464,7 @@ get_filename_table_size(mrc_ccontext *c, const mrc_irep *irep, mrc_sym **fp, uin
     if (find_filename_index(filenames, *lp, file->filename_sym) == -1) {
       /* register filename */
       *lp += 1;
-      *fp = filenames = (mrc_sym*)xrealloc(filenames, sizeof(mrc_sym) * (*lp));
+      *fp = filenames = (mrc_sym*)mrc_realloc(filenames, sizeof(mrc_sym) * (*lp));
       filenames[*lp - 1] = file->filename_sym;
 
       /* filename */
@@ -598,7 +598,7 @@ static void
 create_lv_sym_table(mrc_ccontext *c, const mrc_irep *irep, mrc_sym **syms, uint32_t *syms_len)
 {
   if (*syms == NULL) {
-    *syms = (mrc_sym*)xmalloc(sizeof(mrc_sym) * 1);
+    *syms = (mrc_sym*)mrc_malloc(sizeof(mrc_sym) * 1);
   }
 
   for (int i = 0; i + 1 < irep->nlocals; i++) {
@@ -607,7 +607,7 @@ create_lv_sym_table(mrc_ccontext *c, const mrc_irep *irep, mrc_sym **syms, uint3
     if (find_filename_index(*syms, *syms_len, name) != -1) continue;
 
     ++(*syms_len);
-    *syms = (mrc_sym*)xrealloc(*syms, sizeof(mrc_sym) * (*syms_len));
+    *syms = (mrc_sym*)mrc_realloc(*syms, sizeof(mrc_sym) * (*syms_len));
     (*syms)[*syms_len - 1] = name;
   }
 
@@ -789,7 +789,7 @@ mrc_dump_irep(mrc_ccontext *c, const mrc_irep *irep, uint8_t flags, uint8_t **bi
     if (debug_info_defined) {
       section_lineno_size += sizeof(struct rite_section_debug_header);
       /* filename table */
-      filenames = (mrc_sym*)xmalloc(sizeof(mrc_sym) + 1);
+      filenames = (mrc_sym*)mrc_malloc(sizeof(mrc_sym) + 1);
 
       /* filename table size */
       section_lineno_size += sizeof(uint16_t);
@@ -808,7 +808,7 @@ mrc_dump_irep(mrc_ccontext *c, const mrc_irep *irep, uint8_t flags, uint8_t **bi
   malloc_size = sizeof(struct rite_binary_header) +
                 section_irep_size + section_lineno_size + section_lv_size +
                 sizeof(struct rite_binary_footer);
-  cur = *bin = (uint8_t*)xmalloc(malloc_size);
+  cur = *bin = (uint8_t*)mrc_malloc(malloc_size);
   cur += sizeof(struct rite_binary_header);
 
   result = write_section_irep(c, irep, cur, &section_irep_size, flags);
@@ -844,11 +844,11 @@ mrc_dump_irep(mrc_ccontext *c, const mrc_irep *irep, uint8_t flags, uint8_t **bi
 
 error_exit:
   if (result != MRC_DUMP_OK) {
-    xfree(*bin);
+    mrc_free(*bin);
     *bin = NULL;
   }
-  xfree(lv_syms);
-  xfree(filenames);
+  mrc_free(lv_syms);
+  mrc_free(filenames);
   return result;
 }
 
@@ -872,7 +872,7 @@ mrc_dump_irep_binary(mrc_ccontext *c, const mrc_irep *irep, uint8_t flags, FILE*
     }
   }
 
-  xfree(bin);
+  mrc_free(bin);
   return result;
 }
 

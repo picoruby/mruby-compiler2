@@ -21,7 +21,8 @@ mrc_sym_dump(mrc_ccontext *c, mrc_sym sym)
   }
   else {
     // FIXME: memory leak
-    char *buf = (char*)mrc_pool_alloc(c, lenp+1);
+    //char *buf = (char*)mrc_pool_alloc(c->pool, lenp+1);
+    char *buf = (char*)mrc_malloc(lenp+1);
     memcpy(buf, name, lenp);
     buf[lenp] = '\0';
     return buf;

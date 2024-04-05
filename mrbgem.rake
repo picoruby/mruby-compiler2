@@ -6,8 +6,10 @@ MRuby::Gem::Specification.new('mruby-compiler2') do |spec|
   lib_dir = "#{dir}/lib"
   cc.include_paths << "#{dir}/include"
 
+  prism_dir = "#{lib_dir}/prism"
+  libruby_parser_dir = "#{lib_dir}/libruby-parser"
+
   if cc.defines.flatten.include? "MRC_PARSER_PRISM"
-    prism_dir = "#{lib_dir}/prism"
     prism_templates_dir = "#{lib_dir}/prism/templates"
     cc.include_paths << "#{prism_dir}/include"
 
@@ -51,8 +53,19 @@ MRuby::Gem::Specification.new('mruby-compiler2') do |spec|
       end
     end
   elsif cc.defines.flatten.include? "MRC_PARSER_KANEKO"
-    libruby_parser_dir = "#{lib_dir}/libruby-parser"
+    cc.defines << "UNIVERSAL_PARSER"
+    cc.include_paths << "#{prism_dir}/include" # for pm_constant_pool
     cc.include_paths << "#{libruby_parser_dir}/include"
+    cc.include_paths << "#{libruby_parser_dir}/lib/ruby"
+    cc.include_paths << "#{libruby_parser_dir}/lib/ruby/include"
+    cc.include_paths << "#{libruby_parser_dir}/lib/ruby/.ext/include/x86_64-linux"
+
+    src = "#{libruby_parser_dir}/src/helper.c"
+    obj = objfile(src.pathmap("#{build_dir}/lib/%n"))
+    objs << obj
+    file obj => [src] do |f|
+      cc.run f.name, f.prerequisites.first
+    end
   else
     raise "You have to specify MRC_PARSER_PRISM or MRC_PARSER_KANEKO"
   end

@@ -56,7 +56,7 @@ typedef struct mrc_pool {
 mrc_pool*
 mrc_pool_open(mrc_ccontext *c)
 {
-  mrc_pool *pool = (mrc_pool*)xmalloc(sizeof(mrc_pool));
+  mrc_pool *pool = (mrc_pool*)mrc_malloc(sizeof(mrc_pool));
 
   if (pool) {
     pool->c = c;
@@ -75,9 +75,9 @@ mrc_pool_close(mrc_pool *pool)
   while (page) {
     struct mrc_pool_page *tmp = page;
     page = page->next;
-    xfree(tmp);
+    mrc_free(tmp);
   }
-  xfree(pool);
+  mrc_free(pool);
 }
 
 static struct mrc_pool_page*
@@ -87,7 +87,7 @@ page_alloc(mrc_pool *pool, size_t len)
 
   if (len < POOL_PAGE_SIZE)
     len = POOL_PAGE_SIZE;
-  page = (struct mrc_pool_page*)xmalloc(sizeof(struct mrc_pool_page)+len);
+  page = (struct mrc_pool_page*)mrc_malloc(sizeof(struct mrc_pool_page)+len);
   if (page) {
     page->offset = 0;
     page->len = len;

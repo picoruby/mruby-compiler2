@@ -19,7 +19,11 @@ MRC_BEGIN_DECL
     bool parsed;
   } pm_parse_result_t;
 #elif defined(MRC_PARSER_KANEKO)
-  // TODO
+  #include "rubyparser.h"
+  #include "helper.h" // in lib/libruby-parser/include
+  typedef rb_ast_t mrc_node;
+  typedef struct parser_params mrc_parser_state;
+  typedef pm_constant_id_list_t mrc_constant_id_list;
 #else
   #error "No parser defined. Please define MRC_PARSER_PRISM or MRC_PARSER_KANEKO."
 #endif

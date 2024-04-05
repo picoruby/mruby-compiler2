@@ -7,10 +7,10 @@
   #include <mrc_custom_alloc.h>
 #else
   #include <stdlib.h>
-  #define xmalloc   malloc
-  #define xrealloc  realloc
-  #define xcalloc   calloc
-  #define xfree     free
+  #define mrc_malloc   malloc
+  #define mrc_realloc  realloc
+  #define mrc_calloc   calloc
+  #define mrc_free     free
 #endif
 
 typedef void mrb_state;
