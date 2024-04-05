@@ -55,9 +55,23 @@ mrc_parse_file_cxt(mrc_ccontext *c, const char *filename)
   pm_parser_init(c->p, string.source, string.length, NULL);
   return pm_parse(c->p);
 #elif defined(MRC_PARSER_KANEKO)
-  return NULL;
+  FILE *f = fopen(filename, "r");
+  if (!f) {
+    fprintf(stderr, "cannot open file: %s\n", filename);
+    return NULL;
+  } else {
+    size_t len;
+    fseek(f, 0, SEEK_END);
+    len = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    char *str = (char *)mrc_malloc(len); // FIXME: memory leak
+    fread(str, len, 1, f);
+    fclose(f);
+    VALUE string = (VALUE)string_new_with_str_len(str, len);
+    rb_ast_t *ast = rb_ruby_parser_compile_string(c->p, filename, string, 0);
+    return (mrc_node *)ast->body.root;
+  }
 #endif
-#
 }
 
 mrc_irep *
@@ -82,7 +96,8 @@ mrc_parse_string_cxt(mrc_ccontext *c, const uint8_t *source, size_t length)
   return pm_parse(c->p);
 #elif defined(MRC_PARSER_KANEKO)
   VALUE str = (VALUE)string_new_with_str_len((const char *)source, length);
-  return rb_ruby_parser_compile_string(c->p, "name", str, 0);
+  rb_ast_t *ast = rb_ruby_parser_compile_string(c->p, "name", str, 0);
+  return (mrc_node *)ast->body.root;
 #endif
 }
 

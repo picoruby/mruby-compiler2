@@ -1183,7 +1183,7 @@ mrc_generate_code(mrc_ccontext *c, mrc_node *node)
 #if defined(MRC_PARSER_PRISM)
   #include "codegen_prism.inc"
 #elif defined(MRC_PARSER_KANEKO)
-
+  #include "codegen_libruby_parser.inc"
 #else
   #error "Unknown parser"
 #endif
