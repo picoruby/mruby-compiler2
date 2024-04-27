@@ -17,6 +17,8 @@ mrc_sym_name_len(mrc_ccontext *c, mrc_sym sym, mrc_int *lenp)
   }
 #elif defined(MRC_PARSER_KANEKO)
   // TODO
+  *lenp = 4;
+  return "puts";
 #endif
   return NULL;
 }

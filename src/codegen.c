@@ -438,9 +438,9 @@ scope_new(mrc_ccontext *c, mrc_codegen_scope *prev, mrc_constant_id_list *nlv)
   s->scapa = 256;
   s->syms = (mrc_sym *)mrc_malloc(sizeof(mrc_sym)*s->scapa);
   s->lv = nlv;
-  s->sp += nlv->size + 1; // add self
   s->nlocals = s->sp;
   if (nlv) {
+    s->sp += nlv->size + 1; // add self
     mrc_sym *lv;
     s->irep->lv = lv = (mrc_sym *)mrc_malloc(sizeof(mrc_sym)*(s->nlocals-1));
     memcpy(lv, nlv->ids, sizeof(mrc_sym)*nlv->size);
