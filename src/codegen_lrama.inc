@@ -125,7 +125,7 @@ gen_call(mrc_codegen_scope *s, mrc_node *tree, int val, int safe)
   rb_node_list_t *cast = RNODE_LIST(tree);
 //  pm_constant_t *constant = pm_constant_pool_id_to_constant(&s->c->p->constant_pool, (const pm_constant_id_t)cast->nd_mid);
   mrc_sym sym = 0;//mrc_find_presym(constant->start, constant->length);
-  mrc_sym pm_sym = nsym(s, "puts", 4);
+  mrc_sym pm_sym = nsym(s->c->p, (const uint8_t *)"puts", 4);
 //  if (sym == 0) pm_sym = nsym(s->c->p, constant->start, constant->length);
   int skip = 0, n = 0, nk = 0, noop = no_optimize(s), noself = 0, blk = 0, sp_save = cursp();
 

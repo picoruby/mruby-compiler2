@@ -41,11 +41,13 @@ int mrc_dump_irep_binary(mrc_ccontext *c, const mrc_irep *irep, uint8_t flags, F
 #define RITE_BINARY_MINOR_VER          "00"
 #define RITE_BINARY_FORMAT_VER         RITE_BINARY_MAJOR_VER RITE_BINARY_MINOR_VER
 #if defined(MRC_PARSER_PRISM)
-  #define RITE_COMPILER_NAME           "HAPR"
-#elif defined(MRC_PARSER_KANEKO)
-  #define RITE_COMPILER_NAME           "HALR"
+  #define RITE_COMPILER_NAME           "PRHS"
+  #define RITE_PARSER_NAME             "Prism"
+#elif defined(MRC_PARSER_LRAMA)
+  #define RITE_COMPILER_NAME           "LRHS"
+  #define RITE_PARSER_NAME             "Lrama-generated"
 #else
-  #error "You must define MRC_PARSER_PRISM or MRC_PARSER_KANEKO"
+  #error "You must define MRC_PARSER_PRISM or MRC_PARSER_LRAMA"
 #endif
 #define RITE_COMPILER_VERSION          "0000"
 
@@ -144,6 +146,13 @@ bin_to_uint8(const uint8_t *bin)
 {
   return (uint8_t)bin[0];
 }
+
+static inline const char*
+mrc_description(void)
+{
+  return RITE_BINARY_MAJOR_VER "." RITE_BINARY_MINOR_VER " (" MRC_RELEASE_DATE ") " RITE_PARSER_NAME " parser";
+}
+
 MRC_END_DECL
 
 #endif // MRC_DUMP_H

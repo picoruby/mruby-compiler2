@@ -1082,7 +1082,7 @@ nsym(mrc_parser_state *p, const uint8_t *start, size_t length)
     pm_sym = pm_constant_pool_insert_shared(&p->constant_pool, start, length);
   }
   return pm_sym;
-#elif defined(MRC_PARSER_KANEKO)
+#elif defined(MRC_PARSER_LRAMA)
   // TODO!!!
   return 1;
 #endif
@@ -1182,8 +1182,8 @@ mrc_generate_code(mrc_ccontext *c, mrc_node *node)
 
 #if defined(MRC_PARSER_PRISM)
   #include "codegen_prism.inc"
-#elif defined(MRC_PARSER_KANEKO)
-  #include "codegen_libruby_parser.inc"
+#elif defined(MRC_PARSER_LRAMA)
+  #include "codegen_lrama.inc"
 #else
   #error "Unknown parser"
 #endif

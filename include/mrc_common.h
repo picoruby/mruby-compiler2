@@ -3,6 +3,16 @@
 
 #include <stdint.h>
 
+#define MRC_STRINGIZE0(expr) #expr
+#define MRC_STRINGIZE(expr) MRC_STRINGIZE0(expr)
+
+#define MRC_RELEASE_YEAR    2024
+#define MRC_RELEASE_MONTH   5
+#define MRC_RELEASE_DAY     8
+#define MRC_RELEASE_DATE    MRC_STRINGIZE(MRC_RELEASE_YEAR) "-" \
+                            MRC_STRINGIZE(MRC_RELEASE_MONTH) "-" \
+                            MRC_STRINGIZE(MRC_RELEASE_DAY)
+
 #ifdef MRC_CUSTOM_ALLOC
   #include <mrc_custom_alloc.h>
 #else

@@ -18,14 +18,14 @@ MRC_BEGIN_DECL
     pm_string_t input;
     bool parsed;
   } pm_parse_result_t;
-#elif defined(MRC_PARSER_KANEKO)
+#elif defined(MRC_PARSER_LRAMA)
   #include "rubyparser.h"
   #include "helper.h" // in lib/libruby-parser/include
   typedef NODE mrc_node;
   typedef struct parser_params mrc_parser_state;
   typedef rb_ast_id_table_t mrc_constant_id_list;
 #else
-  #error "No parser defined. Please define MRC_PARSER_PRISM or MRC_PARSER_KANEKO."
+  #error "No parser defined. Please define MRC_PARSER_PRISM or MRC_PARSER_LRAMA."
 #endif
 
 typedef struct mrc_ccontext {

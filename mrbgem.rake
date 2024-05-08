@@ -52,7 +52,7 @@ MRuby::Gem::Specification.new('mruby-compiler2') do |spec|
         cc.run f.name, f.prerequisites.first
       end
     end
-  elsif cc.defines.flatten.include? "MRC_PARSER_KANEKO"
+  elsif cc.defines.flatten.include? "MRC_PARSER_LRAMA"
     cc.defines << "UNIVERSAL_PARSER"
     cc.include_paths << "#{prism_dir}/include" # for pm_constant_pool
     cc.include_paths << "#{libruby_parser_dir}/include"
@@ -67,7 +67,7 @@ MRuby::Gem::Specification.new('mruby-compiler2') do |spec|
       cc.run f.name, f.prerequisites.first
     end
   else
-    raise "You have to specify MRC_PARSER_PRISM or MRC_PARSER_KANEKO"
+    raise "You have to specify MRC_PARSER_PRISM or MRC_PARSER_LRAMA"
   end
 
 end
