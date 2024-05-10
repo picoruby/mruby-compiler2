@@ -20,7 +20,7 @@ MRC_BEGIN_DECL
   } pm_parse_result_t;
 #elif defined(MRC_PARSER_LRAMA)
   #include "rubyparser.h"
-  #include "helper.h" // in lib/libruby-parser/include
+  #include "lrama_helper.h"
   typedef NODE mrc_node;
   typedef struct parser_params mrc_parser_state;
   typedef rb_ast_id_table_t mrc_constant_id_list;

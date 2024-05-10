@@ -7,9 +7,10 @@ MRuby::Gem::Specification.new('mruby-compiler2') do |spec|
   cc.include_paths << "#{dir}/include"
 
   prism_dir = "#{lib_dir}/prism"
-  libruby_parser_dir = "#{lib_dir}/libruby-parser"
+  ruby_dir = "#{lib_dir}/ruby"
 
   if cc.defines.flatten.include? "MRC_PARSER_PRISM"
+    objs.delete_if {|obj| obj =~ /lrama_helper/}
     prism_templates_dir = "#{lib_dir}/prism/templates"
     cc.include_paths << "#{prism_dir}/include"
 
@@ -55,16 +56,19 @@ MRuby::Gem::Specification.new('mruby-compiler2') do |spec|
   elsif cc.defines.flatten.include? "MRC_PARSER_LRAMA"
     cc.defines << "UNIVERSAL_PARSER"
     cc.include_paths << "#{prism_dir}/include" # for pm_constant_pool
-    cc.include_paths << "#{libruby_parser_dir}/include"
-    cc.include_paths << "#{libruby_parser_dir}/lib/ruby"
-    cc.include_paths << "#{libruby_parser_dir}/lib/ruby/include"
-    cc.include_paths << "#{libruby_parser_dir}/lib/ruby/.ext/include/x86_64-linux"
-
-    src = "#{libruby_parser_dir}/src/helper.c"
-    obj = objfile(src.pathmap("#{build_dir}/lib/%n"))
-    objs << obj
-    file obj => [src] do |f|
-      cc.run f.name, f.prerequisites.first
+    cc.include_paths << "#{ruby_dir}"
+    cc.include_paths << "#{ruby_dir}/include"
+    cc.include_paths << "#{ruby_dir}/.ext/include/x86_64-linux"
+    [
+      "#{prism_dir}/src/util/pm_constant_pool.c",
+      "#{ruby_dir}/parse.c",
+      "#{ruby_dir}/node.c",
+      "#{ruby_dir}/parser_st.c"
+    ].each do |src|
+      objs << objfile(src.pathmap("#{build_dir}/lib/%n"))
+      file objs.last => [src] do |f|
+        cc.run f.name, f.prerequisites.first
+      end
     end
   else
     raise "You have to specify MRC_PARSER_PRISM or MRC_PARSER_LRAMA"

@@ -80,15 +80,6 @@ mrc_parse_file_cxt(mrc_ccontext *c, const char *filename)
     fprintf(stderr, "cannot open file: %s\n", filename);
     return NULL;
   } else {
-//    size_t len;
-//    fseek(f, 0, SEEK_END);
-//    len = ftell(f);
-//    fseek(f, 0, SEEK_SET);
-//    char *str = (char *)mrc_malloc(len); // FIXME: memory leak
-//    fread(str, len, 1, f);
-//    fclose(f);
-//    VALUE string = (VALUE)string_new_with_str_len(str, len);
-//    rb_ast_t *ast = rb_ruby_parser_compile_string(c->p, filename, string, 0);
     rb_ast_t *ast = rb_parser_compile(c->p, &rb_parser_gets, NULL, 0, NULL, (rb_parser_input_data)f, 1);
     return (mrc_node *)ast->body.root;
   }
