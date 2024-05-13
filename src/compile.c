@@ -49,7 +49,7 @@ mrc_load_exec(mrc_ccontext *c, mrc_node *ast)
 
 #include "internal/parse.h"
 
-rb_parser_string_t *rb_parser_string_new(rb_parser_t *p, const char *ptr, long len);
+//rb_parser_string_t *rb_parser_string_new(rb_parser_t *p, const char *ptr, long len);
 
 static rb_parser_string_t *
 rb_parser_gets(struct parser_params *p, rb_parser_input_data input, int line)

@@ -173,6 +173,12 @@ id2sym(ID id)
     return (VALUE)id;
 }
 
+static double
+parser_strtod(const char *nptr, char **endptr)
+{
+    return 0.0;
+}
+
 static VALUE
 enc_str_new(const char *ptr, long len, rb_encoding *enc)
 {
@@ -405,6 +411,7 @@ parser_config_initialize(rb_parser_config_t *config)
 
     // added by hasumi
     config->id2sym = id2sym;
+    config->strtod = parser_strtod;
     config->id2str = id2str;
     config->enc_str_new = enc_str_new;
     config->is_ascii_string = is_ascii_string;
