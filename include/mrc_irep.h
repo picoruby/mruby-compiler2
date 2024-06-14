@@ -92,7 +92,7 @@ struct mrc_insn_data {
 #define mrc_irep_catch_handler_pack(n, v)   uint32_to_bin(n, v)
 #define mrc_irep_catch_handler_unpack(v)    bin_to_uint32(v)
 
-void mrc_irep_remove_lv(mrb_state *mrb, mrc_irep *irep);
+void mrc_irep_remove_lv(mrc_ccontext *c, mrc_irep *irep);
 void mrc_irep_free(mrc_ccontext *c, mrc_irep *irep);
 
 #define MRC_ASPEC_REQ(a)          (((a) >> 18) & 0x1f)

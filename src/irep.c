@@ -1,8 +1,19 @@
 #include "../include/mrc_irep.h"
 
 void
-mrc_irep_remove_lv(mrb_state *mrb, mrc_irep *irep)
+mrc_irep_remove_lv(mrc_ccontext *c, mrc_irep *irep)
 {
+  int i;
+
+  if (irep->flags & MRC_IREP_NO_FREE) return;
+  if (irep->lv) {
+    mrc_free((void*)irep->lv);
+    irep->lv = NULL;
+  }
+  if (!irep->reps) return;
+  for (i = 0; i < irep->rlen; i++) {
+    mrc_irep_remove_lv(c, (mrc_irep*)irep->reps[i]);
+  }
 }
 
 void
