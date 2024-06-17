@@ -25,7 +25,7 @@ MRuby::Gem::Specification.new('mruby-compiler2') do |spec|
         sh "git clone https://github.com/ruby/prism.git"
       end
       FileUtils.cd prism_dir do
-        sh "git checkout 532e4cc209818f52075bd4b2dc2f353d7da1bfbe"
+        sh "git checkout v0.30.0"
       end
     end
 

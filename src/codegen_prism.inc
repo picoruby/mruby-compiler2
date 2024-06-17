@@ -411,7 +411,17 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     {
       pm_integer_node_t *cast = (pm_integer_node_t *)tree;
       // todo: check overflow
-      gen_int(s, cursp(), cast->value.head.value); // todo: negative or big integer
+      if (cast->value.length == 0) {
+        if (!cast->value.negative) {
+          gen_int(s, cursp(), cast->value.value);
+        }
+        else {
+          // todo: negative
+        }
+      }
+      else {
+        // todo: big integer
+      }
       push();
       break;
     }
