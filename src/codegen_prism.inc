@@ -386,6 +386,21 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       }
       break;
     }
+    case PM_LOCAL_VARIABLE_READ_NODE:
+    {
+      if (val) {
+        pm_local_variable_read_node_t *cast = (pm_local_variable_read_node_t *)tree;
+        if (cast->depth == 0) {
+          gen_move(s, cursp(), cast->name, val);
+        }
+        else {
+          // TODO
+          // gen_getupvar(s, cursp(), nsym(tree));
+        }
+        push();
+      }
+      break;
+    }
     case PM_LOCAL_VARIABLE_WRITE_NODE:
     {
       pm_local_variable_write_node_t *cast = (pm_local_variable_write_node_t *)tree;
