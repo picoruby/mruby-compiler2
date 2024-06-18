@@ -151,7 +151,7 @@ gen_values(mrc_codegen_scope *s, mrc_node *tree, int val, int limit)
     }
     if (is_splat) {
       pm_array_node_t *a = (pm_array_node_t *)((pm_splat_node_t *)t)->expression;
-      codegen(s, (mrc_node *)a, VAL);
+      codegen(s, (mrc_node *)a, val);
       pop(); pop();
       genop_1(s, OP_ARYCAT, cursp());
       push();
@@ -403,8 +403,16 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       pm_statements_node_t *cast = (pm_statements_node_t *)tree;
       size_t last_index = cast->body.size;
       for (uint32_t i = 0; i < last_index; i++) {
-        codegen(s, (mrc_node *)cast->body.nodes[i], val);
+        codegen(s, (mrc_node *)cast->body.nodes[i], (i+1 < last_index) ? NOVAL : val);
       }
+      break;
+    }
+    case PM_INSTANCE_VARIABLE_READ_NODE:
+    {
+      pm_instance_variable_read_node_t *cast = (pm_instance_variable_read_node_t *)tree;
+      int sym = new_sym(s, cast->name);
+      genop_2(s, OP_GETIV, cursp(), sym);
+      if (val) push();
       break;
     }
     case PM_LOCAL_VARIABLE_READ_NODE:
@@ -423,6 +431,11 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       break;
     }
     case PM_INSTANCE_VARIABLE_WRITE_NODE:
+    {
+      pm_instance_variable_write_node_t *cast = (pm_instance_variable_write_node_t *)tree;
+      gen_assignment(s, tree, (mrc_node *)cast->value, 0, val);
+      break;
+    }
     case PM_LOCAL_VARIABLE_WRITE_NODE:
     {
       pm_local_variable_write_node_t *cast = (pm_local_variable_write_node_t *)tree;
