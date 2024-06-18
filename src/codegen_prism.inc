@@ -1,11 +1,26 @@
 
 static void
+gen_setxv(mrc_codegen_scope *s, uint8_t op, uint16_t dst, mrc_sym sym, int val)
+{
+  int idx = new_sym(s, sym);
+  if (!val && !no_peephole(s)) {
+    struct mrc_insn_data data = mrc_last_insn(s);
+    if (data.insn == OP_MOVE && data.a == dst) {
+      dst = data.b;
+      rewind_pc(s);
+    }
+  }
+  genop_2(s, op, dst, idx);
+}
+
+static void
 gen_assignment(mrc_codegen_scope *s, mrc_node *tree, mrc_node *rhs, int sp, int val)
 {
   int idx;
 
   switch (PM_NODE_TYPE(tree)) {
     case PM_LOCAL_VARIABLE_WRITE_NODE:
+    case PM_INSTANCE_VARIABLE_WRITE_NODE:
     {
       if (rhs) {
         codegen(s, rhs, VAL);
@@ -16,7 +31,7 @@ gen_assignment(mrc_codegen_scope *s, mrc_node *tree, mrc_node *rhs, int sp, int 
     }
     default:
     {
-      printf("Not implemented %s\n", pm_node_type_to_str(PM_NODE_TYPE(tree)));
+      printf("Not implemented (#1) %s\n", pm_node_type_to_str(PM_NODE_TYPE(tree)));
       break;
     }
   }
@@ -38,9 +53,15 @@ gen_assignment(mrc_codegen_scope *s, mrc_node *tree, mrc_node *rhs, int sp, int 
       }
       break;
     }
+    case PM_INSTANCE_VARIABLE_WRITE_NODE:
+    {
+      pm_instance_variable_write_node_t *cast = (pm_instance_variable_write_node_t *)tree;
+      gen_setxv(s, OP_SETIV, sp, cast->name, val);
+      break;
+    }
     default:
     {
-      printf("Not implemented %s\n", pm_node_type_to_str(PM_NODE_TYPE(tree)));
+      printf("Not implemented (#2) %s\n", pm_node_type_to_str(PM_NODE_TYPE(tree)));
       break;
     }
   }
@@ -62,7 +83,7 @@ scope_body(mrc_codegen_scope *s, mrc_node *tree, int val)
     }
     default:
     {
-      printf("Not implemented %s\n", pm_node_type_to_str(PM_NODE_TYPE(tree)));
+      printf("Not implemented (#3) %s\n", pm_node_type_to_str(PM_NODE_TYPE(tree)));
       break;
     }
   }
@@ -401,6 +422,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       }
       break;
     }
+    case PM_INSTANCE_VARIABLE_WRITE_NODE:
     case PM_LOCAL_VARIABLE_WRITE_NODE:
     {
       pm_local_variable_write_node_t *cast = (pm_local_variable_write_node_t *)tree;
@@ -481,7 +503,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     }
     default:
     {
-      printf("Not implemented %s\n", pm_node_type_to_str(PM_NODE_TYPE(tree)));
+      printf("Not implemented (#4) %s\n", pm_node_type_to_str(PM_NODE_TYPE(tree)));
       break;
     }
   }
