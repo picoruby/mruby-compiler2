@@ -1,4 +1,7 @@
 
+#define CAST(name) \
+  pm_##name##_node_t *cast = (pm_##name##_node_t *)tree
+
 static void
 gen_setxv(mrc_codegen_scope *s, uint8_t op, uint16_t dst, mrc_sym sym, int val)
 {
@@ -21,6 +24,7 @@ gen_assignment(mrc_codegen_scope *s, mrc_node *tree, mrc_node *rhs, int sp, int 
   switch (PM_NODE_TYPE(tree)) {
     case PM_LOCAL_VARIABLE_WRITE_NODE:
     case PM_INSTANCE_VARIABLE_WRITE_NODE:
+    case PM_CONSTANT_WRITE_NODE:
     {
       if (rhs) {
         codegen(s, rhs, VAL);
@@ -39,7 +43,7 @@ gen_assignment(mrc_codegen_scope *s, mrc_node *tree, mrc_node *rhs, int sp, int 
   switch (PM_NODE_TYPE(tree)) {
     case PM_LOCAL_VARIABLE_WRITE_NODE:
     {
-      pm_local_variable_write_node_t *cast = (pm_local_variable_write_node_t *)tree;
+      CAST(local_variable_write);
       idx = cast->name;
       if (cast->depth == 0) {
         if (idx != sp) {
@@ -55,8 +59,14 @@ gen_assignment(mrc_codegen_scope *s, mrc_node *tree, mrc_node *rhs, int sp, int 
     }
     case PM_INSTANCE_VARIABLE_WRITE_NODE:
     {
-      pm_instance_variable_write_node_t *cast = (pm_instance_variable_write_node_t *)tree;
+      CAST(instance_variable_write);
       gen_setxv(s, OP_SETIV, sp, cast->name, val);
+      break;
+    }
+    case PM_CONSTANT_WRITE_NODE:
+    {
+      CAST(constant_write);
+      gen_setxv(s, OP_SETCONST, sp, cast->name, val);
       break;
     }
     default:
@@ -105,7 +115,7 @@ scope_body(mrc_codegen_scope *s, mrc_node *tree, int val)
 static int
 gen_values(mrc_codegen_scope *s, mrc_node *tree, int val, int limit)
 {
-  pm_arguments_node_t *cast = (pm_arguments_node_t *)tree;
+  CAST(arguments);
   mrc_node *t = (mrc_node *)cast->arguments.nodes[0];
 
   int n = 0;
@@ -183,11 +193,11 @@ gen_hash(mrc_codegen_scope *s, mrc_node *tree, int val, int limit)
 {
   struct pm_node_list elements;
   if (PM_NODE_TYPE(tree) == PM_HASH_NODE) {
-    pm_hash_node_t *cast = (pm_hash_node_t *)tree;
+    CAST(hash);
     elements = cast->elements;
   }
   else {
-    pm_keyword_hash_node_t *cast = (pm_keyword_hash_node_t *)tree;
+    CAST(keyword_hash);
     elements = cast->elements;
   }
 
@@ -267,7 +277,7 @@ gen_hash(mrc_codegen_scope *s, mrc_node *tree, int val, int limit)
 static void
 gen_call(mrc_codegen_scope *s, mrc_node *tree, int val, int safe)
 {
-  pm_call_node_t *cast = (pm_call_node_t *)tree;
+  CAST(call);
   pm_constant_t *constant = pm_constant_pool_id_to_constant(&s->c->p->constant_pool, (const pm_constant_id_t)cast->name);
   mrc_sym sym = mrc_find_presym(constant->start, constant->length);
   mrc_sym pm_sym = 0;
@@ -363,6 +373,14 @@ gen_call(mrc_codegen_scope *s, mrc_node *tree, int val, int safe)
   }
 }
 
+#define case_WRITE_NODE(NODE_TYPE, CAST_TYPE) \
+  case NODE_TYPE##_WRITE_NODE: \
+    { \
+      CAST_TYPE##_write_node_t *cast = (CAST_TYPE##_write_node_t *)tree; \
+      gen_assignment(s, tree, (mrc_node *)cast->value, 0, val); \
+      break; \
+    }
+
 static void
 codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
 {
@@ -400,7 +418,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     }
     case PM_STATEMENTS_NODE:
     {
-      pm_statements_node_t *cast = (pm_statements_node_t *)tree;
+      CAST(statements);
       size_t last_index = cast->body.size;
       for (uint32_t i = 0; i < last_index; i++) {
         codegen(s, (mrc_node *)cast->body.nodes[i], (i+1 < last_index) ? NOVAL : val);
@@ -430,21 +448,20 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       }
       break;
     }
-    case PM_INSTANCE_VARIABLE_WRITE_NODE:
+    case PM_CONSTANT_READ_NODE:
     {
-      pm_instance_variable_write_node_t *cast = (pm_instance_variable_write_node_t *)tree;
-      gen_assignment(s, tree, (mrc_node *)cast->value, 0, val);
+      pm_constant_read_node_t *cast = (pm_constant_read_node_t *)tree;
+      int sym = new_sym(s, cast->name);
+      genop_2(s, OP_GETCONST, cursp(), sym);
+      if (val) push();
       break;
     }
-    case PM_LOCAL_VARIABLE_WRITE_NODE:
-    {
-      pm_local_variable_write_node_t *cast = (pm_local_variable_write_node_t *)tree;
-      gen_assignment(s, tree, (mrc_node *)cast->value, 0, val);
-      break;
-    }
+    case_WRITE_NODE(PM_INSTANCE_VARIABLE, pm_instance_variable)
+    case_WRITE_NODE(PM_LOCAL_VARIABLE, pm_local_variable)
+    case_WRITE_NODE(PM_CONSTANT, pm_constant)
     case PM_INTEGER_NODE:
     {
-      pm_integer_node_t *cast = (pm_integer_node_t *)tree;
+      CAST(integer);
       // todo: check overflow
       if (cast->value.length == 0) {
         if (!cast->value.negative) {
@@ -462,7 +479,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     }
     case PM_CALL_NODE:
     {
-      pm_call_node_t *cast = (pm_call_node_t *)tree;
+      CAST(call);
       gen_call(s, tree, val, (cast->base.flags & PM_CALL_NODE_FLAGS_SAFE_NAVIGATION) ? 1 : 0);
       break;
     }
@@ -482,7 +499,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     case PM_SYMBOL_NODE:
     {
       if (val) {
-        pm_symbol_node_t *cast = (pm_symbol_node_t *)tree;
+        CAST(symbol);
         int sym = new_sym(s, nsym(s->c->p, cast->unescaped.source, cast->unescaped.length));
 
         genop_2(s, OP_LOADSYM, cursp(), sym);
@@ -504,7 +521,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     case PM_STRING_NODE:
     {
       if (val) {
-        pm_string_node_t *cast = (pm_string_node_t *)tree;
+        CAST(string);
         char *p = (char*)cast->unescaped.source;
         mrc_int len = cast->unescaped.length;
         int off = new_lit_str(s, p, len);
