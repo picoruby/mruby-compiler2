@@ -25,6 +25,7 @@ gen_assignment(mrc_codegen_scope *s, mrc_node *tree, mrc_node *rhs, int sp, int 
     case PM_LOCAL_VARIABLE_WRITE_NODE:
     case PM_INSTANCE_VARIABLE_WRITE_NODE:
     case PM_CONSTANT_WRITE_NODE:
+    case PM_GLOBAL_VARIABLE_WRITE_NODE:
     {
       if (rhs) {
         codegen(s, rhs, VAL);
@@ -67,6 +68,12 @@ gen_assignment(mrc_codegen_scope *s, mrc_node *tree, mrc_node *rhs, int sp, int 
     {
       CAST(constant_write);
       gen_setxv(s, OP_SETCONST, sp, cast->name, val);
+      break;
+    }
+    case PM_GLOBAL_VARIABLE_WRITE_NODE:
+    {
+      CAST(global_variable_read);
+      gen_setxv(s, OP_SETGV, sp, cast->name, val);
       break;
     }
     default:
@@ -373,14 +380,6 @@ gen_call(mrc_codegen_scope *s, mrc_node *tree, int val, int safe)
   }
 }
 
-#define case_WRITE_NODE(NODE_TYPE, CAST_TYPE) \
-  case NODE_TYPE##_WRITE_NODE: \
-    { \
-      CAST_TYPE##_write_node_t *cast = (CAST_TYPE##_write_node_t *)tree; \
-      gen_assignment(s, tree, (mrc_node *)cast->value, 0, val); \
-      break; \
-    }
-
 static void
 codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
 {
@@ -427,7 +426,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     }
     case PM_INSTANCE_VARIABLE_READ_NODE:
     {
-      pm_instance_variable_read_node_t *cast = (pm_instance_variable_read_node_t *)tree;
+      CAST(instance_variable_read);
       int sym = new_sym(s, cast->name);
       genop_2(s, OP_GETIV, cursp(), sym);
       if (val) push();
@@ -436,7 +435,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     case PM_LOCAL_VARIABLE_READ_NODE:
     {
       if (val) {
-        pm_local_variable_read_node_t *cast = (pm_local_variable_read_node_t *)tree;
+        CAST(local_variable_read);
         if (cast->depth == 0) {
           gen_move(s, cursp(), cast->name, val);
         }
@@ -448,17 +447,33 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       }
       break;
     }
+    case PM_GLOBAL_VARIABLE_READ_NODE:
+    {
+      CAST(global_variable_read);
+      int sym = new_sym(s, cast->name);
+      genop_2(s, OP_GETGV, cursp(), sym);
+      if (val) push();
+      break;
+    }
     case PM_CONSTANT_READ_NODE:
     {
-      pm_constant_read_node_t *cast = (pm_constant_read_node_t *)tree;
+      CAST(constant_read);
       int sym = new_sym(s, cast->name);
       genop_2(s, OP_GETCONST, cursp(), sym);
       if (val) push();
       break;
     }
+#define case_WRITE_NODE(NODE_TYPE, CAST_TYPE) \
+  case NODE_TYPE##_WRITE_NODE: \
+    { \
+      CAST_TYPE##_write_node_t *cast = (CAST_TYPE##_write_node_t *)tree; \
+      gen_assignment(s, tree, (mrc_node *)cast->value, 0, val); \
+      break; \
+    }
     case_WRITE_NODE(PM_INSTANCE_VARIABLE, pm_instance_variable)
     case_WRITE_NODE(PM_LOCAL_VARIABLE, pm_local_variable)
     case_WRITE_NODE(PM_CONSTANT, pm_constant)
+    case_WRITE_NODE(PM_GLOBAL_VARIABLE, pm_global_variable)
     case PM_INTEGER_NODE:
     {
       CAST(integer);
