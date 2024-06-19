@@ -26,6 +26,7 @@ gen_assignment(mrc_codegen_scope *s, mrc_node *tree, mrc_node *rhs, int sp, int 
     case PM_INSTANCE_VARIABLE_WRITE_NODE:
     case PM_CONSTANT_WRITE_NODE:
     case PM_GLOBAL_VARIABLE_WRITE_NODE:
+    case PM_CLASS_VARIABLE_WRITE_NODE:
     {
       if (rhs) {
         codegen(s, rhs, VAL);
@@ -74,6 +75,12 @@ gen_assignment(mrc_codegen_scope *s, mrc_node *tree, mrc_node *rhs, int sp, int 
     {
       CAST(global_variable_read);
       gen_setxv(s, OP_SETGV, sp, cast->name, val);
+      break;
+    }
+    case PM_CLASS_VARIABLE_WRITE_NODE:
+    {
+      CAST(class_variable_read);
+      gen_setxv(s, OP_SETCV, sp, cast->name, val);
       break;
     }
     default:
@@ -455,6 +462,14 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       if (val) push();
       break;
     }
+    case PM_CLASS_VARIABLE_READ_NODE:
+    {
+      CAST(class_variable_read);
+      int sym = new_sym(s, cast->name);
+      genop_2(s, OP_GETCV, cursp(), sym);
+      if (val) push();
+      break;
+    }
     case PM_CONSTANT_READ_NODE:
     {
       CAST(constant_read);
@@ -474,6 +489,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     case_WRITE_NODE(PM_LOCAL_VARIABLE, pm_local_variable)
     case_WRITE_NODE(PM_CONSTANT, pm_constant)
     case_WRITE_NODE(PM_GLOBAL_VARIABLE, pm_global_variable)
+    case_WRITE_NODE(PM_CLASS_VARIABLE, pm_global_variable)
     case PM_INTEGER_NODE:
     {
       CAST(integer);
