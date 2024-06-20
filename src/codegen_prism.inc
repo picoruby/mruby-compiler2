@@ -2,6 +2,8 @@
 #define CAST(name) \
   pm_##name##_node_t *cast = (pm_##name##_node_t *)tree
 
+static void gen_massignment(mrc_codegen_scope *s, mrc_node *tree, int rhs, int val);
+
 static void
 gen_setxv(mrc_codegen_scope *s, uint8_t op, uint16_t dst, mrc_sym sym, int val)
 {
@@ -23,10 +25,16 @@ gen_assignment(mrc_codegen_scope *s, mrc_node *tree, mrc_node *rhs, int sp, int 
 
   switch (PM_NODE_TYPE(tree)) {
     case PM_LOCAL_VARIABLE_WRITE_NODE:
+    case PM_LOCAL_VARIABLE_TARGET_NODE:
     case PM_INSTANCE_VARIABLE_WRITE_NODE:
+    case PM_INSTANCE_VARIABLE_TARGET_NODE:
     case PM_CONSTANT_WRITE_NODE:
+    case PM_CONSTANT_TARGET_NODE:
     case PM_GLOBAL_VARIABLE_WRITE_NODE:
+    case PM_GLOBAL_VARIABLE_TARGET_NODE:
     case PM_CLASS_VARIABLE_WRITE_NODE:
+    case PM_CLASS_VARIABLE_TARGET_NODE:
+    case PM_MULTI_TARGET_NODE:
     {
       if (rhs) {
         codegen(s, rhs, VAL);
@@ -44,6 +52,7 @@ gen_assignment(mrc_codegen_scope *s, mrc_node *tree, mrc_node *rhs, int sp, int 
 
   switch (PM_NODE_TYPE(tree)) {
     case PM_LOCAL_VARIABLE_WRITE_NODE:
+    case PM_LOCAL_VARIABLE_TARGET_NODE:
     {
       CAST(local_variable_write);
       idx = cast->name;
@@ -60,27 +69,36 @@ gen_assignment(mrc_codegen_scope *s, mrc_node *tree, mrc_node *rhs, int sp, int 
       break;
     }
     case PM_INSTANCE_VARIABLE_WRITE_NODE:
+    case PM_INSTANCE_VARIABLE_TARGET_NODE:
     {
       CAST(instance_variable_write);
       gen_setxv(s, OP_SETIV, sp, cast->name, val);
       break;
     }
     case PM_CONSTANT_WRITE_NODE:
+    case PM_CONSTANT_TARGET_NODE:
     {
       CAST(constant_write);
       gen_setxv(s, OP_SETCONST, sp, cast->name, val);
       break;
     }
     case PM_GLOBAL_VARIABLE_WRITE_NODE:
+    case PM_GLOBAL_VARIABLE_TARGET_NODE:
     {
       CAST(global_variable_read);
       gen_setxv(s, OP_SETGV, sp, cast->name, val);
       break;
     }
     case PM_CLASS_VARIABLE_WRITE_NODE:
+    case PM_CLASS_VARIABLE_TARGET_NODE:
     {
       CAST(class_variable_read);
       gen_setxv(s, OP_SETCV, sp, cast->name, val);
+      break;
+    }
+    case PM_MULTI_TARGET_NODE:
+    {
+      gen_massignment(s, tree, sp, val);
       break;
     }
     default:
@@ -388,6 +406,38 @@ gen_call(mrc_codegen_scope *s, mrc_node *tree, int val, int safe)
 }
 
 static void
+gen_massignment(mrc_codegen_scope *s, mrc_node *tree, int rhs, int val)
+{
+  CAST(multi_write);
+  int n = cast->lefts.size, post = cast->rights.size;
+
+  if (0 < n) { /* pre */
+    for (int i = 0; i < n; i++) {
+      int sp = cursp();
+      genop_3(s, OP_AREF, sp, rhs, i);
+      push();
+      gen_assignment(s, cast->lefts.nodes[i], NULL, sp, NOVAL);
+      pop();
+    }
+  }
+  if (cast->rest || 0 < post) {
+    gen_move(s, cursp(), rhs, val);
+    push_n(post+1);
+    pop_n(post+1);
+    genop_3(s, OP_APOST, cursp(), n, post);
+    if (cast->rest) { /* rest */
+      gen_assignment(s, ((pm_splat_node_t *)cast->rest)->expression, NULL, cursp(), NOVAL);
+    }
+    for (int i = 1; i <= post; i++) {
+      gen_assignment(s, cast->rights.nodes[i], NULL, cursp()+i, NOVAL);
+    }
+    if (val) {
+      gen_move(s, cursp(), rhs, 0);
+    }
+  }
+}
+
+static void
 codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
 {
   int rlev = s->rlev;
@@ -484,12 +534,86 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       CAST_TYPE##_write_node_t *cast = (CAST_TYPE##_write_node_t *)tree; \
       gen_assignment(s, tree, (mrc_node *)cast->value, 0, val); \
       break; \
+    } \
+  case NODE_TYPE##_TARGET_NODE: \
+    { \
+      gen_assignment(s, tree, NULL, 0, val); \
+      break; \
     }
     case_WRITE_NODE(PM_INSTANCE_VARIABLE, pm_instance_variable)
     case_WRITE_NODE(PM_LOCAL_VARIABLE, pm_local_variable)
     case_WRITE_NODE(PM_CONSTANT, pm_constant)
     case_WRITE_NODE(PM_GLOBAL_VARIABLE, pm_global_variable)
     case_WRITE_NODE(PM_CLASS_VARIABLE, pm_global_variable)
+    case PM_MULTI_WRITE_NODE:
+    {
+      CAST(multi_write);
+      int len = 0, n = 0, post = 0;
+      pm_array_node_t *t = (pm_array_node_t *)cast->value;
+      int rhs = cursp();
+
+      if (!val && PM_NODE_TYPE((mrc_node *)t) == PM_ARRAY_NODE && !(t->base.flags & PM_ARRAY_NODE_FLAGS_CONTAINS_SPLAT) ) {
+        /* fixed rhs */
+        n = 1;
+        len = t->elements.size;
+        for (int i = 0; i < len; i++) {
+          codegen(s, t->elements.nodes[i], VAL);
+        }
+        if (0 < cast->lefts.size) {
+          n = 0;
+          for (int i = 0; i < cast->lefts.size; i++) {
+            if (i < len) {
+              gen_assignment(s, cast->lefts.nodes[i], NULL, rhs+n, NOVAL);
+              n++;
+            }
+            else {
+              genop_1(s, OP_LOADNIL, rhs+n);
+              gen_assignment(s, cast->lefts.nodes[i], NULL, rhs+n, NOVAL);
+            }
+          }
+        }
+        post = cast->rights.size;
+        if (cast->rest) {
+          int rn;
+          if (len < post + n) {
+            rn = 0;
+          }
+          else {
+            rn = len - post - n;
+          }
+          if (cursp() == rhs+n) {
+            genop_2(s, OP_ARRAY, cursp(), rn);
+          }
+          else {
+            genop_3(s, OP_ARRAY2, cursp(), rhs+n, rn);
+          }
+          gen_assignment(s, ((pm_splat_node_t *)cast->rest)->expression, NULL, cursp(), NOVAL);
+          n += rn;
+        }
+        if (0 < post) {
+          for (int i = 0; i < post; i++) {
+            if (n < len) {
+              gen_assignment(s, cast->rights.nodes[i], NULL, rhs+n, NOVAL);
+            }
+            else {
+              genop_1(s, OP_LOADNIL, cursp());
+              gen_assignment(s, cast->rights.nodes[i], NULL, cursp(), NOVAL);
+              n++;
+            }
+          }
+        }
+        pop_n(len);
+      }
+      else {
+        /* variable rhs */
+        codegen(s, cast->value, VAL);
+        gen_massignment(s, tree, rhs, val);
+        if (!val) {
+          pop();
+        }
+      }
+      break;
+    }
     case PM_INTEGER_NODE:
     {
       CAST(integer);
