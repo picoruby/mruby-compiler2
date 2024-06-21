@@ -1,3 +1,4 @@
+#define nint(node) PM_NODE_TYPE(node)
 
 #define CAST(name) \
   pm_##name##_node_t *cast = (pm_##name##_node_t *)tree
@@ -23,7 +24,7 @@ gen_assignment(mrc_codegen_scope *s, mrc_node *tree, mrc_node *rhs, int sp, int 
 {
   int idx;
 
-  switch (PM_NODE_TYPE(tree)) {
+  switch (nint(tree)) {
     case PM_LOCAL_VARIABLE_WRITE_NODE:
     case PM_LOCAL_VARIABLE_TARGET_NODE:
     case PM_INSTANCE_VARIABLE_WRITE_NODE:
@@ -45,12 +46,12 @@ gen_assignment(mrc_codegen_scope *s, mrc_node *tree, mrc_node *rhs, int sp, int 
     }
     default:
     {
-      printf("Not implemented (#1) %s\n", pm_node_type_to_str(PM_NODE_TYPE(tree)));
+      printf("Not implemented (#1) %s\n", pm_node_type_to_str(nint(tree)));
       break;
     }
   }
 
-  switch (PM_NODE_TYPE(tree)) {
+  switch (nint(tree)) {
     case PM_LOCAL_VARIABLE_WRITE_NODE:
     case PM_LOCAL_VARIABLE_TARGET_NODE:
     {
@@ -103,7 +104,7 @@ gen_assignment(mrc_codegen_scope *s, mrc_node *tree, mrc_node *rhs, int sp, int 
     }
     default:
     {
-      printf("Not implemented (#2) %s\n", pm_node_type_to_str(PM_NODE_TYPE(tree)));
+      printf("Not implemented (#2) %s\n", pm_node_type_to_str(nint(tree)));
       break;
     }
   }
@@ -115,7 +116,7 @@ scope_body(mrc_codegen_scope *s, mrc_node *tree, int val)
 {
   mrc_constant_id_list *nlv;
   mrc_node *node;
-  switch (PM_NODE_TYPE(tree)) {
+  switch (nint(tree)) {
     case PM_PROGRAM_NODE:
     {
       pm_program_node_t *program = (pm_program_node_t *)tree;
@@ -125,7 +126,7 @@ scope_body(mrc_codegen_scope *s, mrc_node *tree, int val)
     }
     default:
     {
-      printf("Not implemented (#3) %s\n", pm_node_type_to_str(PM_NODE_TYPE(tree)));
+      printf("Not implemented (#3) %s\n", pm_node_type_to_str(nint(tree)));
       break;
     }
   }
@@ -168,8 +169,8 @@ gen_values(mrc_codegen_scope *s, mrc_node *tree, int val, int limit)
 
   for (int i = 0; i < cast->arguments.size; i++) {
     t = (mrc_node *)cast->arguments.nodes[i];
-    if (PM_NODE_TYPE(t) == PM_KEYWORD_HASH_NODE) break;
-    int is_splat = PM_NODE_TYPE(t) == PM_SPLAT_NODE;
+    if (nint(t) == PM_KEYWORD_HASH_NODE) break;
+    int is_splat = nint(t) == PM_SPLAT_NODE;
 
     if (is_splat || cursp() >= slimit) { /* flush stack */
       pop_n(n);
@@ -224,7 +225,7 @@ static int
 gen_hash(mrc_codegen_scope *s, mrc_node *tree, int val, int limit)
 {
   struct pm_node_list elements;
-  if (PM_NODE_TYPE(tree) == PM_HASH_NODE) {
+  if (nint(tree) == PM_HASH_NODE) {
     CAST(hash);
     elements = cast->elements;
   }
@@ -241,7 +242,7 @@ gen_hash(mrc_codegen_scope *s, mrc_node *tree, int val, int limit)
 
   //while (tree) {
   for (int i = 0; i < elements.size; i++) {
-    if (PM_NODE_TYPE(elements.nodes[i]) == PM_ASSOC_SPLAT_NODE) {
+    if (nint(elements.nodes[i]) == PM_ASSOC_SPLAT_NODE) {
       pm_assoc_splat_node_t *assocsplat = (pm_assoc_splat_node_t *)elements.nodes[i];
       if (val && first) {
         genop_2(s, OP_HASH, cursp(), 0);
@@ -340,7 +341,7 @@ gen_call(mrc_codegen_scope *s, mrc_node *tree, int val, int safe)
     }
     for (int i = 0; i < arguments->arguments.size; i++) {
       mrc_node *t = (mrc_node *)arguments->arguments.nodes[i];
-      if (PM_NODE_TYPE(t) == PM_KEYWORD_HASH_NODE) {       /* keyword arguments */
+      if (nint(t) == PM_KEYWORD_HASH_NODE) {       /* keyword arguments */
         noop = 1;
         nk = gen_hash(s, t, VAL, 14);
         if (nk < 0) nk = 15;
@@ -466,7 +467,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
   //}
 
 //  s->lineno = tree->lineno;
-  switch (PM_NODE_TYPE(tree)) {
+  switch (nint(tree)) {
     case PM_PROGRAM_NODE: {
       // todo: lvar
       scope_body(s, tree, val);
@@ -552,7 +553,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       pm_array_node_t *t = (pm_array_node_t *)cast->value;
       int rhs = cursp();
 
-      if (!val && PM_NODE_TYPE((mrc_node *)t) == PM_ARRAY_NODE && !(t->base.flags & PM_ARRAY_NODE_FLAGS_CONTAINS_SPLAT) ) {
+      if (!val && nint((mrc_node *)t) == PM_ARRAY_NODE && !(t->base.flags & PM_ARRAY_NODE_FLAGS_CONTAINS_SPLAT) ) {
         /* fixed rhs */
         n = 1;
         len = t->elements.size;
@@ -688,7 +689,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     }
     default:
     {
-      printf("Not implemented (#4) %s\n", pm_node_type_to_str(PM_NODE_TYPE(tree)));
+      printf("Not implemented (#4) %s\n", pm_node_type_to_str(nint(tree)));
       break;
     }
   }
