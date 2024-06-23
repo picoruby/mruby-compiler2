@@ -29,7 +29,7 @@ mrc_load_exec(mrc_ccontext *c, mrc_node *ast)
   //  return NULL;
   //}
   if (c->dump_result) {
-#if defined(MRB_PARSER_PRISM)
+#if defined(MRC_PARSER_PRISM)
     {
       pm_buffer_t buffer = { 0 };
       pm_prettyprint(&buffer, c->p, ast);
@@ -37,7 +37,7 @@ mrc_load_exec(mrc_ccontext *c, mrc_node *ast)
       pm_buffer_free(&buffer);
     }
     mrc_codedump_all(c, irep);
-#elif defined(MRB_PARSER_LRAMA)
+#elif defined(MRC_PARSER_LRAMA)
     parser_dump(ast->body.root, 0);
 #endif
   }
