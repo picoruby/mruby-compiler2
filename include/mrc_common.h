@@ -115,4 +115,13 @@ typedef uint8_t mrc_bool;
 typedef uint32_t mrc_sym;
 typedef uint8_t mrc_code;
 
+/**
+ * \class mrb_aspec
+ *
+ * Specifies the number of arguments a function takes
+ *
+ * Example: `MRB_ARGS_REQ(2) | MRB_ARGS_OPT(1)` for a method that expects 2..3 arguments
+ */
+typedef uint32_t mrc_aspec;
+
 #endif  /* MRC_COMMON_H */

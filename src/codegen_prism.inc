@@ -1,5 +1,14 @@
 #define nint(node) PM_NODE_TYPE(node)
 
+static int
+lv_idx(mrc_codegen_scope *s, mrc_sym id)
+{
+  for (int n = 0; n < s->lv->size; n++) {
+    if (s->lv->ids[n] == id) return n + 1;
+  }
+  return 0;
+}
+
 #define CAST(name) \
   pm_##name##_node_t *cast = (pm_##name##_node_t *)tree
 
@@ -36,6 +45,7 @@ gen_assignment(mrc_codegen_scope *s, mrc_node *tree, mrc_node *rhs, int sp, int 
     case PM_CLASS_VARIABLE_WRITE_NODE:
     case PM_CLASS_VARIABLE_TARGET_NODE:
     case PM_MULTI_TARGET_NODE:
+    case PM_REQUIRED_PARAMETER_NODE:
     {
       if (rhs) {
         codegen(s, rhs, VAL);
@@ -54,9 +64,10 @@ gen_assignment(mrc_codegen_scope *s, mrc_node *tree, mrc_node *rhs, int sp, int 
   switch (nint(tree)) {
     case PM_LOCAL_VARIABLE_WRITE_NODE:
     case PM_LOCAL_VARIABLE_TARGET_NODE:
+    case PM_REQUIRED_PARAMETER_NODE:
     {
       CAST(local_variable_write);
-      idx = cast->name;
+      idx = lv_idx(s, cast->name);
       if (cast->depth == 0) {
         if (idx != sp) {
           gen_move(s, idx, sp, val);
@@ -421,7 +432,9 @@ gen_massignment(mrc_codegen_scope *s, mrc_node *tree, int rhs, int val)
       pop();
     }
   }
-  if (cast->rest || 0 < post) {
+  if (cast->rest || 0 < post || nint(tree)==PM_MULTI_TARGET_NODE) {
+                              //^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                              // def ((a,b),c)
     gen_move(s, cursp(), rhs, val);
     push_n(post+1);
     pop_n(post+1);
@@ -436,6 +449,353 @@ gen_massignment(mrc_codegen_scope *s, mrc_node *tree, int rhs, int val)
       gen_move(s, cursp(), rhs, 0);
     }
   }
+}
+
+static struct loopinfo*
+loop_push(mrc_codegen_scope *s, enum looptype t)
+{
+  struct loopinfo *p = (struct loopinfo*)codegen_palloc(s, sizeof(struct loopinfo));
+
+  p->type = t;
+  p->pc0 = p->pc1 = p->pc2 = JMPLINK_START;
+  p->prev = s->loop;
+  p->reg = cursp();
+  s->loop = p;
+
+  return p;
+}
+
+static void
+loop_break(mrc_codegen_scope *s, mrc_node *tree)
+{
+//  if (!s->loop) {
+//    codegen(s, tree, NOVAL);
+//    raise_error(s, "unexpected break");
+//  }
+//  else {
+//    struct loopinfo *loop;
+//
+//    loop = s->loop;
+//    if (tree) {
+//      if (loop->reg < 0) {
+//        codegen(s, tree, NOVAL);
+//      }
+//      else {
+//        gen_retval(s, tree);
+//      }
+//    }
+//    while (loop) {
+//      if (loop->type == LOOP_BEGIN) {
+//        loop = loop->prev;
+//      }
+//      else if (loop->type == LOOP_RESCUE) {
+//        loop = loop->prev;
+//      }
+//      else{
+//        break;
+//      }
+//    }
+//    if (!loop) {
+//      raise_error(s, "unexpected break");
+//      return;
+//    }
+//
+//    if (loop->type == LOOP_NORMAL) {
+//      int tmp;
+//
+//      if (loop->reg >= 0) {
+//        if (tree) {
+//          gen_move(s, loop->reg, cursp(), 0);
+//        }
+//        else {
+//          genop_1(s, OP_LOADNIL, loop->reg);
+//        }
+//      }
+//      tmp = genjmp(s, OP_JMPUW, loop->pc2);
+//      loop->pc2 = tmp;
+//    }
+//    else {
+//      if (!tree) {
+//        genop_1(s, OP_LOADNIL, cursp());
+//      }
+//      gen_return(s, OP_BREAK, cursp());
+//    }
+//  }
+}
+
+static void
+loop_pop(mrc_codegen_scope *s, int val)
+{
+  if (val) {
+    genop_1(s, OP_LOADNIL, cursp());
+  }
+  dispatch_linked(s, s->loop->pc2);
+  s->loop = s->loop->prev;
+  if (val) push();
+}
+
+static int
+lambda_body(mrc_codegen_scope *s, mrc_node *tree, int blk)
+{
+  CAST(def); // TODO: sdef, lambda, block
+  pm_parameters_node_t *parameters = cast->parameters;
+  mrc_codegen_scope *parent = s;
+
+  int ma, mma, oa, ra, pa, ppa, ka, kd, ba, i;
+  pm_constant_id_list_t lv;
+  pm_constant_id_t null_mark = pm_constant_pool_insert_constant(&s->c->p->constant_pool, NULL, 0);
+
+  // Create lv
+  if (parameters == NULL) {
+    pm_constant_id_list_init_capacity(&lv, 2);
+  }
+  else {
+    int nregs;
+    /* mandatory arguments */
+    ma = parameters->requireds.size;
+    mma = 0;
+    for (i = 0; i < ma; i++) {
+      if (nint(parameters->requireds.nodes[i]) == PM_MULTI_TARGET_NODE) {
+        pm_multi_target_node_t *m = (pm_multi_target_node_t *)parameters->requireds.nodes[i];
+        mma += m->lefts.size;
+      }
+    }
+    oa = parameters->optionals.size;
+    ra = parameters->rest ? 1 : 0;
+    pa = parameters->posts.size;
+    ppa = 0;
+    for (i = 0; i < pa; i++) {
+      if (nint(parameters->posts.nodes[i]) == PM_MULTI_TARGET_NODE) {
+        pm_multi_target_node_t *m = (pm_multi_target_node_t *)parameters->posts.nodes[i];
+        ppa += m->lefts.size;
+      }
+    }
+    ka = parameters->keywords.size;
+    kd = parameters->keyword_rest ? 1 : 0;
+    ba = parameters->block ? 1 : 0;
+    nregs = ma + mma + oa + ra + pa + ppa + ka + kd + ba;
+    pm_constant_id_list_init_capacity(&lv, nregs);
+    // mandatory
+    for (i = 0; i < ma; i++) {
+      if (nint(parameters->requireds.nodes[i]) == PM_MULTI_TARGET_NODE) {
+        pm_constant_id_list_append(&lv, null_mark);
+      } else {
+        pm_constant_id_list_append(&lv, ((pm_required_parameter_node_t *)parameters->requireds.nodes[i])->name);
+      }
+    }
+    // optional
+    for (i = 0; i < oa; i++) {
+      pm_constant_id_list_append(&lv, ((pm_optional_parameter_node_t *)parameters->optionals.nodes[i])->name);
+    }
+    // rest
+    if (ra) {
+      if (((pm_rest_parameter_node_t *)parameters->rest)->name) {
+        pm_constant_id_list_append(&lv, ((pm_rest_parameter_node_t *)parameters->rest)->name);
+      } else {
+        pm_constant_id_t astr = pm_constant_pool_insert_constant(&s->c->p->constant_pool, (const uint8_t *)"*", 1);
+        pm_constant_id_list_append(&lv, astr);
+      }
+    }
+    // post
+    for (i = 0; i < pa; i++) {
+      if (nint(parameters->posts.nodes[i]) == PM_MULTI_TARGET_NODE) {
+        pm_constant_id_list_append(&lv, null_mark);
+      } else {
+        pm_constant_id_list_append(&lv, ((pm_required_parameter_node_t *)parameters->posts.nodes[i])->name);
+      }
+    }
+    // keywords and block
+    if (ka || kd) {
+      // keyword rest
+      if (!kd || (kd && !((pm_keyword_rest_parameter_node_t *)parameters->keyword_rest)->name) ) {
+        pm_constant_id_t dastr = pm_constant_pool_insert_constant(&s->c->p->constant_pool, (const uint8_t *)"**", 2);
+        pm_constant_id_list_append(&lv, dastr);
+      }
+      else {
+        pm_constant_id_list_append(&lv, ((pm_keyword_rest_parameter_node_t *)parameters->keyword_rest)->name);
+      }
+      // block
+      if (ba) {
+        pm_constant_id_list_append(&lv, ((pm_block_parameter_node_t *)parameters->block)->name);
+      }
+      else {
+        pm_constant_id_list_append(&lv, null_mark);
+      }
+      // keywords
+      for (i = 0; i < ka; i++) {
+        if (nint(parameters->keywords.nodes[i]) == PM_REQUIRED_KEYWORD_PARAMETER_NODE) {
+          pm_constant_id_list_append(&lv, ((pm_required_keyword_parameter_node_t *)parameters->keywords.nodes[i])->name);
+        }
+        else {
+          pm_constant_id_list_append(&lv, ((pm_optional_keyword_parameter_node_t *)parameters->keywords.nodes[i])->name);
+        }
+      }
+    }
+    // mandatory multi
+    if (0 < mma) {
+      pm_constant_id_list_append(&lv, null_mark);
+    }
+    for (i = 0; i < ma; i++) {
+      if (nint(parameters->requireds.nodes[i]) == PM_MULTI_TARGET_NODE) {
+        pm_multi_target_node_t *m = (pm_multi_target_node_t *)parameters->requireds.nodes[i];
+        for (int j = 0; j < m->lefts.size; j++) {
+          pm_constant_id_list_append(&lv, ((pm_required_parameter_node_t *)m->lefts.nodes[j])->name);
+        }
+      }
+    }
+    for (i = 0; i < pa; i++) {
+      if (nint(parameters->posts.nodes[i]) == PM_MULTI_TARGET_NODE) {
+        pm_multi_target_node_t *m = (pm_multi_target_node_t *)parameters->posts.nodes[i];
+        for (int j = 0; j < m->lefts.size; j++) {
+          pm_constant_id_list_append(&lv, ((pm_required_parameter_node_t *)m->lefts.nodes[j])->name);
+        }
+      }
+    }
+  }
+  if (!pm_constant_id_list_includes(&lv, null_mark)) {
+    pm_constant_id_list_append(&lv, null_mark);
+  }
+
+  s = scope_new(s->c, s, &lv);
+  pop();
+
+  s->mscope = !blk;
+
+  if (blk) {
+    struct loopinfo *lp = loop_push(s, LOOP_BLOCK);
+    lp->pc0 = new_label(s);
+  }
+  if (parameters == NULL) {
+    genop_W(s, OP_ENTER, 0);
+    s->ainfo = 0;
+  }
+  else {
+    mrc_aspec a;
+    uint32_t pos;
+    pm_optional_parameter_node_t *opt;
+    mrc_node **margs, **pargs;
+
+    /* mandatory arguments */
+    margs = parameters->requireds.nodes;
+    /* mandatory arguments after rest argument */
+    pargs = parameters->posts.nodes;
+
+    if (ma > 0x1f || oa > 0x1f || pa > 0x1f || ka > 0x1f) {
+      codegen_error(s, "too many formal arguments");
+    }
+    /* (23bits = 5:5:1:5:5:1:1) */
+    a = MRC_ARGS_REQ(ma)
+      | MRC_ARGS_OPT(oa)
+      | (ra? MRC_ARGS_REST() : 0)
+      | MRC_ARGS_POST(pa)
+      | MRC_ARGS_KEY(ka, kd)
+      | (ba? MRC_ARGS_BLOCK() : 0);
+    genop_W(s, OP_ENTER, a);
+    /* (12bits = 5:1:5:1) */
+    s->ainfo = (((ma+oa) & 0x3f) << 7)
+      | ((ra & 0x1) << 6)
+      | ((pa & 0x1f) << 1)
+      | ((ka | kd) ? 1 : 0);
+    /* generate jump table for optional arguments initializer */
+    pos = new_label(s);
+    for (i=0; i<oa; i++) {
+      new_label(s);
+      genjmp_0(s, OP_JMP);
+    }
+    if (oa > 0) {
+      genjmp_0(s, OP_JMP);
+    }
+    for (i = 0; i < oa; i++) {
+      opt = (pm_optional_parameter_node_t *)parameters->optionals.nodes[i];
+      int idx;
+      mrc_sym id = opt->name;
+
+      dispatch(s, pos+i*3+1);
+      codegen(s, opt->value, VAL);
+      pop();
+      // TODO: `a=1;->(v=a){}`
+      idx = lv_idx(s, id);
+      //idx = id;
+      //if (idx > 0) {
+        gen_move(s, idx, cursp(), 0);
+      //}
+      //else {
+      //  gen_getupvar(s, cursp(), id);
+      //}
+    }
+    if (oa > 0) {
+      dispatch(s, pos+i*3+1);
+    }
+
+    /* keyword arguments */
+    if (ka) {
+      for (i = 0; i < ka; i++) {
+        int jmpif_key_p, jmp_def_set = -1;
+        pm_required_keyword_parameter_node_t *kwd = (pm_required_keyword_parameter_node_t *)parameters->keywords.nodes[i];
+        mrc_sym kwd_sym = kwd->name;
+
+        if (nint((mrc_node *)kwd) == PM_OPTIONAL_KEYWORD_PARAMETER_NODE) {
+          int idx;
+          //genop_2(s, OP_KEY_P, lv_idx(s, kwd_sym), new_sym(s, kwd_sym));
+          //jmpif_key_p = genjmp2_0(s, OP_JMPIF, lv_idx(s, kwd_sym), NOVAL);
+          genop_2(s, OP_KEY_P, kwd_sym, new_sym(s, kwd_sym));
+          jmpif_key_p = genjmp2_0(s, OP_JMPIF, kwd_sym, NOVAL);
+          codegen(s, ((pm_optional_keyword_parameter_node_t *)kwd)->value, VAL);
+          pop();
+          idx = lv_idx(s, kwd_sym);
+          //  idx = kwd_sym;
+          //if (idx > 0) {
+            gen_move(s, idx, cursp(), 0);
+          //}
+          //else {
+          //  gen_getupvar(s, cursp(), kwd_sym);
+          //}
+          jmp_def_set = genjmp_0(s, OP_JMP);
+          dispatch(s, jmpif_key_p);
+        }
+        genop_2(s, OP_KARG, lv_idx(s, kwd_sym), new_sym(s, kwd_sym));
+        //genop_2(s, OP_KARG, kwd_sym, new_sym(s, kwd_sym));
+        if (jmp_def_set != -1) {
+          dispatch(s, jmp_def_set);
+        }
+      }
+      if (!kd) {
+        genop_0(s, OP_KEYEND);
+      }
+    }
+
+    /* argument destructuring */
+    if (margs) {
+      pos = 1;
+      push();
+      for (i = 0; i < ma; i++) {
+        if (nint(margs[i]) == PM_MULTI_TARGET_NODE) {
+          gen_massignment(s, margs[i], pos, NOVAL);
+        }
+        pos++;
+      }
+    }
+    if (pargs) {
+      pos = ma+oa+ra+1;
+      for (i = 0; i < pa; i++) {
+        if (nint(pargs[i]) == PM_MULTI_TARGET_NODE) {
+          gen_massignment(s, pargs[i], pos, NOVAL);
+        }
+        pos++;
+      }
+    }
+  }
+
+  codegen(s, cast->body, VAL);
+  pop();
+  if (s->pc > 0) {
+    gen_return(s, OP_RETURN, cursp());
+  }
+  if (blk) {
+    loop_pop(s, NOVAL);
+  }
+  scope_finish(s);
+  return parent->irep->rlen - 1;
 }
 
 static void
@@ -495,7 +855,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       if (val) {
         CAST(local_variable_read);
         if (cast->depth == 0) {
-          gen_move(s, cursp(), cast->name, val);
+          gen_move(s, cursp(), lv_idx(s, cast->name), val);
         }
         else {
           // TODO
@@ -685,6 +1045,21 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
         genop_2(s, OP_STRING, cursp(), off);
         push();
       }
+      break;
+    }
+    case PM_DEF_NODE:
+    {
+      CAST(def);
+      int sym = new_sym(s, cast->name);
+      int idx = lambda_body(s, tree, 0);
+
+      genop_1(s, OP_TCLASS, cursp());
+      push();
+      genop_2(s, OP_METHOD, cursp(), idx);
+      push(); pop();
+      pop();
+      genop_2(s, OP_DEF, cursp(), sym);
+      if (val) push();
       break;
     }
     default:

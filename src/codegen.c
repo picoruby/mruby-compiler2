@@ -28,6 +28,56 @@
 # define MRC_PRIx PRIx32
 #endif
 
+/**
+ * Function requires n arguments.
+ *
+ * @param n
+ *      The number of required arguments.
+ */
+#define MRC_ARGS_REQ(n)     ((mrc_aspec)((n)&0x1f) << 18)
+
+/**
+ * Function takes n optional arguments
+ *
+ * @param n
+ *      The number of optional arguments.
+ */
+#define MRC_ARGS_OPT(n)     ((mrc_aspec)((n)&0x1f) << 13)
+
+/**
+ * Function takes n1 mandatory arguments and n2 optional arguments
+ *
+ * @param n1
+ *      The number of required arguments.
+ * @param n2
+ *      The number of optional arguments.
+ */
+#define MRC_ARGS_ARG(n1,n2)   (MRC_ARGS_REQ(n1)|MRC_ARGS_OPT(n2))
+
+/** rest argument */
+#define MRC_ARGS_REST()     ((mrc_aspec)(1 << 12))
+
+/** required arguments after rest */
+#define MRC_ARGS_POST(n)    ((mrc_aspec)((n)&0x1f) << 7)
+
+/** keyword arguments (n of keys, kdict) */
+#define MRC_ARGS_KEY(n1,n2) ((mrc_aspec)((((n1)&0x1f) << 2) | ((n2)?(1<<1):0)))
+
+/**
+ * Function takes a block argument
+ */
+#define MRC_ARGS_BLOCK()    ((mrc_aspec)1)
+
+/**
+ * Function accepts any number of arguments
+ */
+#define MRC_ARGS_ANY()      MRC_ARGS_REST()
+
+/**
+ * Function accepts no arguments
+ */
+#define MRC_ARGS_NONE()     ((mrc_aspec)0)
+
 static inline mrc_bool
 mrc_int_mul_overflow(mrc_int a, mrc_int b, mrc_int *c)
 {
@@ -1076,6 +1126,16 @@ dispatch(mrc_codegen_scope *s, uint32_t pos0)
   emit_S(s, pos0, (uint16_t)offset);
   if (newpos == 0) return 0;
   return pos1+newpos;
+}
+
+static void
+dispatch_linked(mrc_codegen_scope *s, uint32_t pos)
+{
+  if (pos==JMPLINK_START) return;
+  for (;;) {
+    pos = dispatch(s, pos);
+    if (pos==0) break;
+  }
 }
 
 static mrc_sym
