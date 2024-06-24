@@ -923,6 +923,40 @@ scope_finish(mrc_codegen_scope *s)
   mrc_pool_close(s->mpool);
 }
 
+static mrc_pool_value*
+lit_pool_extend(mrc_codegen_scope *s)
+{
+  if (s->irep->plen == s->pcapa) {
+    s->pcapa *= 2;
+    s->pool = (mrc_pool_value*)codegen_realloc(s, s->pool, sizeof(mrc_pool_value)*s->pcapa);
+  }
+
+  return &s->pool[s->irep->plen++];
+}
+
+#ifndef MRC_NO_FLOAT
+static int
+new_lit_float(mrc_codegen_scope *s, mrc_float num)
+{
+  int i;
+  mrc_pool_value *pv;
+
+  for (i=0; i<s->irep->plen; i++) {
+    mrc_float f;
+    pv = &s->pool[i];
+    if (pv->tt != IREP_TT_FLOAT) continue;
+    f = pv->u.f;
+    if (f == num && !signbit(f) == !signbit(num)) return i;
+  }
+
+  pv = lit_pool_extend(s);
+
+  pv->tt = IREP_TT_FLOAT;
+  pv->u.f = num;
+
+  return i;
+}
+#endif
 static int
 new_sym(mrc_codegen_scope *s, mrc_sym sym)
 {
@@ -1151,17 +1185,6 @@ nsym(mrc_parser_state *p, const uint8_t *start, size_t length)
   // TODO!!!
   return 1;
 #endif
-}
-
-static mrc_pool_value*
-lit_pool_extend(mrc_codegen_scope *s)
-{
-  if (s->irep->plen == s->pcapa) {
-    s->pcapa *= 2;
-    s->pool = (mrc_pool_value*)codegen_realloc(s, s->pool, sizeof(mrc_pool_value)*s->pcapa);
-  }
-
-  return &s->pool[s->irep->plen++];
 }
 
 static int

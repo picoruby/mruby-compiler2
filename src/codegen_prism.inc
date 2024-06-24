@@ -998,6 +998,18 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       push();
       break;
     }
+#ifndef MRC_NO_FLOAT
+  case PM_FLOAT_NODE:
+  {
+    if (val) {
+      CAST(float);
+      int off = new_lit_float(s, (mrc_float)cast->value);
+      genop_2(s, OP_LOADL, cursp(), off);
+      push();
+    }
+    break;
+  }
+#endif
     case PM_CALL_NODE:
     {
       CAST(call);
