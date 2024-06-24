@@ -1067,6 +1067,38 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       if (val) push();
       break;
     }
+    case PM_SELF_NODE:
+    {
+      if (val) {
+        genop_1(s, OP_LOADSELF, cursp());
+        push();
+      }
+      break;
+    }
+    case PM_TRUE_NODE:
+    {
+      if (val) {
+        genop_1(s, OP_LOADT, cursp());
+        push();
+      }
+      break;
+    }
+    case PM_FALSE_NODE:
+    {
+      if (val) {
+        genop_1(s, OP_LOADF, cursp());
+        push();
+      }
+      break;
+    }
+    case PM_NIL_NODE:
+    {
+      if (val) {
+        genop_1(s, OP_LOADNIL, cursp());
+        push();
+      }
+      break;
+    }
     default:
     {
       printf("Not implemented (#4) %s\n", pm_node_type_to_str(nint(tree)));
