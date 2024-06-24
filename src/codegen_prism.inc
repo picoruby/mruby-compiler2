@@ -545,7 +545,7 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, int blk)
   pm_constant_id_list_t lv;
   pm_constant_id_t null_mark = pm_constant_pool_insert_constant(&s->c->p->constant_pool, NULL, 0);
 
-  // Create lv
+  // Create lv regs from Prism's locals
   if (parameters == NULL) {
     pm_constant_id_list_init_capacity(&lv, 2);
   }
@@ -655,6 +655,11 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, int blk)
   if (!pm_constant_id_list_includes(&lv, null_mark)) {
     pm_constant_id_list_append(&lv, null_mark);
   }
+
+  // free Prism's locals
+  pm_constant_id_list_free(&cast->locals);
+  cast->locals.ids = NULL;
+  cast->locals.size = cast->locals.capacity = 0;
 
   s = scope_new(s->c, s, &lv);
   pop();
