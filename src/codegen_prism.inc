@@ -161,7 +161,7 @@ static int
 gen_values(mrc_codegen_scope *s, mrc_node *tree, int val, int limit)
 {
   CAST(arguments);
-  mrc_node *t = (mrc_node *)cast->arguments.nodes[0];
+  mrc_node *t;
 
   int n = 0;
   int first = 1;
