@@ -9,8 +9,9 @@ lv_idx(mrc_codegen_scope *s, mrc_sym id)
   return 0;
 }
 
-#define CAST(name) \
-  pm_##name##_node_t *cast = (pm_##name##_node_t *)tree
+#define CAST3(name, from, to) \
+  pm_##name##_node_t *to = (pm_##name##_node_t *)from
+#define CAST(name) CAST3(name,tree,cast)
 
 static void gen_massignment(mrc_codegen_scope *s, mrc_node *tree, int rhs, int val);
 
@@ -204,7 +205,7 @@ gen_values(mrc_codegen_scope *s, mrc_node *tree, int val, int limit)
       n = 0;
     }
     if (is_splat) {
-      pm_array_node_t *a = (pm_array_node_t *)((pm_splat_node_t *)t)->expression;
+      CAST3(array, ((pm_splat_node_t *)t)->expression, a);
       codegen(s, (mrc_node *)a, val);
       pop(); pop();
       genop_1(s, OP_ARYCAT, cursp());
@@ -254,7 +255,7 @@ gen_hash(mrc_codegen_scope *s, mrc_node *tree, int val, int limit)
   //while (tree) {
   for (int i = 0; i < elements.size; i++) {
     if (nint(elements.nodes[i]) == PM_ASSOC_SPLAT_NODE) {
-      pm_assoc_splat_node_t *assocsplat = (pm_assoc_splat_node_t *)elements.nodes[i];
+      CAST3(assoc_splat, elements.nodes[i], assocsplat);
       if (val && first) {
         genop_2(s, OP_HASH, cursp(), 0);
         push();
@@ -281,7 +282,7 @@ gen_hash(mrc_codegen_scope *s, mrc_node *tree, int val, int limit)
       len = 0;
     }
     else {
-      pm_assoc_node_t *assoc = (pm_assoc_node_t *)elements.nodes[i];
+      CAST3(assoc, elements.nodes[i], assoc);
       codegen(s, assoc->key, val);
       codegen(s, assoc->value, val);
       len++;
@@ -340,7 +341,7 @@ gen_call(mrc_codegen_scope *s, mrc_node *tree, int val, int safe)
     gen_move(s, cursp(), recv, 1);
     skip = genjmp2_0(s, OP_JMPNIL, cursp(), val);
   }
-  pm_arguments_node_t *arguments = (pm_arguments_node_t *)cast->arguments;
+  CAST3(arguments, cast->arguments, arguments);
   if (arguments) {
     if (0 < arguments->arguments.size) {            /* positional arguments */
       n = gen_values(s, (mrc_node *)arguments, VAL, 14);
@@ -556,7 +557,7 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, int blk)
     mma = 0;
     for (i = 0; i < ma; i++) {
       if (nint(parameters->requireds.nodes[i]) == PM_MULTI_TARGET_NODE) {
-        pm_multi_target_node_t *m = (pm_multi_target_node_t *)parameters->requireds.nodes[i];
+        CAST3(multi_target, parameters->requireds.nodes[i], m);
         mma += m->lefts.size;
       }
     }
@@ -566,7 +567,7 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, int blk)
     ppa = 0;
     for (i = 0; i < pa; i++) {
       if (nint(parameters->posts.nodes[i]) == PM_MULTI_TARGET_NODE) {
-        pm_multi_target_node_t *m = (pm_multi_target_node_t *)parameters->posts.nodes[i];
+        CAST3(multi_target, parameters->posts.nodes[i], m);
         ppa += m->lefts.size;
       }
     }
@@ -637,7 +638,7 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, int blk)
     }
     for (i = 0; i < ma; i++) {
       if (nint(parameters->requireds.nodes[i]) == PM_MULTI_TARGET_NODE) {
-        pm_multi_target_node_t *m = (pm_multi_target_node_t *)parameters->requireds.nodes[i];
+        CAST3(multi_target, parameters->requireds.nodes[i], m);
         for (int j = 0; j < m->lefts.size; j++) {
           pm_constant_id_list_append(&lv, ((pm_required_parameter_node_t *)m->lefts.nodes[j])->name);
         }
@@ -645,7 +646,7 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, int blk)
     }
     for (i = 0; i < pa; i++) {
       if (nint(parameters->posts.nodes[i]) == PM_MULTI_TARGET_NODE) {
-        pm_multi_target_node_t *m = (pm_multi_target_node_t *)parameters->posts.nodes[i];
+        CAST3(multi_target, parameters->posts.nodes[i], m);
         for (int j = 0; j < m->lefts.size; j++) {
           pm_constant_id_list_append(&lv, ((pm_required_parameter_node_t *)m->lefts.nodes[j])->name);
         }
@@ -677,7 +678,6 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, int blk)
   else {
     mrc_aspec a;
     uint32_t pos;
-    pm_optional_parameter_node_t *opt;
     mrc_node **margs, **pargs;
 
     /* mandatory arguments */
@@ -711,7 +711,7 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, int blk)
       genjmp_0(s, OP_JMP);
     }
     for (i = 0; i < oa; i++) {
-      opt = (pm_optional_parameter_node_t *)parameters->optionals.nodes[i];
+      CAST3(optional_parameter, parameters->optionals.nodes[i], opt);
       int idx;
       mrc_sym id = opt->name;
 
@@ -736,7 +736,7 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, int blk)
     if (ka) {
       for (i = 0; i < ka; i++) {
         int jmpif_key_p, jmp_def_set = -1;
-        pm_required_keyword_parameter_node_t *kwd = (pm_required_keyword_parameter_node_t *)parameters->keywords.nodes[i];
+        CAST3(required_keyword_parameter, parameters->keywords.nodes[i], kwd);
         mrc_sym kwd_sym = kwd->name;
 
         if (nint((mrc_node *)kwd) == PM_OPTIONAL_KEYWORD_PARAMETER_NODE) {
@@ -915,7 +915,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     {
       CAST(multi_write);
       int len = 0, n = 0, post = 0;
-      pm_array_node_t *t = (pm_array_node_t *)cast->value;
+      CAST3(array, cast->value, t);
       int rhs = cursp();
 
       if (!val && nint((mrc_node *)t) == PM_ARRAY_NODE && !(t->base.flags & PM_ARRAY_NODE_FLAGS_CONTAINS_SPLAT) ) {
