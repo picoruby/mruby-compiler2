@@ -143,6 +143,13 @@ scope_body(mrc_codegen_scope *s, mrc_node *tree, int val)
       statements = class->body;
       break;
     }
+    case PM_MODULE_NODE:
+    {
+      CAST3(module, tree, module);
+      nlv = &module->locals;
+      statements = module->body;
+      break;
+    }
     default:
     {
       printf("Not implemented (#3) %s\n", pm_node_type_to_str(nint(tree)));
@@ -1143,6 +1150,37 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       pop(); pop();
       idx = new_sym(s, cast->name);
       genop_2(s, OP_CLASS, cursp(), idx);
+      if (!cast->body) {
+        genop_1(s, OP_LOADNIL, cursp());
+      }
+      else {
+        idx = scope_body(s, cast, val);
+        genop_2(s, OP_EXEC, cursp(), idx);
+      }
+      if (val) {
+        push();
+      }
+      break;
+    }
+    case PM_MODULE_NODE:
+    {
+      int idx;
+      CAST(module);
+      CAST3(constant_path, cast->constant_path, cpath);
+      if (cpath->parent == 1) {
+        genop_1(s, OP_LOADNIL, cursp());
+        push();
+      }
+      else if (cpath->parent == 0) {
+        genop_1(s, OP_OCLASS, cursp());
+        push();
+      }
+      else {
+        codegen(s, cpath->parent, VAL);
+      }
+      pop();
+      idx = new_sym(s, cast->name);
+      genop_2(s, OP_MODULE, cursp(), idx);
       if (!cast->body) {
         genop_1(s, OP_LOADNIL, cursp());
       }
