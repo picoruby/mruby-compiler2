@@ -55,6 +55,8 @@ gen_assignment(mrc_codegen_scope *s, mrc_node *tree, mrc_node *rhs, int sp, int 
       }
       break;
     }
+    case PM_CONSTANT_PATH_WRITE_NODE:
+      break;
     default:
     {
       printf("Not implemented (#1) %s\n", pm_node_type_to_str(nint(tree)));
@@ -93,6 +95,32 @@ gen_assignment(mrc_codegen_scope *s, mrc_node *tree, mrc_node *rhs, int sp, int 
     {
       CAST(constant_write);
       gen_setxv(s, OP_SETCONST, sp, cast->name, val);
+      break;
+    }
+    case PM_CONSTANT_PATH_WRITE_NODE:
+    case PM_CONSTANT_PATH_TARGET_NODE:
+    {
+      CAST(constant_path_write);
+      if (sp) {
+        gen_move(s, cursp(), sp, 0);
+      }
+      sp = cursp();
+      push();
+      if (cast->target->parent) {
+        codegen(s, cast->target->parent, VAL);
+        idx = new_sym(s, cast->target->name);
+      }
+      else {   /* NODE_COLON3 */
+        genop_1(s, OP_OCLASS, cursp());
+        push();
+        idx = new_sym(s, cast->target->name);
+      }
+      if (rhs) {
+        codegen(s, rhs, VAL); pop();
+        gen_move(s, sp, cursp(), 0);
+      }
+      pop_n(2);
+      genop_2(s, OP_SETMCNST, sp, idx);
       break;
     }
     case PM_GLOBAL_VARIABLE_WRITE_NODE:
@@ -924,6 +952,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     case_WRITE_NODE(PM_CONSTANT, pm_constant)
     case_WRITE_NODE(PM_GLOBAL_VARIABLE, pm_global_variable)
     case_WRITE_NODE(PM_CLASS_VARIABLE, pm_global_variable)
+    case_WRITE_NODE(PM_CONSTANT_PATH, pm_constant_path)
     case PM_MULTI_WRITE_NODE:
     {
       CAST(multi_write);
@@ -1197,8 +1226,13 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     {
       CAST(constant_path);
       int sym = new_sym(s, cast->name);
-      codegen(s, cast->parent, VAL);
-      pop();
+      if (cast->parent) {
+        codegen(s, cast->parent, VAL);
+        pop();
+      }
+      else { /* NODE_COLON3 */
+        genop_1(s, OP_OCLASS, cursp());
+      }
       genop_2(s, OP_GETMCNST, cursp(), sym);
       if (val) push();
       break;
