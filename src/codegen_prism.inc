@@ -127,13 +127,20 @@ static int
 scope_body(mrc_codegen_scope *s, mrc_node *tree, int val)
 {
   mrc_constant_id_list *nlv;
-  mrc_node *node;
+  mrc_node *statements;
   switch (nint(tree)) {
     case PM_PROGRAM_NODE:
     {
-      pm_program_node_t *program = (pm_program_node_t *)tree;
+      CAST3(program, tree, program);
       nlv = &program->locals;
-      node = (mrc_node *)program->statements;
+      statements = (mrc_node *)program->statements;
+      break;
+    }
+    case PM_CLASS_NODE:
+    {
+      CAST3(class, tree, class);
+      nlv = &class->locals;
+      statements = class->body;
       break;
     }
     default:
@@ -144,7 +151,7 @@ scope_body(mrc_codegen_scope *s, mrc_node *tree, int val)
   }
   mrc_codegen_scope *scope = scope_new(s->c, s, nlv);
 
-  codegen(scope, node, VAL);
+  codegen(scope, statements, VAL);
   gen_return(scope, OP_RETURN, scope->sp-1);
   if (!s->iseq) {
     genop_0(scope, OP_STOP);
@@ -834,7 +841,6 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
 //  s->lineno = tree->lineno;
   switch (nint(tree)) {
     case PM_PROGRAM_NODE: {
-      // todo: lvar
       scope_body(s, tree, val);
       break;
     }
@@ -1107,6 +1113,44 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     {
       if (val) {
         genop_1(s, OP_LOADNIL, cursp());
+        push();
+      }
+      break;
+    }
+    case PM_CLASS_NODE:
+    {
+      int idx;
+      CAST(class);
+      CAST3(constant_path, cast->constant_path, cpath);
+      if (cpath->parent == 1) {
+        genop_1(s, OP_LOADNIL, cursp());
+        push();
+      }
+      else if (cpath->parent == 0) {
+        genop_1(s, OP_OCLASS, cursp());
+        push();
+      }
+      else {
+        codegen(s, cpath->parent, VAL);
+      }
+      if (cast->superclass) {
+        codegen(s, cast->superclass, VAL);
+      }
+      else {
+        genop_1(s, OP_LOADNIL, cursp());
+        push();
+      }
+      pop(); pop();
+      idx = new_sym(s, cast->name);
+      genop_2(s, OP_CLASS, cursp(), idx);
+      if (!cast->body) {
+        genop_1(s, OP_LOADNIL, cursp());
+      }
+      else {
+        idx = scope_body(s, cast, val);
+        genop_2(s, OP_EXEC, cursp(), idx);
+      }
+      if (val) {
         push();
       }
       break;

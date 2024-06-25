@@ -771,7 +771,7 @@ debug_info_defined_p(const mrc_irep *irep)
 static mrc_bool
 lv_defined_p(const mrc_irep *irep)
 {
-  if (0 < ((pm_constant_id_list_t *)irep->lv)->size) { return TRUE; }
+  if (irep->lv && 0 < ((pm_constant_id_list_t *)irep->lv)->size) { return TRUE; }
   for (int i = 0; i < irep->rlen; i++) {
     if (lv_defined_p(irep->reps[i])) { return TRUE; }
   }
