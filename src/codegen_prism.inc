@@ -30,6 +30,27 @@ gen_setxv(mrc_codegen_scope *s, uint8_t op, uint16_t dst, mrc_sym sym, int val)
 }
 
 static void
+gen_retval(mrc_codegen_scope *s, mrc_node *tree)
+{
+  CAST(arguments);
+  if (cast->arguments.size == 1 ) {
+    if (nint(cast->arguments.nodes[0]) == PM_SPLAT_NODE) {
+      codegen(s, ((pm_splat_node_t *)cast->arguments.nodes[0])->expression, VAL);
+      pop();
+      genop_1(s, OP_ARYSPLAT, cursp());
+    }
+    else {
+      codegen(s, cast->arguments.nodes[0], VAL);
+      pop();
+    }
+  }
+  else {
+    codegen(s, tree, VAL);
+    pop();
+  }
+}
+
+static void
 gen_assignment(mrc_codegen_scope *s, mrc_node *tree, mrc_node *rhs, int sp, int val)
 {
   int idx;
@@ -1059,6 +1080,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       break;
     }
     case PM_ARRAY_NODE:
+    case PM_ARGUMENTS_NODE: /* ???: Multi args in return */
     {
       int n;
       n = gen_values(s, tree, val, 0);
@@ -1234,6 +1256,24 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
         genop_1(s, OP_OCLASS, cursp());
       }
       genop_2(s, OP_GETMCNST, cursp(), sym);
+      if (val) push();
+      break;
+    }
+    case PM_RETURN_NODE:
+    {
+      CAST(return);
+      if (cast->arguments) {
+        gen_retval(s, cast->arguments);
+      }
+      else {
+        genop_1(s, OP_LOADNIL, cursp());
+      }
+      if (s->loop) {
+        gen_return(s, OP_RETURN_BLK, cursp());
+      }
+      else {
+        gen_return(s, OP_RETURN, cursp());
+      }
       if (val) push();
       break;
     }
