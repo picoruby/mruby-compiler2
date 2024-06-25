@@ -1193,6 +1193,16 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       }
       break;
     }
+    case PM_CONSTANT_PATH_NODE:
+    {
+      CAST(constant_path);
+      int sym = new_sym(s, cast->name);
+      codegen(s, cast->parent, VAL);
+      pop();
+      genop_2(s, OP_GETMCNST, cursp(), sym);
+      if (val) push();
+      break;
+    }
     default:
     {
       printf("Not implemented (#4) %s\n", pm_node_type_to_str(nint(tree)));
