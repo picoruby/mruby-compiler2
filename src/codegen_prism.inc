@@ -1244,6 +1244,20 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       }
       break;
     }
+    case PM_ALIAS_METHOD_NODE:
+    {
+      CAST(alias_method);
+      CAST3(symbol, cast->new_name, new_name);
+      CAST3(symbol, cast->old_name, old_name);
+      int a = new_sym(s, nsym(s->c->p, new_name->unescaped.source, new_name->unescaped.length));
+      int b = new_sym(s, nsym(s->c->p, old_name->unescaped.source, old_name->unescaped.length));
+      genop_2(s, OP_ALIAS, a, b);
+      if (val) {
+        genop_1(s, OP_LOADNIL, cursp());
+        push();
+      }
+      break;
+    }
     case PM_CONSTANT_PATH_NODE:
     {
       CAST(constant_path);
