@@ -192,6 +192,13 @@ scope_body(mrc_codegen_scope *s, mrc_node *tree, int val)
       statements = class->body;
       break;
     }
+    case PM_SINGLETON_CLASS_NODE:
+    {
+      CAST3(singleton_class, tree, sclass);
+      nlv = &sclass->locals;
+      statements = sclass->body;
+      break;
+    }
     case PM_MODULE_NODE:
     {
       CAST3(module, tree, module);
@@ -1124,6 +1131,24 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
         int off = new_lit_str(s, p, len);
 
         genop_2(s, OP_STRING, cursp(), off);
+        push();
+      }
+      break;
+    }
+    case PM_SINGLETON_CLASS_NODE:
+    {
+      CAST(singleton_class);
+      int idx;
+      codegen(s, cast->expression, VAL);
+      genop_1(s, OP_SCLASS, cursp());
+      if (cast->body == NULL) {
+        genop_1(s, OP_LOADNIL, cursp());
+      }
+      else {
+        idx = scope_body(s, cast, val);
+        genop_2(s, OP_EXEC, cursp(), idx);
+      }
+      if (val) {
         push();
       }
       break;
