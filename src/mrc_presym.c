@@ -3,12 +3,12 @@
 
 typedef struct {
   int index;
-  const char *name;
+  const char *lit;
 } mrc_sym_entry;
 
 static mrc_sym_entry symTable[] = {
-#define MRC_OPSYM_2(name, lit, num) {num, #name},
-#define MRC_SYM_2(name, lit, num)   {num, #name},
+#define MRC_OPSYM_2(name, lit, num) {num, #lit},
+#define MRC_SYM_2(name, lit, num)   {num, #lit},
 #include "mrc_presym.inc"
 #undef MRC_OPSYM_2
 #undef MRC_SYM_2
@@ -16,13 +16,13 @@ static mrc_sym_entry symTable[] = {
 };
 
 mrc_sym
-mrc_find_presym(const uint8_t *name, size_t len)
+mrc_find_presym(const uint8_t *lit, size_t len)
 {
   for (int i = 0; ; i++) {
-    if (symTable[i].name == NULL) {
+    if (symTable[i].lit == NULL) {
       return 0;
     }
-    if (strlen(symTable[i].name) == len && memcmp(symTable[i].name, name, len) == 0) {
+    if (strlen(symTable[i].lit) == len && memcmp(symTable[i].lit, lit, len) == 0) {
       return symTable[i].index;
     }
   }
