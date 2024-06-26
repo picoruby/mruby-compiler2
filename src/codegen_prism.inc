@@ -608,7 +608,7 @@ loop_pop(mrc_codegen_scope *s, int val)
 static int
 lambda_body(mrc_codegen_scope *s, mrc_node *tree, int blk)
 {
-  CAST(def); // TODO: sdef, lambda, block
+  CAST(def); // TODO: lambda, block
   pm_parameters_node_t *parameters = cast->parameters;
   mrc_codegen_scope *parent = s;
 
@@ -728,9 +728,11 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, int blk)
   }
 
   // free Prism's locals
-  pm_constant_id_list_free(&cast->locals);
-  cast->locals.ids = NULL;
-  cast->locals.size = cast->locals.capacity = 0;
+  if (nint(tree) == PM_DEF_NODE) {
+    pm_constant_id_list_free(&cast->locals);
+    cast->locals.ids = NULL;
+    cast->locals.size = cast->locals.capacity = 0;
+  }
 
   s = scope_new(s->c, s, &lv);
   pop();
@@ -861,7 +863,27 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, int blk)
     }
   }
 
-  codegen(s, cast->body, VAL);
+  mrc_node *body;
+  switch (nint(tree)) {
+    case PM_DEF_NODE:
+    {
+      CAST3(def, tree, def);
+      body = def->body;
+      break;
+    }
+    case PM_BLOCK_NODE:
+    {
+      CAST3(block, tree, block);
+      body = block->body;
+      break;
+    }
+  }
+  if (body) {
+    codegen(s, body, VAL);
+  }
+  else {
+    genop_1(s, OP_LOADNIL, cursp());
+  }
   pop();
   if (s->pc > 0) {
     gen_return(s, OP_RETURN, cursp());
@@ -1176,6 +1198,15 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       if (val) push();
       break;
     }
+    case PM_BLOCK_NODE:
+    {
+      if (val) {
+        int idx = lambda_body(s, tree, 1);
+        genop_2(s, OP_BLOCK, cursp(), idx);
+        push();
+      }
+      break;
+    }
     case PM_SELF_NODE:
     {
       if (val) {
@@ -1344,4 +1375,6 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       break;
     }
   }
+ exit:
+  s->rlev = rlev;
 }
