@@ -1258,6 +1258,20 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       }
       break;
     }
+    case PM_UNDEF_NODE:
+    {
+      CAST(undef);
+      for (int i = 0; i < cast->names.size; i++) {
+        CAST3(symbol, cast->names.nodes[i], name);
+        int symbol = new_sym(s, nsym(s->c->p, name->unescaped.source, name->unescaped.length));
+        genop_1(s, OP_UNDEF, symbol);
+      }
+      if (val) {
+        genop_1(s, OP_LOADNIL, cursp());
+        push();
+      }
+      break;
+    }
     case PM_CONSTANT_PATH_NODE:
     {
       CAST(constant_path);
