@@ -1250,11 +1250,11 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       int idx;
       CAST(class);
       CAST3(constant_path, cast->constant_path, cpath);
-      if (cpath->parent == 1) {
+      if (cpath->parent == (mrc_node *)1) {
         genop_1(s, OP_LOADNIL, cursp());
         push();
       }
-      else if (cpath->parent == 0) {
+      else if (cpath->parent == (mrc_node *)0) {
         genop_1(s, OP_OCLASS, cursp());
         push();
       }
@@ -1275,7 +1275,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
         genop_1(s, OP_LOADNIL, cursp());
       }
       else {
-        idx = scope_body(s, cast, val);
+        idx = scope_body(s, tree, val);
         genop_2(s, OP_EXEC, cursp(), idx);
       }
       if (val) {
@@ -1288,11 +1288,11 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       int idx;
       CAST(module);
       CAST3(constant_path, cast->constant_path, cpath);
-      if (cpath->parent == 1) {
+      if (cpath->parent == (mrc_node *)1) {
         genop_1(s, OP_LOADNIL, cursp());
         push();
       }
-      else if (cpath->parent == 0) {
+      else if (cpath->parent == (mrc_node *)0) {
         genop_1(s, OP_OCLASS, cursp());
         push();
       }
@@ -1306,7 +1306,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
         genop_1(s, OP_LOADNIL, cursp());
       }
       else {
-        idx = scope_body(s, cast, val);
+        idx = scope_body(s, tree, val);
         genop_2(s, OP_EXEC, cursp(), idx);
       }
       if (val) {
@@ -1361,7 +1361,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     {
       CAST(return);
       if (cast->arguments) {
-        gen_retval(s, cast->arguments);
+        gen_retval(s, (mrc_node *)cast->arguments);
       }
       else {
         genop_1(s, OP_LOADNIL, cursp());
