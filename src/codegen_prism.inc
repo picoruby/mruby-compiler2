@@ -1159,8 +1159,16 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       int sym = new_sym(s, cast->name);
       int idx = lambda_body(s, tree, 0);
 
-      genop_1(s, OP_TCLASS, cursp());
-      push();
+      if (cast->receiver == NULL) {
+        genop_1(s, OP_TCLASS, cursp());
+        push();
+      }
+      else {
+        codegen(s, cast->receiver, VAL);
+        pop();
+        genop_1(s, OP_SCLASS, cursp());
+        push();
+      }
       genop_2(s, OP_METHOD, cursp(), idx);
       push(); pop();
       pop();
