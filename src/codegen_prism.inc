@@ -938,8 +938,9 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
   //  s->filename_sym = mrc_parser_get_filename(s->c->p, tree->filename_index);
   //}
 
+  int nt = nint(tree);
 //  s->lineno = tree->lineno;
-  switch (nint(tree)) {
+  switch (nt) {
     case PM_PROGRAM_NODE: {
       scope_body(s, tree, val);
       break;
@@ -1276,6 +1277,55 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       pos = genjmp2_0(s, OP_JMPIF, cursp(), val);
       codegen(s, cast->right, val);
       dispatch(s, pos);
+      break;
+    }
+    case PM_PARENTHESES_NODE:
+    {
+      CAST(parentheses);
+      codegen(s, cast->body, val);
+      break;
+    }
+    case PM_WHILE_NODE:
+    case PM_UNTIL_NODE:
+    {
+      CAST(while); /* Compatible with until? */
+      if (true_always(cast->predicate)) {
+        if (nt == PM_UNTIL_NODE) {
+          if (val) {
+            genop_1(s, OP_LOADNIL, cursp());
+            push();
+          }
+          goto exit;
+        }
+      }
+      else if (false_always(cast->predicate)) {
+        if (nt == PM_WHILE_NODE) {
+          if (val) {
+            genop_1(s, OP_LOADNIL, cursp());
+            push();
+          }
+          goto exit;
+        }
+      }
+
+      uint32_t pos = JMPLINK_START;
+      struct loopinfo *lp = loop_push(s, LOOP_NORMAL);
+
+      if (!val) lp->reg = -1;
+      lp->pc0 = new_label(s);
+      codegen(s, cast->predicate, VAL);
+      pop();
+      if (nt == PM_WHILE_NODE) {
+        pos = genjmp2_0(s, OP_JMPNOT, cursp(), NOVAL);
+      }
+      else {
+        pos = genjmp2_0(s, OP_JMPIF, cursp(), NOVAL);
+      }
+      lp->pc1 = new_label(s);
+      codegen(s, cast->statements, NOVAL);
+      genjmp(s, OP_JMP, lp->pc0);
+      dispatch(s, pos);
+      loop_pop(s, val);
       break;
     }
     case PM_SELF_NODE:
