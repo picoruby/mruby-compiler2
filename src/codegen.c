@@ -222,7 +222,43 @@ mrc_debug_info_alloc(mrc_irep *irep)
 static void
 codegen_error(mrc_codegen_scope *s, const char *message)
 {
-  // TODO
+  if (!s) return;
+#ifndef MRC_NO_STDIO
+  if (s->filename_sym && s->lineno) {
+    const char *filename = mrc_sym_name_len(s->c, s->filename_sym, NULL);
+    fprintf(stderr, "%s:%d: %s\n", filename, s->lineno, message);
+  }
+  else {
+    fprintf(stderr, "%s\n", message);
+  }
+#endif
+  while (s->prev) {
+    mrc_codegen_scope *tmp = s->prev;
+    if (s->irep) {
+      mrc_free(s->iseq);
+      for (int i=0; i<s->irep->plen; i++) {
+        mrc_pool_value *pv = &s->pool[i];
+        if ((pv->tt & 0x3) == IREP_TT_STR || pv->tt == IREP_TT_BIGINT) {
+          mrc_free((void*)pv->u.str);
+        }
+      }
+      mrc_free(s->pool);
+      mrc_free(s->syms);
+      mrc_free(s->catch_table);
+      if (s->reps) {
+        /* copied from mrc_irep_free() in state.c */
+        //for (int i=0; i<s->irep->rlen; i++) {
+        //  if (s->reps[i])
+        //    mrc_irep_decref(s->mrb, (mrc_irep*)s->reps[i]);
+        //}
+        mrc_free(s->reps);
+      }
+      mrc_free(s->lines);
+    }
+    mrc_pool_close(s->mpool);
+    s = tmp;
+  }
+  MRC_THROW(s->c->jmp);
 }
 
 static void*
