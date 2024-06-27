@@ -20,6 +20,32 @@ gen_setxv(mrc_codegen_scope *s, uint8_t op, uint16_t dst, mrc_sym sym, int val)
   genop_2(s, op, dst, idx);
 }
 
+static mrc_bool
+true_always(mrc_node *tree)
+{
+  switch (nint(tree)) {
+  case PM_TRUE_NODE:
+  case PM_INTEGER_NODE:
+  case PM_STRING_NODE:
+  case PM_SYMBOL_NODE:
+    return TRUE;
+  default:
+    return FALSE;
+  }
+}
+
+static mrc_bool
+false_always(mrc_node *tree)
+{
+  switch (nint(tree)) {
+  case PM_FALSE_NODE:
+  case PM_NIL_NODE:
+    return TRUE;
+  default:
+    return FALSE;
+  }
+}
+
 static void
 gen_retval(mrc_codegen_scope *s, mrc_node *tree)
 {
@@ -1212,6 +1238,44 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
         genop_2(s, OP_BLOCK, cursp(), idx);
         push();
       }
+      break;
+    }
+    case PM_AND_NODE:
+    {
+      CAST(and);
+      uint32_t pos;
+      if (true_always(cast->left)) {
+        codegen(s, cast->right, val);
+        goto exit;
+      }
+      if (false_always(cast->left)) {
+        codegen(s, cast->left, val);
+        goto exit;
+      }
+      codegen(s, cast->left, VAL);
+      pop();
+      pos = genjmp2_0(s, OP_JMPNOT, cursp(), val);
+      codegen(s, cast->right, val);
+      dispatch(s, pos);
+      break;
+    }
+    case PM_OR_NODE:
+    {
+      CAST(or);
+      uint32_t pos;
+      if (true_always(cast->left)) {
+        codegen(s, cast->left, val);
+        goto exit;
+      }
+      if (false_always(cast->left)) {
+        codegen(s, cast->right, val);
+        goto exit;
+      }
+      codegen(s, cast->left, VAL);
+      pop();
+      pos = genjmp2_0(s, OP_JMPIF, cursp(), val);
+      codegen(s, cast->right, val);
+      dispatch(s, pos);
       break;
     }
     case PM_SELF_NODE:
