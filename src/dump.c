@@ -597,13 +597,15 @@ write_section_debug(mrc_ccontext *c, const mrc_irep *irep, uint8_t *cur, mrc_sym
 static void
 create_lv_sym_table(mrc_ccontext *c, const mrc_irep *irep, mrc_sym **syms, uint32_t *syms_len)
 {
+  pm_constant_id_t null_mark = pm_constant_pool_find(&c->p->constant_pool, NULL, 0);
+
   if (*syms == NULL) {
     *syms = (mrc_sym*)mrc_malloc(sizeof(mrc_sym) * 1);
   }
 
   for (int i = 0; i + 1 < irep->nlocals; i++) {
     mrc_sym const name = irep->lv[i];
-    if (name == 0) continue;
+    if (name == null_mark) continue;
     if (find_filename_index(*syms, *syms_len, name) != -1) continue;
 
     ++(*syms_len);
@@ -623,15 +625,9 @@ write_lv_sym_table(mrc_ccontext *c, uint8_t **start, mrc_sym const *syms, uint32
   const char *str;
   mrc_int str_len;
 
-  // Workaround. See other `null_mark`s in this file and codegen_prism.inc
-  int adjust = 0;
-  pm_constant_id_t null_mark = pm_constant_pool_find(&c->p->constant_pool, NULL, 0);
-  if (0 < null_mark) adjust = 1;
-
-  cur += uint32_to_bin(syms_len - adjust, cur);
+  cur += uint32_to_bin(syms_len, cur);
 
   for (uint32_t i = 0; i < syms_len; i++) {
-    if (syms[i] == null_mark) continue;
     str = mrc_sym_name_len(c, syms[i], &str_len);
     cur += uint16_to_bin((uint16_t)str_len, cur);
     memcpy(cur, str, str_len);
@@ -655,11 +651,6 @@ write_lv_record(mrc_ccontext *c, const mrc_irep *irep, uint8_t **start, mrc_sym 
       cur += uint16_to_bin(RITE_LV_NULL_MARK, cur);
     }
     else {
-      // Workaround
-      if (syms[0] == null_mark) {
-        syms++;
-        syms_len--;
-      }
       int const sym_idx = find_filename_index(syms, syms_len, irep->lv[i]);
       mrc_assert(sym_idx != -1); /* local variable name must be in syms */
 
@@ -700,9 +691,6 @@ get_lv_section_size(mrc_ccontext *c, const mrc_irep *irep, mrc_sym const *syms, 
   }
 
   ret += get_lv_record_size(c, irep);
-
-  pm_constant_id_t null_mark = pm_constant_pool_find(&c->p->constant_pool, NULL, 0);
-  if (0 < null_mark) ret -= 2;
 
   return ret;
 }

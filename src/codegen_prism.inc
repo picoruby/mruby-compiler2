@@ -1,14 +1,5 @@
 #define nint(node) PM_NODE_TYPE(node)
 
-static int
-lv_idx(mrc_codegen_scope *s, mrc_sym id)
-{
-  for (int n = 0; n < s->lv->size; n++) {
-    if (s->lv->ids[n] == id) return n + 1;
-  }
-  return 0;
-}
-
 #define CAST3(name, from, to) \
   pm_##name##_node_t *to = (pm_##name##_node_t *)from
 #define CAST(name) CAST3(name,tree,cast)
@@ -99,8 +90,7 @@ gen_assignment(mrc_codegen_scope *s, mrc_node *tree, mrc_node *rhs, int sp, int 
         break;
       }
       else {
-        // TODO
-        //gen_setupvar(s, sp, idx, cast->depth, val);
+        genop_3(s, OP_SETUPVAR, sp, idx, cast->depth);
       }
       break;
     }
@@ -621,6 +611,7 @@ lambda_body(mrc_codegen_scope *s, pm_parameters_node_t *parameters, mrc_node *bo
   // Create lv regs from Prism's locals
   if (parameters == NULL) {
     pm_constant_id_list_init_capacity(&lv, 2);
+    pm_constant_id_list_append(&lv, null_mark);
   }
   else {
     int nregs;
@@ -678,18 +669,33 @@ lambda_body(mrc_codegen_scope *s, pm_parameters_node_t *parameters, mrc_node *bo
       }
     }
     // keywords and block
-    if (ka || kd) {
+    if (ka || kd || ba) {
       // keyword rest
-      if (!kd || (kd && !((pm_keyword_rest_parameter_node_t *)parameters->keyword_rest)->name) ) {
+      mrc_bool write_dastr = false;
+      if (kd) {
+        if (!((pm_keyword_rest_parameter_node_t *)parameters->keyword_rest)->name) {
+          write_dastr = true;
+        }
+        else {
+          pm_constant_id_list_append(&lv, ((pm_keyword_rest_parameter_node_t *)parameters->keyword_rest)->name);
+        }
+      }
+      else if (!ba) {
+        write_dastr = true;
+      }
+      if (write_dastr) {
         pm_constant_id_t dastr = pm_constant_pool_insert_constant(&s->c->p->constant_pool, (const uint8_t *)"**", 2);
         pm_constant_id_list_append(&lv, dastr);
       }
-      else {
-        pm_constant_id_list_append(&lv, ((pm_keyword_rest_parameter_node_t *)parameters->keyword_rest)->name);
-      }
       // block
       if (ba) {
-        pm_constant_id_list_append(&lv, ((pm_block_parameter_node_t *)parameters->block)->name);
+        if (((pm_block_parameter_node_t *)parameters->block)->name) {
+          pm_constant_id_list_append(&lv, ((pm_block_parameter_node_t *)parameters->block)->name);
+        }
+        else {
+          pm_constant_id_t and = pm_constant_pool_insert_constant(&s->c->p->constant_pool, (const uint8_t *)"&", 1);
+          pm_constant_id_list_append(&lv, and);
+        }
       }
       else {
         pm_constant_id_list_append(&lv, null_mark);
@@ -703,10 +709,6 @@ lambda_body(mrc_codegen_scope *s, pm_parameters_node_t *parameters, mrc_node *bo
           pm_constant_id_list_append(&lv, ((pm_optional_keyword_parameter_node_t *)parameters->keywords.nodes[i])->name);
         }
       }
-    }
-    // mandatory multi
-    if (0 < mma) {
-      pm_constant_id_list_append(&lv, null_mark);
     }
     for (i = 0; i < ma; i++) {
       if (nint(parameters->requireds.nodes[i]) == PM_MULTI_TARGET_NODE) {
@@ -736,12 +738,8 @@ lambda_body(mrc_codegen_scope *s, pm_parameters_node_t *parameters, mrc_node *bo
     locals->ids = NULL;
     locals->size = locals->capacity = 0;
   }
-  if (!pm_constant_id_list_includes(&lv, null_mark)) {
-    pm_constant_id_list_append(&lv, null_mark);
-  }
 
   s = scope_new(s->c, s, &lv);
-  pop();
 
   s->mscope = !blk;
 
@@ -796,15 +794,15 @@ lambda_body(mrc_codegen_scope *s, pm_parameters_node_t *parameters, mrc_node *bo
       dispatch(s, pos+i*3+1);
       codegen(s, opt->value, VAL);
       pop();
-      // TODO: `a=1;->(v=a){}`
       idx = lv_idx(s, id);
-      //idx = id;
-      //if (idx > 0) {
+      if (idx > 0) {
         gen_move(s, idx, cursp(), 0);
-      //}
-      //else {
-      //  gen_getupvar(s, cursp(), id);
-      //}
+      }
+      else {
+        // TODO
+        //gen_getupvar(s, cursp(), id, );
+        codegen_error(s, "getupvar happens in optional argument");
+      }
     }
     if (oa > 0) {
       dispatch(s, pos+i*3+1);
@@ -826,18 +824,18 @@ lambda_body(mrc_codegen_scope *s, pm_parameters_node_t *parameters, mrc_node *bo
           codegen(s, ((pm_optional_keyword_parameter_node_t *)kwd)->value, VAL);
           pop();
           idx = lv_idx(s, kwd_sym);
-          //  idx = kwd_sym;
-          //if (idx > 0) {
+          if (idx > 0) {
             gen_move(s, idx, cursp(), 0);
-          //}
-          //else {
-          //  gen_getupvar(s, cursp(), kwd_sym);
-          //}
+          }
+          else {
+            // TODO
+            // gen_getupvar(s, cursp(), kwd_sym);
+            codegen_error(s, "getupvar happens in keyword argument");
+          }
           jmp_def_set = genjmp_0(s, OP_JMP);
           dispatch(s, jmpif_key_p);
         }
         genop_2(s, OP_KARG, lv_idx(s, kwd_sym), new_sym(s, kwd_sym));
-        //genop_2(s, OP_KARG, kwd_sym, new_sym(s, kwd_sym));
         if (jmp_def_set != -1) {
           dispatch(s, jmp_def_set);
         }
@@ -945,8 +943,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
           gen_move(s, cursp(), lv_idx(s, cast->name), val);
         }
         else {
-          // TODO
-          // gen_getupvar(s, cursp(), nsym(tree));
+          gen_getupvar(s, cursp(), cast->name, cast->depth);
         }
         push();
       }
@@ -1377,6 +1374,29 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
         gen_return(s, OP_RETURN, cursp());
       }
       if (val) push();
+      break;
+    }
+    case PM_BLOCK_ARGUMENT_NODE:
+    {
+      CAST(block_argument);
+      if (!cast->expression) {
+        mrc_sym and = pm_constant_pool_find(&s->c->p->constant_pool, (const uint8_t *)"&", 1);
+        if (and == 0) {
+          and = pm_constant_pool_insert_constant(&s->c->p->constant_pool, (const uint8_t *)"&", 1);
+        }
+        int idx = lv_idx(s, and);
+        if (idx == 0) {
+          int depth = search_upvar(s, and, &idx);
+          gen_getupvar(s, cursp(), and, depth);
+        }
+        else {
+          gen_move(s, cursp(), idx, val);
+        }
+        if (val) push();
+      }
+      else {
+        codegen(s, cast->expression, val);
+      }
       break;
     }
     default:

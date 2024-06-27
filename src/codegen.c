@@ -898,6 +898,110 @@ gen_int(mrc_codegen_scope *s, uint16_t dst, mrc_int i)
   }
 }
 
+static int
+lv_idx(mrc_codegen_scope *s, mrc_sym id)
+{
+  if (!s->lv) return 0;
+  for (int n = 0; n < s->lv->size; n++) {
+    if (s->lv->ids[n] == id) return n + 1;
+  }
+  return 0;
+}
+
+#define MRC_PROC_CFUNC_FL 128
+#define MRC_PROC_CFUNC_P(p) (((p)->flags & MRC_PROC_CFUNC_FL) != 0)
+#define MRC_PROC_SCOPE 2048
+#define MRC_PROC_SCOPE_P(p) (((p)->flags & MRC_PROC_SCOPE) != 0)
+
+static int
+search_upvar(mrc_codegen_scope *s, mrc_sym id, int *idx)
+{
+//  const struct RProc *u;
+  int lv = 0;
+  mrc_codegen_scope *up = s->prev;
+
+  while (up) {
+    *idx = lv_idx(up, id);
+    if (*idx > 0) {
+      return lv;
+    }
+    lv++;
+    up = up->prev;
+  }
+
+//  if (lv < 1) lv = 1;
+//  u = s->parser->upper;
+//  while (u && !MRC_PROC_CFUNC_P(u)) {
+//    const struct mrc_irep *ir = u->body.irep;
+//    uint_fast16_t n = ir->nlocals;
+//    int i;
+//
+//    const mrc_sym *v = ir->lv;
+//    if (v) {
+//      for (i=1; n > 1; n--, v++, i++) {
+//        if (*v == id) {
+//          *idx = i;
+//          return lv - 1;
+//        }
+//      }
+//    }
+//    if (MRC_PROC_SCOPE_P(u)) break;
+//    u = u->upper;
+//    lv++;
+//  }
+
+  //if (id == MRC_OPSYM_2(and)) {
+  if (pm_constant_pool_find(&s->c->p->constant_pool, (const uint8_t *)"&", 1)) {
+    codegen_error(s, "No anonymous block parameter");
+  }
+  //else if (id == MRC_OPSYM_2(mul)) {
+  else if (pm_constant_pool_find(&s->c->p->constant_pool, (const uint8_t *)"*", 1)) {
+    codegen_error(s, "No anonymous rest parameter");
+  }
+  //else if (id == MRC_OPSYM_2(pow)) {
+  else if (pm_constant_pool_find(&s->c->p->constant_pool, (const uint8_t *)"**", 2)) {
+    codegen_error(s, "No anonymous keyword rest parameter");
+  }
+  else {
+    codegen_error(s, "Can't find local variables");
+  }
+  return -1; /* not reached */
+}
+
+static void
+gen_getupvar(mrc_codegen_scope *s, uint16_t dst, mrc_sym id, int depth)
+{
+  int idx;
+  int lv = search_upvar(s, id, &idx);
+
+  mrc_assert(lv == depth);
+
+  if (!no_peephole(s)) {
+    struct mrc_insn_data data = mrc_last_insn(s);
+    if (data.insn == OP_SETUPVAR && data.a == dst && data.b == idx && data.cc == lv) {
+      /* skip GETUPVAR right after SETUPVAR */
+      return;
+    }
+  }
+  genop_3(s, OP_GETUPVAR, dst, idx, lv);
+}
+
+static void
+gen_setupvar(mrc_codegen_scope *s, uint16_t dst, mrc_sym id)
+{
+  int idx;
+  int lv = search_upvar(s, id, &idx);
+
+  if (!no_peephole(s)) {
+    struct mrc_insn_data data = mrc_last_insn(s);
+    if (data.insn == OP_MOVE && data.a == dst) {
+      dst = data.b;
+      rewind_pc(s);
+    }
+  }
+  genop_3(s, OP_SETUPVAR, dst, idx, lv);
+}
+
 static void
 gen_return(mrc_codegen_scope *s, uint8_t op, uint16_t src)
 {
