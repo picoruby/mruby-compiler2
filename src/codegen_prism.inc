@@ -116,7 +116,7 @@ gen_assignment(mrc_codegen_scope *s, mrc_node *tree, mrc_node *rhs, int sp, int 
         break;
       }
       else {
-        genop_3(s, OP_SETUPVAR, sp, idx, cast->depth);
+        gen_setupvar(s, sp, cast->name);
       }
       break;
     }
