@@ -950,16 +950,13 @@ search_upvar(mrc_codegen_scope *s, mrc_sym id, int *idx)
 //    lv++;
 //  }
 
-  //if (id == MRC_OPSYM_2(and)) {
-  if (pm_constant_pool_find(&s->c->p->constant_pool, (const uint8_t *)"&", 1)) {
+  if (id == MRC_OPSYM_2(and)) {
     codegen_error(s, "No anonymous block parameter");
   }
-  //else if (id == MRC_OPSYM_2(mul)) {
-  else if (pm_constant_pool_find(&s->c->p->constant_pool, (const uint8_t *)"*", 1)) {
+  else if (id == MRC_OPSYM_2(mul)) {
     codegen_error(s, "No anonymous rest parameter");
   }
-  //else if (id == MRC_OPSYM_2(pow)) {
-  else if (pm_constant_pool_find(&s->c->p->constant_pool, (const uint8_t *)"**", 2)) {
+  else if (id == MRC_OPSYM_2(pow)) {
     codegen_error(s, "No anonymous keyword rest parameter");
   }
   else {
@@ -1097,6 +1094,7 @@ new_lit_float(mrc_codegen_scope *s, mrc_float num)
   return i;
 }
 #endif
+
 static int
 new_sym(mrc_codegen_scope *s, mrc_sym sym)
 {
@@ -1316,11 +1314,8 @@ static mrc_sym
 nsym(mrc_parser_state *p, const uint8_t *start, size_t length)
 {
 #if defined(MRC_PARSER_PRISM)
-  mrc_sym pm_sym = pm_constant_pool_find(&p->constant_pool, start, length);
-  if (pm_sym == 0) {
-    pm_sym = pm_constant_pool_insert_shared(&p->constant_pool, start, length);
-  }
-  return pm_sym;
+  mrc_sym sym = pm_constant_pool_insert_constant(&p->constant_pool, start, length);
+  return sym;
 #elif defined(MRC_PARSER_LRAMA)
   // TODO!!!
   return 1;

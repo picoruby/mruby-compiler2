@@ -6,6 +6,7 @@
 #include "../include/mrc_dump.h"
 #include "../include/mrc_codedump.h"
 #include "../include/mrc_opcode.h"
+#include "../include/mrc_presym.h"
 
 //static void
 //mrc_assert(int cond)
@@ -45,7 +46,15 @@ mrc_load_exec(mrc_ccontext *c, mrc_node *ast)
   return irep;
 }
 
-#if defined(MRC_PARSER_LRAMA)
+
+#if defined(MRC_PARSER_PRISM)
+static void
+mrc_pm_parser_init(mrc_parser_state *p, const uint8_t *source, size_t size)
+{
+  pm_parser_init(p, source, size, NULL);
+  mrc_init_presym(&p->constant_pool);
+}
+#elif defined(MRC_PARSER_LRAMA)
 
 #include "internal/parse.h"
 
@@ -72,7 +81,7 @@ mrc_parse_file_cxt(mrc_ccontext *c, const char *filename)
 #if defined(MRC_PARSER_PRISM)
   pm_string_t string;
   pm_string_mapped_init(&string, filename);
-  pm_parser_init(c->p, string.source, string.length, NULL);
+  mrc_pm_parser_init(c->p, string.source, string.length);
   return pm_parse(c->p);
 #elif defined(MRC_PARSER_LRAMA)
   FILE *f = fopen(filename, "r");
@@ -104,7 +113,7 @@ mrc_parse_string_cxt(mrc_ccontext *c, const uint8_t *source, size_t length)
 #if defined(MRC_PARSER_PRISM)
   pm_string_t string;
   pm_string_owned_init(&string, (uint8_t *)source, length);
-  pm_parser_init(c->p, string.source, string.length, NULL);
+  mrc_pm_parser_init(c->p, string.source, string.length);
   return pm_parse(c->p);
 #elif defined(MRC_PARSER_LRAMA)
   //VALUE str = (VALUE)string_new_with_str_len((const char *)source, length);

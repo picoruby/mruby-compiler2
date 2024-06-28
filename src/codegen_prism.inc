@@ -225,6 +225,8 @@ scope_body(mrc_codegen_scope *s, mrc_node *tree, int val)
     default:
     {
       printf("Not implemented (#3) %s\n", pm_node_type_to_str(nint(tree)));
+      statements = NULL;
+      nlv = NULL;
       break;
     }
   }
@@ -409,8 +411,7 @@ static void
 gen_call(mrc_codegen_scope *s, mrc_node *tree, int val, int safe)
 {
   CAST(call);
-  pm_constant_t *constant = pm_constant_pool_id_to_constant(&s->c->p->constant_pool, (const pm_constant_id_t)cast->name);
-  mrc_sym pm_sym = pm_sym = nsym(s->c->p, constant->start, constant->length);
+  const mrc_sym sym = cast->name;
   int skip = 0, n = 0, nk = 0, noop = no_optimize(s), noself = 0, blk = 0, sp_save = cursp();
 
   if (cast->receiver == NULL) {
@@ -454,50 +455,49 @@ gen_call(mrc_codegen_scope *s, mrc_node *tree, int val, int safe)
   s->sp = sp_save;
 
   if (!noop) {
-    mrc_sym presym = mrc_find_presym(constant->start, constant->length);
-    if (presym == MRC_OPSYM_2(add) && n == 1)  {
+    if (sym == MRC_OPSYM_2(add) && n == 1)  {
       gen_addsub(s, OP_ADD, cursp());
     }
-    else if (presym == MRC_OPSYM_2(sub) && n == 1)  {
+    else if (sym == MRC_OPSYM_2(sub) && n == 1)  {
       gen_addsub(s, OP_SUB, cursp());
     }
-    else if (presym == MRC_OPSYM_2(mul) && n == 1)  {
+    else if (sym == MRC_OPSYM_2(mul) && n == 1)  {
       gen_muldiv(s, OP_MUL, cursp());
     }
-    else if (presym == MRC_OPSYM_2(div) && n == 1)  {
+    else if (sym == MRC_OPSYM_2(div) && n == 1)  {
       gen_muldiv(s, OP_DIV, cursp());
     }
-    else if (presym == MRC_OPSYM_2(lt) && n == 1)  {
+    else if (sym == MRC_OPSYM_2(lt) && n == 1)  {
       genop_1(s, OP_LT, cursp());
     }
-    else if (presym == MRC_OPSYM_2(le) && n == 1)  {
+    else if (sym == MRC_OPSYM_2(le) && n == 1)  {
       genop_1(s, OP_LE, cursp());
     }
-    else if (presym == MRC_OPSYM_2(gt) && n == 1)  {
+    else if (sym == MRC_OPSYM_2(gt) && n == 1)  {
       genop_1(s, OP_GT, cursp());
     }
-    else if (presym == MRC_OPSYM_2(ge) && n == 1)  {
+    else if (sym == MRC_OPSYM_2(ge) && n == 1)  {
       genop_1(s, OP_GE, cursp());
     }
-    else if (presym == MRC_OPSYM_2(eq) && n == 1)  {
+    else if (sym == MRC_OPSYM_2(eq) && n == 1)  {
       genop_1(s, OP_EQ, cursp());
     }
-    else if (presym == MRC_OPSYM_2(aset) && n == 2)  {
+    else if (sym == MRC_OPSYM_2(aset) && n == 2)  {
       genop_1(s, OP_SETIDX, cursp());
     }
-    else if (n == 0 && gen_uniop(s, presym, cursp())) {
+    else if (n == 0 && gen_uniop(s, sym, cursp())) {
       /* constant folding succeeded */
     }
-    else if (n == 1 && gen_binop(s, presym, cursp())) {
+    else if (n == 1 && gen_binop(s, sym, cursp())) {
       /* constant folding succeeded */
     }
   }
   else {
     if (noself) {
-      genop_3(s, blk ? OP_SSENDB : OP_SSEND, cursp(), new_sym(s, pm_sym), n|(nk<<4));
+      genop_3(s, blk ? OP_SSENDB : OP_SSEND, cursp(), new_sym(s, sym), n|(nk<<4));
     }
     else {
-      genop_3(s, blk ? OP_SENDB : OP_SEND, cursp(), new_sym(s, pm_sym), n|(nk<<4));
+      genop_3(s, blk ? OP_SENDB : OP_SEND, cursp(), new_sym(s, sym), n|(nk<<4));
     }
   }
   if (safe) {
@@ -638,6 +638,7 @@ lambda_body(mrc_codegen_scope *s, pm_parameters_node_t *parameters, mrc_node *bo
   if (parameters == NULL) {
     pm_constant_id_list_init_capacity(&lv, 2);
     pm_constant_id_list_append(&lv, null_mark);
+    ma = mma = oa = ra = pa = ppa = ka = kd = ba = 0;
   }
   else {
     int nregs;
@@ -682,7 +683,7 @@ lambda_body(mrc_codegen_scope *s, pm_parameters_node_t *parameters, mrc_node *bo
       if (((pm_rest_parameter_node_t *)parameters->rest)->name) {
         pm_constant_id_list_append(&lv, ((pm_rest_parameter_node_t *)parameters->rest)->name);
       } else {
-        pm_constant_id_t astr = pm_constant_pool_insert_constant(&s->c->p->constant_pool, (const uint8_t *)"*", 1);
+        pm_constant_id_t astr = MRC_OPSYM_2(mul);
         pm_constant_id_list_append(&lv, astr);
       }
     }
@@ -710,7 +711,7 @@ lambda_body(mrc_codegen_scope *s, pm_parameters_node_t *parameters, mrc_node *bo
         write_dastr = true;
       }
       if (write_dastr) {
-        pm_constant_id_t dastr = pm_constant_pool_insert_constant(&s->c->p->constant_pool, (const uint8_t *)"**", 2);
+        pm_constant_id_t dastr = MRC_OPSYM_2(pow);
         pm_constant_id_list_append(&lv, dastr);
       }
       // block
@@ -719,7 +720,7 @@ lambda_body(mrc_codegen_scope *s, pm_parameters_node_t *parameters, mrc_node *bo
           pm_constant_id_list_append(&lv, ((pm_block_parameter_node_t *)parameters->block)->name);
         }
         else {
-          pm_constant_id_t and = pm_constant_pool_insert_constant(&s->c->p->constant_pool, (const uint8_t *)"&", 1);
+          pm_constant_id_t and = MRC_OPSYM_2(and);
           pm_constant_id_list_append(&lv, and);
         }
       }
@@ -1322,7 +1323,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
         pos = genjmp2_0(s, OP_JMPIF, cursp(), NOVAL);
       }
       lp->pc1 = new_label(s);
-      codegen(s, cast->statements, NOVAL);
+      codegen(s, (mrc_node *)cast->statements, NOVAL);
       genjmp(s, OP_JMP, lp->pc0);
       dispatch(s, pos);
       loop_pop(s, val);
@@ -1494,10 +1495,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     {
       CAST(block_argument);
       if (!cast->expression) {
-        mrc_sym and = pm_constant_pool_find(&s->c->p->constant_pool, (const uint8_t *)"&", 1);
-        if (and == 0) {
-          and = pm_constant_pool_insert_constant(&s->c->p->constant_pool, (const uint8_t *)"&", 1);
-        }
+        mrc_sym and = MRC_OPSYM_2(and);
         int idx = lv_idx(s, and);
         if (idx == 0) {
           int depth = search_upvar(s, and, &idx);

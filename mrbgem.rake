@@ -9,6 +9,10 @@ MRuby::Gem::Specification.new('mruby-compiler2') do |spec|
   prism_dir = "#{lib_dir}/prism"
   ruby_dir = "#{lib_dir}/ruby"
 
+  if ENV['MRB_DEBUG'] || ENV['PICORUBY_DEBUG']
+    cc.defines << "MRC_DEBUG"
+  end
+
   if cc.defines.flatten.include? "MRC_PARSER_PRISM"
     objs.delete_if {|obj| obj =~ /lrama_helper/}
     prism_templates_dir = "#{lib_dir}/prism/templates"
