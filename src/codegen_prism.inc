@@ -625,6 +625,52 @@ loop_pop(mrc_codegen_scope *s, int val)
   if (val) push();
 }
 
+static void
+for_body(mrc_codegen_scope *s, mrc_node *tree)
+{
+  mrc_codegen_scope *prev = s;
+  int idx;
+  struct loopinfo *lp;
+  mrc_node *n2;
+
+  CAST(for);
+
+  /* generate receiver */
+  codegen(s, (mrc_node *)cast->collection, VAL);
+  /* generate loop-block */
+  s = scope_new(s->c, s, s->lv);
+  //                     ^^^^^ Different from original mruby
+  //                           drawing the upper scope's lvars
+
+  push();                       /* push for a block parameter */
+
+  /* generate loop variable */
+  n2 = cast->index;
+  genop_W(s, OP_ENTER, 0x40000);
+  if (nint(n2) == PM_MULTI_TARGET_NODE) {
+    gen_massignment(s, n2, 1, VAL);
+  }
+  else {
+    gen_assignment(s, n2, NULL, 1, NOVAL);
+  }
+  /* construct loop */
+  lp = loop_push(s, LOOP_FOR);
+  lp->pc1 = new_label(s);
+
+  /* loop body */
+  codegen(s, (mrc_node *)cast->statements, VAL);
+  pop();
+  gen_return(s, OP_RETURN, cursp());
+  loop_pop(s, NOVAL);
+  scope_finish(s);
+  s = prev;
+  genop_2(s, OP_BLOCK, cursp(), s->irep->rlen-1);
+  push();pop(); /* space for a block */
+  pop();
+  idx = new_sym(s, MRC_SYM_2(each));
+  genop_3(s, OP_SENDB, cursp(), idx, 0);
+}
+
 static int
 lambda_body(mrc_codegen_scope *s, pm_parameters_node_t *parameters, mrc_node *body, pm_constant_id_list_t *locals, int blk)
 {
@@ -1327,6 +1373,12 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       genjmp(s, OP_JMP, lp->pc0);
       dispatch(s, pos);
       loop_pop(s, val);
+      break;
+    }
+    case PM_FOR_NODE:
+    {
+      for_body(s, tree);
+      if (val) push();
       break;
     }
     case PM_SELF_NODE:
