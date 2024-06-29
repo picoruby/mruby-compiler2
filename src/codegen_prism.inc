@@ -67,6 +67,20 @@ gen_retval(mrc_codegen_scope *s, mrc_node *tree)
   }
 }
 
+static
+gen_assignment_lvar(mrc_codegen_scope *s, int sp, mrc_sym name, int depth, int val)
+{
+  if (depth == 0) {
+    int idx = lv_idx(s, name);
+    if (idx != sp) {
+      gen_move(s, idx, sp, val);
+    }
+  }
+  else {
+    gen_setupvar(s, sp, name, depth);
+  }
+}
+
 static void
 gen_assignment(mrc_codegen_scope *s, mrc_node *tree, mrc_node *rhs, int sp, int val)
 {
@@ -97,7 +111,7 @@ gen_assignment(mrc_codegen_scope *s, mrc_node *tree, mrc_node *rhs, int sp, int 
       break;
     default:
     {
-      printf("Not implemented (#1) %s\n", pm_node_type_to_str(nint(tree)));
+      codegen_error(s, "Not implemented (#1)");
       break;
     }
   }
@@ -108,16 +122,7 @@ gen_assignment(mrc_codegen_scope *s, mrc_node *tree, mrc_node *rhs, int sp, int 
     case PM_REQUIRED_PARAMETER_NODE:
     {
       CAST(local_variable_write);
-      idx = lv_idx(s, cast->name);
-      if (cast->depth == 0) {
-        if (idx != sp) {
-          gen_move(s, idx, sp, val);
-        }
-        break;
-      }
-      else {
-        gen_setupvar(s, sp, cast->name);
-      }
+      gen_assignment_lvar(s, sp, cast->name, cast->depth, val);
       break;
     }
     case PM_INSTANCE_VARIABLE_WRITE_NODE:
@@ -181,7 +186,7 @@ gen_assignment(mrc_codegen_scope *s, mrc_node *tree, mrc_node *rhs, int sp, int 
     }
     default:
     {
-      printf("Not implemented (#2) %s\n", pm_node_type_to_str(nint(tree)));
+      codegen_error(s, "Not implemented (#2)");
       break;
     }
   }
@@ -224,7 +229,7 @@ scope_body(mrc_codegen_scope *s, mrc_node *tree, int val)
     }
     default:
     {
-      printf("Not implemented (#3) %s\n", pm_node_type_to_str(nint(tree)));
+      codegen_error(s, "Not implemented (#3)");
       statements = NULL;
       nlv = NULL;
       break;
@@ -958,6 +963,18 @@ lambda_body(mrc_codegen_scope *s, pm_parameters_node_t *parameters, mrc_node *bo
 }
 
 static void
+gen_lvar(mrc_codegen_scope *s, mrc_sym name, int depth)
+{
+  if (depth == 0) {
+    gen_move(s, cursp(), lv_idx(s, name), 1);
+  }
+  else {
+    gen_getupvar(s, cursp(), name, depth);
+  }
+  push();
+}
+
+static void
 codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
 {
   int rlev = s->rlev;
@@ -1013,13 +1030,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     {
       if (val) {
         CAST(local_variable_read);
-        if (cast->depth == 0) {
-          gen_move(s, cursp(), lv_idx(s, cast->name), val);
-        }
-        else {
-          gen_getupvar(s, cursp(), cast->name, cast->depth);
-        }
-        push();
+        gen_lvar(s, cast->name, cast->depth);
       }
       break;
     }
@@ -1132,6 +1143,36 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
           pop();
         }
       }
+      break;
+    }
+    case PM_LOCAL_VARIABLE_OPERATOR_WRITE_NODE:
+    {
+      CAST(local_variable_operator_write);
+      int idx;
+      gen_lvar(s, cast->name, cast->depth);
+      codegen(s, (mrc_node *)cast->value, VAL);
+      push(); pop();
+      pop(); pop();
+
+      switch (cast->binary_operator) {
+        case MRC_OPSYM_2(add):
+          gen_addsub(s, OP_ADD, cursp());
+          break;
+        case MRC_OPSYM_2(sub):
+          gen_addsub(s, OP_SUB, cursp());
+          break;
+        case MRC_OPSYM_2(mul):
+          genop_1(s, OP_MUL, cursp());
+          break;
+        case MRC_OPSYM_2(div):
+          genop_1(s, OP_DIV, cursp());
+          break;
+        default:
+          idx = new_sym(s, cast->binary_operator);
+          genop_3(s, OP_SEND, cursp(), idx, 1);
+      }
+      gen_assignment_lvar(s, cursp(), cast->name, cast->depth, val);
+      if (val) push();
       break;
     }
     case PM_INTEGER_NODE:
@@ -1565,6 +1606,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     }
     default:
     {
+      codegen_error(s, "Not implemented (#4)");
       printf("Not implemented (#4) %s\n", pm_node_type_to_str(nint(tree)));
       break;
     }

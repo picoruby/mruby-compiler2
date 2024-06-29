@@ -971,7 +971,7 @@ gen_getupvar(mrc_codegen_scope *s, uint16_t dst, mrc_sym id, int depth)
   int idx;
   int lv = search_upvar(s, id, &idx);
 
-  mrc_assert(lv == depth);
+  mrc_assert(lv == depth-1);
 
   if (!no_peephole(s)) {
     struct mrc_insn_data data = mrc_last_insn(s);
@@ -984,10 +984,12 @@ gen_getupvar(mrc_codegen_scope *s, uint16_t dst, mrc_sym id, int depth)
 }
 
 static void
-gen_setupvar(mrc_codegen_scope *s, uint16_t dst, mrc_sym id)
+gen_setupvar(mrc_codegen_scope *s, uint16_t dst, mrc_sym id, int depth)
 {
   int idx;
   int lv = search_upvar(s, id, &idx);
+
+  mrc_assert(lv == depth-1);
 
   if (!no_peephole(s)) {
     struct mrc_insn_data data = mrc_last_insn(s);
