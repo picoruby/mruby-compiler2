@@ -67,7 +67,7 @@ gen_retval(mrc_codegen_scope *s, mrc_node *tree)
   }
 }
 
-static
+static void
 gen_assignment_lvar(mrc_codegen_scope *s, int sp, mrc_sym name, int depth, int val)
 {
   if (depth == 0) {
@@ -975,6 +975,28 @@ gen_lvar(mrc_codegen_scope *s, mrc_sym name, int depth)
 }
 
 static void
+gen_binary_operator(mrc_codegen_scope *s, mrc_sym binary_operator)
+{
+  switch (binary_operator) {
+    case MRC_OPSYM_2(add):
+      gen_addsub(s, OP_ADD, cursp());
+      break;
+    case MRC_OPSYM_2(sub):
+      gen_addsub(s, OP_SUB, cursp());
+      break;
+    case MRC_OPSYM_2(mul):
+      genop_1(s, OP_MUL, cursp());
+      break;
+    case MRC_OPSYM_2(div):
+      genop_1(s, OP_DIV, cursp());
+      break;
+    default:
+      int idx = new_sym(s, binary_operator);
+      genop_3(s, OP_SEND, cursp(), idx, 1);
+  }
+}
+
+static void
 codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
 {
   int rlev = s->rlev;
@@ -1145,35 +1167,194 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       }
       break;
     }
-    case PM_LOCAL_VARIABLE_OPERATOR_WRITE_NODE:
+    case PM_CONSTANT_PATH_OPERATOR_WRITE_NODE:
     {
-      CAST(local_variable_operator_write);
-      int idx;
-      gen_lvar(s, cast->name, cast->depth);
-      codegen(s, (mrc_node *)cast->value, VAL);
+      codegen_error(s, "constant re-assignment");
+      break;
+    }
+    case PM_LOCAL_VARIABLE_OPERATOR_WRITE_NODE:
+    case PM_GLOBAL_VARIABLE_OPERATOR_WRITE_NODE:
+    case PM_INSTANCE_VARIABLE_OPERATOR_WRITE_NODE:
+    case PM_CLASS_VARIABLE_OPERATOR_WRITE_NODE:
+    case PM_CONSTANT_OPERATOR_WRITE_NODE:
+    {
+      mrc_sym name, binary_operator;
+      mrc_node *value;
+      int op_set, op_get, depth = -1;
+#define CAST_OP_WRITE(type) \
+  CAST(type); \
+  name = cast->name; \
+  value = cast->value; \
+  binary_operator = cast->binary_operator
+      switch (nt) {
+        case PM_LOCAL_VARIABLE_OPERATOR_WRITE_NODE:
+          {
+            CAST_OP_WRITE(local_variable_operator_write);
+            depth = cast->depth;
+            break;
+          }
+        case PM_GLOBAL_VARIABLE_OPERATOR_WRITE_NODE:
+          {
+            CAST_OP_WRITE(global_variable_operator_write);
+            op_set = OP_SETGV; op_get = OP_GETGV;
+            break;
+          }
+        case PM_CLASS_VARIABLE_OPERATOR_WRITE_NODE:
+          {
+            CAST_OP_WRITE(class_variable_operator_write);
+            op_set = OP_SETCV; op_get = OP_GETCV;
+            break;
+          }
+        case PM_INSTANCE_VARIABLE_OPERATOR_WRITE_NODE:
+          {
+            CAST_OP_WRITE(instance_variable_operator_write);
+            op_set = OP_SETIV; op_get = OP_GETIV;
+            break;
+          }
+        case PM_CONSTANT_OPERATOR_WRITE_NODE:
+          {
+            CAST_OP_WRITE(constant_operator_write);
+            op_set = OP_SETCONST; op_get = OP_GETCONST;
+            break;
+          }
+        default: codegen_error(s, "Not implemented (#5)");
+      }
+      switch (nt) {
+        case PM_LOCAL_VARIABLE_OPERATOR_WRITE_NODE:
+          gen_lvar(s, name, depth);
+          break;
+        case PM_GLOBAL_VARIABLE_OPERATOR_WRITE_NODE:
+        case PM_INSTANCE_VARIABLE_OPERATOR_WRITE_NODE:
+        case PM_CLASS_VARIABLE_OPERATOR_WRITE_NODE:
+        case PM_CONSTANT_OPERATOR_WRITE_NODE:
+          genop_2(s, op_get, cursp(), new_sym(s, name));
+          push();
+          break;
+        default: codegen_error(s, "Not implemented (#6)");
+      }
+      codegen(s, (mrc_node *)value, VAL);
       push(); pop();
       pop(); pop();
 
-      switch (cast->binary_operator) {
-        case MRC_OPSYM_2(add):
-          gen_addsub(s, OP_ADD, cursp());
+      gen_binary_operator(s, binary_operator);
+      switch (nt) {
+        case PM_LOCAL_VARIABLE_OPERATOR_WRITE_NODE:
+          gen_assignment_lvar(s, cursp(), name, depth, val);
           break;
-        case MRC_OPSYM_2(sub):
-          gen_addsub(s, OP_SUB, cursp());
+        case PM_GLOBAL_VARIABLE_OPERATOR_WRITE_NODE:
+        case PM_INSTANCE_VARIABLE_OPERATOR_WRITE_NODE:
+        case PM_CLASS_VARIABLE_OPERATOR_WRITE_NODE:
+        case PM_CONSTANT_OPERATOR_WRITE_NODE:
+          gen_setxv(s, op_set, cursp(), name, val);
           break;
-        case MRC_OPSYM_2(mul):
-          genop_1(s, OP_MUL, cursp());
-          break;
-        case MRC_OPSYM_2(div):
-          genop_1(s, OP_DIV, cursp());
-          break;
-        default:
-          idx = new_sym(s, cast->binary_operator);
-          genop_3(s, OP_SEND, cursp(), idx, 1);
+        default: codegen_error(s, "Not implemented (#7)");
       }
-      gen_assignment_lvar(s, cursp(), cast->name, cast->depth, val);
       if (val) push();
       break;
+    }
+    case PM_CALL_OPERATOR_WRITE_NODE:
+    {
+      CAST(call_operator_write);
+      int base;
+      int idx, vsp = -1;
+      if (val) {
+        vsp = cursp();
+        push();
+      }
+      codegen(s, (mrc_node *)cast->receiver, VAL);
+      idx = new_sym(s, cast->read_name);
+      base = cursp()-1;
+      /* copy receiver and arguments */
+      gen_move(s, cursp(), base, 1);
+      push_n(2); pop_n(2); /* space for receiver, arguments and a block */
+      genop_3(s, OP_SEND, cursp(), idx, 0);
+      push();
+
+      codegen(s, cast->value, VAL);
+      push(); pop();
+      pop(); pop();
+      gen_binary_operator(s, cast->binary_operator);
+      if (val && vsp >= 0) {
+        gen_move(s, vsp, cursp(), 0);
+      }
+      pop();
+      idx = new_sym(s, cast->write_name);
+      genop_3(s, OP_SEND, cursp(), idx, 1);
+      break;
+    }
+    case PM_INDEX_OPERATOR_WRITE_NODE:
+    {
+      CAST(index_operator_write);
+      int base, nargs = 0;
+      int idx, callargs = -1, vsp = -1;
+      if (val) {
+        vsp = cursp();
+        push();
+      }
+      codegen(s, (mrc_node *)cast->receiver, VAL);
+      idx = new_sym(s, MRC_OPSYM_2(aref));
+      base = cursp()-1;
+      nargs = gen_values(s, (mrc_node *)cast->arguments, VAL, 13);
+      if (nargs >= 0) {
+        callargs = nargs;
+      }
+      else { /* varargs */
+        push();
+        nargs = 1;
+        callargs = CALL_MAXARGS;
+      }
+      /* copy receiver and arguments */
+      gen_move(s, cursp(), base, 1);
+      for (int i = 0; i < nargs; i++) {
+        gen_move(s, cursp()+i+1, base+i+1, 1);
+      }
+      push_n(nargs + 2); pop_n(nargs + 2); /* space for receiver, arguments and a block */
+      genop_3(s, OP_SEND, cursp(), idx, callargs);
+      push();
+
+      codegen(s, cast->value, VAL);
+      push(); pop();
+      pop(); pop();
+      gen_binary_operator(s, cast->binary_operator);
+      if (val && vsp >= 0) {
+        gen_move(s, vsp, cursp(), 0);
+      }
+      if (callargs == CALL_MAXARGS) {
+        pop();
+        genop_2(s, OP_ARYPUSH, cursp(), 1);
+      }
+      else {
+        pop_n(callargs);
+        callargs++;
+      }
+      pop();
+      idx = new_sym(s, MRC_OPSYM_2(aset));
+      genop_3(s, OP_SEND, cursp(), idx, callargs);
+      break;
+    }
+    case PM_LOCAL_VARIABLE_OR_WRITE_NODE:
+    {
+      int idx, callargs = -1, vsp = -1;
+      CAST(local_variable_or_write);
+      gen_lvar(s, cast->name, cast->depth);
+      uint32_t pos;
+      pop();
+      if (val) {
+        if (vsp >= 0) {
+          gen_move(s, vsp, cursp(), 1);
+        }
+        pos = genjmp2_0(s, OP_JMPIF, cursp(), val);
+      }
+      else {
+        pos = genjmp2_0(s, OP_JMPIF, cursp(), val);
+      }
+      codegen(s, cast->value, VAL);
+      pop();
+      if (val && vsp >= 0) {
+        gen_move(s, vsp, cursp(), 1);
+      }
+      gen_assignment_lvar(s, cursp(), cast->name, cast->depth, val);
+      dispatch(s, pos);
     }
     case PM_INTEGER_NODE:
     {
@@ -1606,8 +1787,8 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     }
     default:
     {
+      fprintf(stderr, "%s\n", pm_node_type_to_str(nt));
       codegen_error(s, "Not implemented (#4)");
-      printf("Not implemented (#4) %s\n", pm_node_type_to_str(nint(tree)));
       break;
     }
   }
