@@ -1180,7 +1180,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     {
       mrc_sym name, binary_operator;
       mrc_node *value;
-      int op_set, op_get, depth = -1;
+      int op_set = -1, op_get = -1, depth = -1;
 #define CAST_OP_WRITE(type) \
   CAST(type); \
   name = cast->name; \
@@ -1333,27 +1333,122 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       break;
     }
     case PM_LOCAL_VARIABLE_OR_WRITE_NODE:
+    case PM_LOCAL_VARIABLE_AND_WRITE_NODE:
+    case PM_INSTANCE_VARIABLE_OR_WRITE_NODE:
+    case PM_INSTANCE_VARIABLE_AND_WRITE_NODE:
+    case PM_CLASS_VARIABLE_OR_WRITE_NODE:
+    case PM_CLASS_VARIABLE_AND_WRITE_NODE:
+    case PM_GLOBAL_VARIABLE_OR_WRITE_NODE:
+    case PM_GLOBAL_VARIABLE_AND_WRITE_NODE:
+    case PM_CONSTANT_OR_WRITE_NODE:
+    case PM_CONSTANT_AND_WRITE_NODE:
     {
-      int idx, callargs = -1, vsp = -1;
-      CAST(local_variable_or_write);
-      gen_lvar(s, cast->name, cast->depth);
+      mrc_sym name;
+      mrc_node *value;
+      int op_set = -1, op_get = -1, depth = -1;
+      int op_jmp = OP_JMPNOT;
+#define CAST_OR_WRITE(type) \
+  CAST(type); \
+  name = cast->name; \
+  value = cast->value
+      switch (nt) {
+        case PM_LOCAL_VARIABLE_OR_WRITE_NODE: op_jmp = OP_JMPIF;
+        case PM_LOCAL_VARIABLE_AND_WRITE_NODE:
+          {
+            CAST_OR_WRITE(local_variable_or_write);
+            depth = cast->depth;
+            break;
+          }
+        case PM_INSTANCE_VARIABLE_OR_WRITE_NODE: op_jmp = OP_JMPIF;
+        case PM_INSTANCE_VARIABLE_AND_WRITE_NODE:
+          {
+            CAST_OR_WRITE(instance_variable_or_write);
+            op_set = OP_SETIV; op_get = OP_GETIV;
+            break;
+          }
+        case PM_GLOBAL_VARIABLE_OR_WRITE_NODE: op_jmp = OP_JMPIF;
+        case PM_GLOBAL_VARIABLE_AND_WRITE_NODE:
+          {
+            CAST_OR_WRITE(global_variable_or_write);
+            op_set = OP_SETGV; op_get = OP_GETGV;
+            break;
+          }
+        case PM_CLASS_VARIABLE_OR_WRITE_NODE: op_jmp = OP_JMPIF;
+        case PM_CLASS_VARIABLE_AND_WRITE_NODE:
+          {
+            CAST_OR_WRITE(class_variable_or_write);
+            op_set = OP_SETCV; op_get = OP_GETCV;
+            break;
+          }
+        case PM_CONSTANT_OR_WRITE_NODE: op_jmp = OP_JMPIF;
+        case PM_CONSTANT_AND_WRITE_NODE:
+          {
+            CAST_OR_WRITE(constant_or_write);
+            op_set = OP_SETCONST; op_get = OP_GETCONST;
+            break;
+          }
+        default: codegen_error(s, "Not implemented (or_write_node)");
+      }
+      switch (nt) {
+        case PM_LOCAL_VARIABLE_OR_WRITE_NODE:
+        case PM_LOCAL_VARIABLE_AND_WRITE_NODE:
+          gen_lvar(s, name, depth);
+          break;
+        case PM_GLOBAL_VARIABLE_OR_WRITE_NODE:
+        case PM_GLOBAL_VARIABLE_AND_WRITE_NODE:
+        case PM_INSTANCE_VARIABLE_OR_WRITE_NODE:
+        case PM_INSTANCE_VARIABLE_AND_WRITE_NODE:
+        case PM_CLASS_VARIABLE_AND_WRITE_NODE:
+        case PM_CONSTANT_AND_WRITE_NODE:
+          genop_2(s, op_get, cursp(), new_sym(s, name));
+          push();
+          break;
+        case PM_CLASS_VARIABLE_OR_WRITE_NODE:
+        case PM_CONSTANT_OR_WRITE_NODE:
+          int catch_entry, begin, end;
+          int noexc, exc;
+          struct loopinfo *lp;
+
+          lp = loop_push(s, LOOP_BEGIN);
+          lp->pc0 = new_label(s);
+          catch_entry = catch_handler_new(s);
+          begin = s->pc;
+          exc = cursp();
+          genop_2(s, op_get, cursp(), new_sym(s, name));
+          push();
+          end = s->pc;
+          noexc = genjmp_0(s, OP_JMP);
+          lp->type = LOOP_RESCUE;
+          catch_handler_set(s, catch_entry, MRC_CATCH_RESCUE, begin, end, s->pc);
+          genop_1(s, OP_EXCEPT, exc);
+          genop_1(s, OP_LOADF, exc);
+          dispatch(s, noexc);
+          loop_pop(s, NOVAL);
+          break;
+        default: codegen_error(s, "Not implemented (or_write_node)");
+      }
       uint32_t pos;
       pop();
-      if (val) {
-        if (vsp >= 0) {
-          gen_move(s, vsp, cursp(), 1);
-        }
-        pos = genjmp2_0(s, OP_JMPIF, cursp(), val);
-      }
-      else {
-        pos = genjmp2_0(s, OP_JMPIF, cursp(), val);
-      }
-      codegen(s, cast->value, VAL);
+      pos = genjmp2_0(s, op_jmp, cursp(), val);
+      codegen(s, value, VAL);
       pop();
-      if (val && vsp >= 0) {
-        gen_move(s, vsp, cursp(), 1);
+      switch (nt) {
+        case PM_LOCAL_VARIABLE_OR_WRITE_NODE:
+        case PM_LOCAL_VARIABLE_AND_WRITE_NODE:
+          gen_assignment_lvar(s, cursp(), name, depth, val);
+          break;
+        case PM_GLOBAL_VARIABLE_OR_WRITE_NODE:
+        case PM_GLOBAL_VARIABLE_AND_WRITE_NODE:
+        case PM_INSTANCE_VARIABLE_OR_WRITE_NODE:
+        case PM_INSTANCE_VARIABLE_AND_WRITE_NODE:
+        case PM_CLASS_VARIABLE_OR_WRITE_NODE:
+        case PM_CLASS_VARIABLE_AND_WRITE_NODE:
+        case PM_CONSTANT_OR_WRITE_NODE:
+        case PM_CONSTANT_AND_WRITE_NODE:
+          gen_setxv(s, op_set, cursp(), name, val);
+          break;
+        default: codegen_error(s, "Not implemented (or_write)");
       }
-      gen_assignment_lvar(s, cursp(), cast->name, cast->depth, val);
       dispatch(s, pos);
     }
     case PM_INTEGER_NODE:

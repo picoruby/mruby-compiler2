@@ -7,6 +7,7 @@
 #include "../include/mrc_opcode.h"
 #include "../include/mrc_presym.h"
 #include "../include/mrc_pool.h"
+#include "../include/mrc_dump.h"
 
 #if defined(MRC_INT64)
   typedef int64_t mrc_int;
@@ -1355,6 +1356,26 @@ new_lit_str(mrc_codegen_scope *s, const char *str, mrc_int len)
   //}
 
   return i;
+}
+
+static int
+catch_handler_new(mrc_codegen_scope *s)
+{
+  size_t newsize = sizeof(struct mrc_irep_catch_handler) * (s->irep->clen + 1);
+  s->catch_table = (struct mrc_irep_catch_handler*)codegen_realloc(s, (void*)s->catch_table, newsize);
+  return s->irep->clen++;
+}
+
+static void
+catch_handler_set(mrc_codegen_scope *s, int ent, enum mrc_catch_type type, uint32_t begin, uint32_t end, uint32_t target)
+{
+  struct mrc_irep_catch_handler *e;
+  mrc_assert(ent >= 0 && ent < s->irep->clen);
+  e = &s->catch_table[ent];
+  uint8_to_bin(type, &e->type);
+  mrc_irep_catch_handler_pack(begin, e->begin);
+  mrc_irep_catch_handler_pack(end, e->end);
+  mrc_irep_catch_handler_pack(target, e->target);
 }
 
 static mrc_irep *
