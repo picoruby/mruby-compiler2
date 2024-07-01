@@ -1264,7 +1264,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
   write_name = cast->write_name;
       mrc_node *receiver, *value;
       mrc_sym read_name, write_name, binary_operator = -1, op_jmp = -1;
-      int pos = -1;
+      uint32_t pos = -1;
       switch (nt) {
         case PM_CALL_OPERATOR_WRITE_NODE:
           {
@@ -1300,7 +1300,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       push_n(2); pop_n(2); /* space for receiver, arguments and a block */
       genop_3(s, OP_SEND, cursp(), idx, 0);
 
-      if (-1 < binary_operator) {
+      if (-1 != binary_operator) {
         push();
         codegen(s, value, VAL);
         push(); pop();
@@ -1325,18 +1325,49 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       break;
     }
     case PM_INDEX_OPERATOR_WRITE_NODE:
+    case PM_INDEX_OR_WRITE_NODE:
+    case PM_INDEX_AND_WRITE_NODE:
     {
-      CAST(index_operator_write);
+#define CAST_INDEX_WRITE(type) \
+  CAST(type); \
+  receiver = (mrc_node *)cast->receiver; \
+  value = (mrc_node *)cast->value; \
+  arguments = (mrc_node *)cast->arguments;
+      mrc_node *receiver, *value, *arguments;
+      mrc_sym binary_operator = -1;
+      mrc_sym op_jmp = -1;
+      switch (nt) {
+        case PM_INDEX_OPERATOR_WRITE_NODE:
+          {
+            CAST_INDEX_WRITE(index_operator_write);
+            binary_operator = cast->binary_operator;
+            break;
+          }
+        case PM_INDEX_OR_WRITE_NODE:
+          {
+            CAST_INDEX_WRITE(index_or_write);
+            op_jmp = OP_JMPIF;
+            break;
+          }
+        case PM_INDEX_AND_WRITE_NODE:
+          {
+            CAST_INDEX_WRITE(index_and_write);
+            op_jmp = OP_JMPNOT;
+            break;
+          }
+        default: codegen_error(s, "Not implemented (index_operator|or|and_write)");
+      }
       int base, nargs = 0;
       int idx, callargs = -1, vsp = -1;
+      uint32_t pos = -1;
       if (val) {
         vsp = cursp();
         push();
       }
-      codegen(s, (mrc_node *)cast->receiver, VAL);
+      codegen(s, (mrc_node *)receiver, VAL);
       idx = new_sym(s, MRC_OPSYM_2(aref));
       base = cursp()-1;
-      nargs = gen_values(s, (mrc_node *)cast->arguments, VAL, 13);
+      nargs = gen_values(s, (mrc_node *)arguments, VAL, 13);
       if (nargs >= 0) {
         callargs = nargs;
       }
@@ -1352,12 +1383,22 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       }
       push_n(nargs + 2); pop_n(nargs + 2); /* space for receiver, arguments and a block */
       genop_3(s, OP_SEND, cursp(), idx, callargs);
-      push();
-
-      codegen(s, cast->value, VAL);
-      push(); pop();
-      pop(); pop();
-      gen_binary_operator(s, cast->binary_operator);
+      if (-1 != binary_operator) {
+        push();
+        codegen(s, value, VAL);
+        push(); pop();
+        pop(); pop();
+        gen_binary_operator(s, binary_operator);
+      }
+      else { /* OR or AND */
+        if (0 <= vsp) {
+          gen_move(s, vsp, cursp(), 0);
+        }
+        pos = genjmp2_0(s, op_jmp, cursp(), val);
+        codegen(s, value, VAL);
+        pop();
+        dispatch(s, pos);
+      }
       if (val && vsp >= 0) {
         gen_move(s, vsp, cursp(), 0);
       }
@@ -1372,6 +1413,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       pop();
       idx = new_sym(s, MRC_OPSYM_2(aset));
       genop_3(s, OP_SEND, cursp(), idx, callargs);
+      if (0 <= pos) { dispatch(s, pos); }
       break;
     }
     case PM_LOCAL_VARIABLE_OR_WRITE_NODE:
