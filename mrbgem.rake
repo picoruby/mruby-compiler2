@@ -14,6 +14,12 @@ MRuby::Gem::Specification.new('mruby-compiler2') do |spec|
   end
 
   if cc.defines.flatten.include? "MRC_PARSER_PRISM"
+    if cc.defines.flatten.include? "MRC_DEBUG"
+      cc.defines << "MRC_DUMP_PRETTY"
+    else
+      cc.defines << "PRISM_BUILD_MINIMAL"
+    end
+
     objs.delete_if {|obj| obj =~ /lrama_helper/}
     prism_templates_dir = "#{lib_dir}/prism/templates"
     cc.include_paths << "#{prism_dir}/include"
