@@ -672,7 +672,7 @@ for_body(mrc_codegen_scope *s, mrc_node *tree)
   genop_2(s, OP_BLOCK, cursp(), s->irep->rlen-1);
   push();pop(); /* space for a block */
   pop();
-  idx = new_sym(s, MRC_SYM_2(each));
+  idx = new_sym(s, MRC_SYM_1(each));
   genop_3(s, OP_SENDB, cursp(), idx, 0);
 }
 
@@ -1687,6 +1687,83 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
         genop_2(s, OP_BLOCK, cursp(), idx);
         push();
       }
+      break;
+    }
+    case PM_IF_NODE:
+    {
+      CAST(if);
+      uint32_t pos1, pos2;
+      mrc_bool nil_p = FALSE;
+      mrc_node *elsepart = (mrc_node *)cast->consequent;
+
+      if (!cast->predicate) {
+        codegen(s, elsepart, val);
+        goto exit;
+      }
+      if (true_always(cast->predicate)) {
+        codegen(s, (mrc_node *)cast->statements, val);
+        goto exit;
+      }
+      if (false_always(cast->predicate)) {
+        codegen(s, elsepart, val);
+        goto exit;
+      }
+      if (nint(cast->predicate) == PM_CALL_NODE) {
+        pm_call_node_t *n = (pm_call_node_t *)cast->predicate;
+        mrc_sym mid = n->name;
+        mrc_sym sym_nil_p = MRC_SYM_2(nil_p);
+        if (mid == sym_nil_p && n->arguments == NULL) {
+          nil_p = TRUE;
+          codegen(s, (mrc_node *)n->receiver, VAL);
+        }
+      }
+      if (!nil_p) {
+        codegen(s, (mrc_node *)cast->predicate, VAL);
+      }
+      pop();
+      if (val || cast->statements) {
+        if (nil_p) {
+          pos2 = genjmp2_0(s, OP_JMPNIL, cursp(), val);
+          pos1 = genjmp_0(s, OP_JMP);
+          dispatch(s, pos2);
+        }
+        else {
+          pos1 = genjmp2_0(s, OP_JMPNOT, cursp(), val);
+        }
+        codegen(s, (mrc_node *)cast->statements, val);
+        if (val) pop();
+        if (elsepart || val) {
+          pos2 = genjmp_0(s, OP_JMP);
+          dispatch(s, pos1);
+          codegen(s, elsepart, val);
+          dispatch(s, pos2);
+        }
+        else {
+          dispatch(s, pos1);
+        }
+      }
+      else {                    /* empty then-part */
+        if (elsepart) {
+          if (nil_p) {
+            pos1 = genjmp2_0(s, OP_JMPNIL, cursp(), val);
+          }
+          else {
+            pos1 = genjmp2_0(s, OP_JMPIF, cursp(), val);
+          }
+          codegen(s, elsepart, val);
+          dispatch(s, pos1);
+        }
+        else if (val && !nil_p) {
+          genop_1(s, OP_LOADNIL, cursp());
+          push();
+        }
+      }
+      break;
+    }
+    case PM_ELSE_NODE:
+    {
+      CAST(else);
+      codegen(s, cast->statements, val);
       break;
     }
     case PM_AND_NODE:

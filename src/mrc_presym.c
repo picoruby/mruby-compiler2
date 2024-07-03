@@ -9,9 +9,11 @@ typedef struct {
 
 static mrc_sym_entry symTable[] = {
 #define MRC_OPSYM_2(name, lit, num) {num, #lit},
-#define MRC_SYM_2(lit, num)         {num, #lit},
+#define MRC_SYM_1(lit, num)         {num, #lit},
+#define MRC_SYM_2(name, lit, num)   {num, #lit},
 #include "mrc_presym.inc"
 #undef MRC_OPSYM_2
+#undef MRC_SYM_1
 #undef MRC_SYM_2
   {0, NULL} // sentinel
 };
