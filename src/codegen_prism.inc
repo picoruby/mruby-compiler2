@@ -1859,6 +1859,76 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       if (val) push();
       break;
     }
+    case PM_CASE_NODE:
+    {
+      CAST(case);
+      int head = 0;
+      uint32_t pos1, pos2, pos3, tmp;
+
+      pos3 = JMPLINK_START;
+      if (cast->predicate) {
+        head = cursp();
+        codegen(s, (mrc_node *)cast->predicate, VAL);
+      }
+      for (int i = 0; i < cast->conditions.size; i++) {
+        pm_when_node_t *when = (pm_when_node_t *)cast->conditions.nodes[i];
+        pos1 = pos2 = JMPLINK_START;
+        for (int j = 0; j < when->conditions.size; j++) {
+          mrc_node *cond = when->conditions.nodes[j];
+          mrc_bool splat = FALSE;
+          if (nint(cond) == PM_SPLAT_NODE) {
+            splat = TRUE;
+            codegen(s, (mrc_node *)((pm_splat_node_t *)cond)->expression, VAL);
+          }
+          else {
+            codegen(s, cond, VAL);
+          }
+          if (head) {
+            gen_move(s, cursp(), head, 0);
+            push(); push(); pop(); pop(); pop();
+            if (splat) {
+              genop_3(s, OP_SEND, cursp(), new_sym(s, MRC_SYM_1(__case_eqq)), 1);
+            }
+            else {
+              genop_3(s, OP_SEND, cursp(), new_sym(s, MRC_OPSYM_2(eqq)), 1);
+            }
+          }
+          else {
+            pop();
+          }
+          tmp = genjmp2(s, OP_JMPIF, cursp(), pos2, !head);
+          pos2 = tmp;
+        }
+        pos1 = genjmp_0(s, OP_JMP);
+        dispatch_linked(s, pos2);
+        codegen(s, (mrc_node *)when->statements, val);
+        if (val) pop();
+        tmp = genjmp(s, OP_JMP, pos3);
+        pos3 = tmp;
+        dispatch(s, pos1);
+      }
+      if (cast->consequent) {
+        codegen(s, (mrc_node *)cast->consequent, val);
+        if (val) pop();
+        tmp = genjmp(s, OP_JMP, pos3);
+        pos3 = tmp;
+      }
+      if (val) {
+        uint32_t pos = cursp();
+        genop_1(s, OP_LOADNIL, pos);
+        if (pos3 != JMPLINK_START) dispatch_linked(s, pos3);
+        if (head) pop();
+        if (cursp() != pos) {
+          gen_move(s, cursp(), pos, 0);
+        }
+        push();
+      }
+      else {
+        if (pos3 != JMPLINK_START) dispatch_linked(s, pos3);
+        if (head) pop();
+      }
+      break;
+    }
     case PM_SELF_NODE:
     {
       if (val) {
