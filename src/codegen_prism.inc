@@ -1763,7 +1763,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     case PM_ELSE_NODE:
     {
       CAST(else);
-      codegen(s, cast->statements, val);
+      codegen(s, (mrc_node *)cast->statements, val);
       break;
     }
     case PM_AND_NODE:
