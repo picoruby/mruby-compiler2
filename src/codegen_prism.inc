@@ -1611,7 +1611,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     {
       if (val) {
         CAST(string);
-        char *p = (char*)cast->unescaped.source;
+        char *p = (char *)cast->unescaped.source;
         mrc_int len = cast->unescaped.length;
         int off = new_lit_str(s, p, len);
 
