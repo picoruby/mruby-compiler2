@@ -1035,6 +1035,11 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     {
       CAST(statements);
       size_t last_index = cast->body.size;
+      if (last_index == 0) {
+        genop_1(s, OP_LOADNIL, cursp());
+        push();
+        break;
+      }
       for (uint32_t i = 0; i < last_index; i++) {
         codegen(s, (mrc_node *)cast->body.nodes[i], (i+1 < last_index) ? NOVAL : val);
       }
