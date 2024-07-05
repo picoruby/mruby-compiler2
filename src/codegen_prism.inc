@@ -1625,6 +1625,113 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       }
       break;
     }
+    case PM_X_STRING_NODE:
+    {
+      CAST(x_string);
+      char *p = (char *)cast->unescaped.source;
+      mrc_int len = cast->unescaped.length;
+      int off = new_lit_str(s, p, len);
+      int sym = new_sym(s, MRC_OPSYM_2(tick));
+
+      genop_1(s, OP_LOADSELF, cursp());
+      push();
+      genop_2(s, OP_STRING, cursp(), off);
+      push(); push();
+      pop_n(3);
+      genop_3(s, OP_SEND, cursp(), sym, 1);
+      if (val) push();
+      break;
+    }
+    case PM_EMBEDDED_STATEMENTS_NODE:
+    {
+      CAST(embedded_statements);
+      codegen(s, (mrc_node *)cast->statements, val);
+      break;
+    }
+    case PM_INTERPOLATED_STRING_NODE:
+    case PM_INTERPOLATED_SYMBOL_NODE:
+    {
+      int i;
+      mrc_node **nodes;
+      uint32_t size;
+      if (nt == PM_INTERPOLATED_SYMBOL_NODE) {
+        CAST(interpolated_symbol);
+        nodes = (mrc_node **)cast->parts.nodes;
+        size = cast->parts.size;
+      }
+      else {
+        CAST(interpolated_string);
+        nodes = (mrc_node **)cast->parts.nodes;
+        size = cast->parts.size;
+      }
+      mrc_bool str_begin = FALSE;
+      if (val) {
+        if (nint(nodes[0]) != PM_STRING_NODE) {
+          genop_2(s, OP_STRING, cursp(), new_lit_str(s, "", 0));
+          push();
+          str_begin = TRUE;
+        }
+        for (i = 0; i < size; i++) {
+          codegen(s, nodes[i], VAL);
+          pop();
+          if (str_begin || 0 < i) {
+            pop();
+            genop_1(s, OP_STRCAT, cursp());
+          }
+          push();
+        }
+      }
+      else {
+        /* example:
+         *  def my_method
+         *    "Hey, #{something} happens!"
+         *    return 1
+         *  end
+         * # The return value of the interpolated string will not be used.
+         * # (This is a case when val is FALSE)
+         * # So we ignore `'Hey, '` and `' happens!'`.
+         * # However, we need to evaluate `something` as it may have side effects.
+         */
+        for (i = 0; i < size; i++) {
+          if (nint(nodes[i]) != PM_STRING_NODE) {
+            codegen(s, nodes[i], NOVAL);
+            pop();
+          }
+        }
+      }
+      if (nt == PM_INTERPOLATED_SYMBOL_NODE) {
+        if (val) {
+          pop();
+          genop_1(s, OP_INTERN, cursp());
+          push();
+        }
+      }
+      break;
+    }
+    case PM_INTERPOLATED_X_STRING_NODE:
+    {
+      int i;
+      CAST(interpolated_x_string);
+      int sym = new_sym(s, MRC_SYM_1(Kernel));
+
+      genop_1(s, OP_LOADSELF, cursp());
+      push();
+      codegen(s, (mrc_node *)cast->parts.nodes[0], VAL);
+      for (i = 1; i < cast->parts.size; i++) {
+        //if (nint(cast->parts.node[i]) == PM_X_STRING_NODE) {
+        //}
+        codegen(s, (mrc_node *)cast->parts.nodes[i], VAL);
+        pop(); pop();
+        genop_1(s, OP_STRCAT, cursp());
+        push();
+      }
+      push();
+      pop_n(3);
+      sym = new_sym(s, MRC_OPSYM_2(tick));
+      genop_3(s, OP_SEND, cursp(), sym, 1);
+      if (val) push();
+      break;
+    }
     case PM_SINGLETON_CLASS_NODE:
     {
       CAST(singleton_class);
