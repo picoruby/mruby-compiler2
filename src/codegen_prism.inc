@@ -945,12 +945,7 @@ lambda_body(mrc_codegen_scope *s, pm_parameters_node_t *parameters, mrc_node *bo
     }
   }
 
-  if (body) {
-    codegen(s, body, VAL);
-  }
-  else {
-    genop_1(s, OP_LOADNIL, cursp());
-  }
+  codegen(s, body, VAL);
   pop();
   if (s->pc > 0) {
     gen_return(s, OP_RETURN, cursp());
