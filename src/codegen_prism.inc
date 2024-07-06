@@ -47,6 +47,23 @@ false_always(mrc_node *tree)
 }
 
 static void
+gen_blkmove(mrc_codegen_scope *s, uint16_t ainfo, int lv)
+{
+  int m1 = (ainfo>>7)&0x3f;
+  int r  = (ainfo>>6)&0x1;
+  int m2 = (ainfo>>1)&0x1f;
+  int kd = (ainfo)&0x1;
+  int off = m1+r+m2+kd+1;
+  if (lv == 0) {
+    gen_move(s, cursp(), off, 0);
+  }
+  else {
+    genop_3(s, OP_GETUPVAR, cursp(), off, lv);
+  }
+  push();
+}
+
+static void
 gen_retval(mrc_codegen_scope *s, mrc_node *tree)
 {
   CAST(arguments);
@@ -2177,6 +2194,54 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
         genop_1(s, OP_OCLASS, cursp());
       }
       genop_2(s, OP_GETMCNST, cursp(), sym);
+      if (val) push();
+      break;
+    }
+    case PM_FORWARDING_SUPER_NODE:
+    {
+      CAST(forwarding_super);
+      mrc_codegen_scope *s2 = s;
+      int lv = 0;
+      uint16_t ainfo = 0;
+      int n = CALL_MAXARGS;
+      int sp = cursp();
+
+      push();        /* room for receiver */
+      while (!s2->mscope) {
+        lv++;
+        s2 = s2->prev;
+        if (!s2) break;
+      }
+      if (s2 && s2->ainfo > 0) {
+        ainfo = s2->ainfo;
+      }
+      if (ainfo > 0) {
+        genop_2S(s, OP_ARGARY, cursp(), (ainfo<<4)|(lv & 0xf));
+        push(); push(); push();   /* ARGARY pushes 3 values at most */
+        pop(); pop(); pop();
+        /* keyword arguments */
+        if (ainfo & 0x1) {
+          n |= CALL_MAXARGS<<4;
+          push();
+        }
+        /* block argument */
+        if (cast->block) {
+          push();
+          codegen(s, (mrc_node *)cast->block, VAL);
+        }
+      }
+      else {
+        /* block argument */
+        if (cast->block) {
+          codegen(s, (mrc_node *)cast->block, VAL);
+        }
+        else {
+          gen_blkmove(s, 0, lv);
+        }
+        n = 0;
+      }
+      s->sp = sp;
+      genop_2(s, OP_SUPER, cursp(), n);
       if (val) push();
       break;
     }
