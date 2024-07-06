@@ -2197,6 +2197,59 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       if (val) push();
       break;
     }
+    case PM_SUPER_NODE:
+    {
+      CAST(super);
+      mrc_codegen_scope *s2 = s;
+      int lv = 0;
+      int n = 0, nk = 0, st = 0;
+
+      push();
+      while (!s2->mscope) {
+        lv++;
+        s2 = s2->prev;
+        if (!s2) break;
+      }
+      CAST3(arguments, cast->arguments, arguments);
+      if (arguments) {
+        st = n = gen_values(s, (mrc_node *)arguments, VAL, 14);
+        if (n < 0) {
+          st = 1; n = 15;
+          push();
+        }
+        /* keyword arguments */
+        for (int i = 0; i < arguments->arguments.size; i++) {
+          mrc_node *t = (mrc_node *)arguments->arguments.nodes[i];
+          if (nint(t) == PM_KEYWORD_HASH_NODE) {
+            nk = gen_hash(s, t, VAL, 14);
+            if (nk < 0) {st++; nk = 15;}
+            else st += nk*2;
+            n |= nk<<4;
+          }
+        }
+        /* block argument */
+        if (cast->block) {
+          codegen(s, (mrc_node *)cast->block, VAL);
+        }
+        else if (s2) gen_blkmove(s, s2->ainfo, lv);
+        else {
+          genop_1(s, OP_LOADNIL, cursp());
+          push();
+        }
+      }
+      else { /* `super()` parentheses without argument */
+        if (s2) gen_blkmove(s, s2->ainfo, lv);
+        else {
+          genop_1(s, OP_LOADNIL, cursp());
+          push();
+        }
+      }
+      st++;
+      pop_n(st+1);
+      genop_2(s, OP_SUPER, cursp(), n);
+      if (val) push();
+      break;
+    }
     case PM_FORWARDING_SUPER_NODE:
     {
       CAST(forwarding_super);
