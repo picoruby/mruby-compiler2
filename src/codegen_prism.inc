@@ -2316,6 +2316,38 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       if (val) push();
       break;
     }
+    case PM_YIELD_NODE:
+    {
+      CAST(yield);
+      mrc_codegen_scope *s2 = s;
+      int lv = 0, ainfo = -1;
+      int n = 0, sendv = 0;
+
+      while (!s2->mscope) {
+        lv++;
+        s2 = s2->prev;
+        if (!s2) break;
+      }
+      if (s2) {
+        ainfo = (int)s2->ainfo;
+      }
+      if (ainfo < 0) codegen_error(s, "invalid yield (SyntaxError)");
+      push();
+      if (cast->arguments) {
+        n = gen_values(s, (mrc_node *)cast->arguments, VAL, 14);
+        if (n < 0) {
+          n = sendv = 1;
+          push();
+        }
+      }
+      push(); pop(); /* space for a block */
+      pop_n(n+1);
+      genop_2S(s, OP_BLKPUSH, cursp(), (ainfo<<4)|(lv & 0xf));
+      if (sendv) n = CALL_MAXARGS;
+      genop_3(s, OP_SEND, cursp(), new_sym(s, MRC_SYM_1(call)), n);
+      if (val) push();
+      break;
+    }
     case PM_BLOCK_ARGUMENT_NODE:
     {
       CAST(block_argument);
