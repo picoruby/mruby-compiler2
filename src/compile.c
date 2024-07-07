@@ -16,19 +16,47 @@
 //  }
 //}
 
+static void
+line_and_column_by_start_and_offset(const uint8_t *start, uint32_t offset, uint32_t *line, uint32_t *column)
+{
+  uint32_t l = 1, c = 1;
+  const uint8_t *p = start;
+  while (p < start + offset) {
+    if (*p == '\n') {
+      l++;
+      c = 1;
+    } else {
+      c++;
+    }
+    p++;
+  }
+  *line = l;
+  *column = c;
+}
+
 static mrc_irep *
 mrc_load_exec(mrc_ccontext *c, mrc_node *ast)
 {
   mrc_irep *irep;
-  //if (parse error) {
-  //  print error message
-  //  return NULL;
-  //}
+  /* parse error */
+  if (0 < c->p->error_list.size) {
+    pm_diagnostic_t *e = (pm_diagnostic_t *)c->p->error_list.head;
+    while (e) {
+      fprintf(stderr, "SyntaxError: %s\n", e->message);
+      uint32_t offset = (uint32_t)(e->location.start - c->p->start);
+      uint32_t length = (uint32_t)(e->location.end - e->location.start);
+      uint32_t line, column;
+      line_and_column_by_start_and_offset(c->p->start, offset, &line, &column);
+      fprintf(stderr, "line: %d, column: %d, length: %d\n", line, column, length);
+      e = (pm_diagnostic_t *)e->node.next;
+    }
+    return NULL;
+  }
   irep = mrc_generate_code(c, ast);
-  //if (codegen error) {
-  //  print error message
-  //  return NULL;
-  //}
+  /* compile error */
+  if (c->capture_errors) {
+    return NULL;
+  }
   if (c->dump_result) {
 #if defined(MRC_PARSER_PRISM)
     {

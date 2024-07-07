@@ -224,6 +224,7 @@ static void
 codegen_error(mrc_codegen_scope *s, const char *message)
 {
   if (!s) return;
+  s->c->capture_errors = TRUE;
 #ifndef MRC_NO_STDIO
   if (s->filename_sym && s->lineno) {
     const char *filename = mrc_sym_name_len(s->c, s->filename_sym, NULL);

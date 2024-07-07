@@ -2368,10 +2368,16 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       }
       break;
     }
+   // case PM_POST_EXECUTION_NODE:
+   // {
+   //   codegen_error(s, "END not supported");
+   //   break;
+   // }
     default:
     {
-      fprintf(stderr, "%s\n", pm_node_type_to_str(nt));
-      codegen_error(s, "Not implemented (#4)");
+      char buf[256];
+      snprintf(buf, sizeof(buf), "Not implemented: %s", pm_node_type_to_str(nt));
+      codegen_error(s, buf);
       break;
     }
   }
