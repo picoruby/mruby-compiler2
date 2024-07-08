@@ -2,6 +2,7 @@
 #define MRC_CCONTEXT_H
 
 #include "mrc_common.h"
+#include "mrc_diagnostic.h"
 #include "mrc_throw.h"
 #include <stddef.h>
 
@@ -28,6 +29,9 @@ MRC_BEGIN_DECL
   #error "No parser defined. Please define MRC_PARSER_PRISM or MRC_PARSER_LRAMA."
 #endif
 
+struct mrc_diagnostic_list;
+typedef struct mrc_diagnostic_list mrc_diagnostic_list;
+
 typedef struct mrc_ccontext {
   mrb_state *mrb;
   struct mrc_jmpbuf *jmp;
@@ -45,7 +49,8 @@ typedef struct mrc_ccontext {
   mrc_bool no_ext_ops:1;
   const struct RProc *upper;
 
-  size_t parser_nerr;
+  //size_t parser_nerr;
+  mrc_diagnostic_list *diagnostic_list;
 } mrc_ccontext;                 /* compiler context */
 
 mrc_ccontext *mrc_ccontext_new(mrb_state *mrb);

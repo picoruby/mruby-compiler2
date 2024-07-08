@@ -225,6 +225,9 @@ codegen_error(mrc_codegen_scope *s, const char *message)
 {
   if (!s) return;
   s->c->capture_errors = TRUE;
+
+  mrc_diagnostic_list_append(s->c, 0, message, MRC_GENERATOR_ERROR);
+
 #ifndef MRC_NO_STDIO
   if (s->filename_sym && s->lineno) {
     const char *filename = mrc_sym_name_len(s->c, s->filename_sym, NULL);
@@ -233,6 +236,7 @@ codegen_error(mrc_codegen_scope *s, const char *message)
   else {
     fprintf(stderr, "%s\n", message);
   }
+
 #endif
   while (s->prev) {
     mrc_codegen_scope *tmp = s->prev;

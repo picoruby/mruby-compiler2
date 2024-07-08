@@ -2368,11 +2368,22 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       }
       break;
     }
-   // case PM_POST_EXECUTION_NODE:
-   // {
-   //   codegen_error(s, "END not supported");
-   //   break;
-   // }
+    case PM_POST_EXECUTION_NODE:
+    {
+      mrc_diagnostic_list_append(s->c, tree->location.start, "END not supported", MRC_GENERATOR_ERROR);
+      break;
+    }
+    case PM_MATCH_REQUIRED_NODE:
+    {
+      CAST(match_required);
+      if (nint(cast->pattern) != PM_LOCAL_VARIABLE_TARGET_NODE) {
+        mrc_diagnostic_list_append(s->c, cast->pattern->location.start, "expecting a local variable", MRC_GENERATOR_ERROR);
+        break;
+      }
+      pm_local_variable_target_node_t *lvar = (pm_local_variable_target_node_t *)cast->pattern;
+      gen_assignment(s, (mrc_node *)lvar, (mrc_node *)cast->value, 0, val);
+      break;
+    }
     default:
     {
       char buf[256];
