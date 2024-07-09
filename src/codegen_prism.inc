@@ -1792,6 +1792,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
         pm_parameters_node_t *parameters = NULL;
         if ((pm_block_parameters_node_t *)cast->parameters) {
           parameters = ((pm_block_parameters_node_t *)cast->parameters)->parameters;
+          // TODO PM_NUMBERED_PARAMETERS_NODE
         }
         int idx = lambda_body(s, parameters, cast->body, &cast->locals, 1);
         genop_2(s, OP_LAMBDA, cursp(), idx);
