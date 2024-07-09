@@ -1009,6 +1009,28 @@ gen_binary_operator(mrc_codegen_scope *s, mrc_sym binary_operator)
 }
 
 static void
+regex_set_flags(pm_node_flags_t flags, char *p2, char *p3)
+{
+  int p2_len = 0;
+  if (flags&PM_REGULAR_EXPRESSION_FLAGS_IGNORE_CASE) p2[p2_len++] = 'i';
+  if (flags&PM_REGULAR_EXPRESSION_FLAGS_EXTENDED)    p2[p2_len++] = 'x';
+  if (flags&PM_REGULAR_EXPRESSION_FLAGS_MULTI_LINE)  p2[p2_len++] = 'm';
+  // mruby does not support once-only subexpression
+  // if (flags|PM_REGULAR_EXPRESSION_FLAGS_ONCE)     p2[p2_len++] = 'o';
+  if (flags&PM_REGULAR_EXPRESSION_FLAGS_EUC_JP)           p3[0] = 'e';
+  else if (flags&PM_REGULAR_EXPRESSION_FLAGS_ASCII_8BIT)  p3[0] = 'n';
+  else if (flags&PM_REGULAR_EXPRESSION_FLAGS_WINDOWS_31J) p3[0] = 's';
+  else if (flags&PM_REGULAR_EXPRESSION_FLAGS_UTF_8)       p3[0] = 'u';
+  // TODO???
+  // /** internal bytes forced the encoding to UTF-8 */
+  // PM_REGULAR_EXPRESSION_FLAGS_FORCED_UTF8_ENCODING
+  // /** internal bytes forced the encoding to binary */
+  // PM_REGULAR_EXPRESSION_FLAGS_FORCED_BINARY_ENCODING
+  // /** internal bytes forced the encoding to US-ASCII */
+  // PM_REGULAR_EXPRESSION_FLAGS_FORCED_US_ASCII_ENCODING
+}
+
+static void
 codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
 {
   int rlev = s->rlev;
@@ -1652,6 +1674,126 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       pop_n(3);
       genop_3(s, OP_SEND, cursp(), sym, 1);
       if (val) push();
+      break;
+    }
+    case PM_REGULAR_EXPRESSION_NODE:
+    {
+      if (val) {
+        CAST(regular_expression);
+        char *p1 = (char *)cast->unescaped.source;
+        char p2[4] = {0, 0, 0, 0};
+        char p3[2] = {0, 0};
+        regex_set_flags(cast->base.flags, p2, p3);
+        int sym = new_sym(s, MRC_SYM_1(Regexp));
+        int off = new_lit_str(s, p1, cast->unescaped.length);
+        int argc = 1;
+
+        genop_1(s, OP_OCLASS, cursp());
+        genop_2(s, OP_GETMCNST, cursp(), sym);
+        push();
+        genop_2(s, OP_STRING, cursp(), off);
+        push();
+        if (p2[0] || p3[0]) {
+          if (p2[0]) { /* opt */
+            off = new_lit_cstr(s, p2);
+            genop_2(s, OP_STRING, cursp(), off);
+          }
+          else {
+            genop_1(s, OP_LOADNIL, cursp());
+          }
+          push();
+          argc++;
+          if (p3[0]) { /* enc */
+            off = new_lit_str(s, p3, 1);
+            genop_2(s, OP_STRING, cursp(), off);
+            push();
+            argc++;
+          }
+        }
+        push(); /* space for a block */
+        pop_n(argc+2);
+        sym = new_sym(s, MRC_SYM_1(compile));
+        genop_3(s, OP_SEND, cursp(), sym, argc);
+        push();
+      }
+      break;
+    }
+    case PM_INTERPOLATED_REGULAR_EXPRESSION_NODE:
+    {
+      CAST(interpolated_regular_expression);
+      if (val) {
+        int sym = new_sym(s, MRC_SYM_1(Regexp));
+        int argc = 1;
+
+        genop_1(s, OP_OCLASS, cursp());
+        genop_2(s, OP_GETMCNST, cursp(), sym);
+        push();
+
+        mrc_bool str_begin = FALSE;
+        if (nint(cast->parts.nodes[0]) != PM_STRING_NODE) {
+          genop_2(s, OP_STRING, cursp(), new_lit_cstr(s, ""));
+          push();
+          str_begin = TRUE;
+        }
+        for (int i = 0; i < cast->parts.size; i++) {
+          codegen(s, cast->parts.nodes[i], VAL);
+          pop();
+          if (str_begin || 0 < i) {
+            pop();
+            genop_1(s, OP_STRCAT, cursp());
+          }
+          push();
+        }
+
+        char p2[4] = {0, 0, 0, 0};
+        char p3[2] = {0, 0};
+        regex_set_flags(cast->base.flags, p2, p3);
+        if (p2[0]) { /* opt */
+          genop_2(s, OP_STRING, cursp(), new_lit_cstr(s, p2));
+          push();
+          argc++;
+        }
+        if (p3[0]) { /* enc */
+          genop_2(s, OP_STRING, cursp(), new_lit_cstr(s, p3));
+          push();
+          argc++;
+        }
+        push(); /* space for a block */
+        pop_n(argc+2);
+        sym = new_sym(s, MRC_SYM_1(compile));
+        genop_3(s, OP_SEND, cursp(), sym, argc);
+        push();
+      }
+      else {
+        for (int i = 0; i < cast->parts.size; i++) {
+          if (nint(cast->parts.nodes[i]) != PM_STRING_NODE) {
+            codegen(s, cast->parts.nodes[i], NOVAL);
+          }
+        }
+      }
+      break;
+    }
+    case PM_BACK_REFERENCE_READ_NODE:
+    {
+      CAST(back_reference_read);
+      if (val) {
+        int sym = new_sym(s, MRC_SYM_2(back_ref));
+        genop_2(s, OP_GETGV, cursp(), sym);
+        push();
+      }
+      break;
+    }
+    case PM_NUMBERED_REFERENCE_READ_NODE:
+    {
+      if (val) {
+        CAST(numbered_reference_read);
+        char buf[100];
+        buf[0] = '$';
+        sprintf(buf+1, "%d", cast->number);
+        int sym = new_sym(s, nsym(s->c->p, buf, strlen(buf)));
+        genop_2(s, OP_GETGV, cursp(), sym);
+        push();
+      }
       break;
     }
     case PM_EMBEDDED_STATEMENTS_NODE:
