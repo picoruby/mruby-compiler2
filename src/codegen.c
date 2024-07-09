@@ -1364,6 +1364,12 @@ new_lit_str(mrc_codegen_scope *s, const char *str, mrc_int len)
 }
 
 static int
+new_lit_cstr(mrc_codegen_scope *s, const char *str)
+{
+  return new_lit_str(s, str, (mrc_int)strlen(str));
+}
+
+static int
 catch_handler_new(mrc_codegen_scope *s)
 {
   size_t newsize = sizeof(struct mrc_irep_catch_handler) * (s->irep->clen + 1);

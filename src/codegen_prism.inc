@@ -1679,7 +1679,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       mrc_bool str_begin = FALSE;
       if (val) {
         if (nint(nodes[0]) != PM_STRING_NODE) {
-          genop_2(s, OP_STRING, cursp(), new_lit_str(s, "", 0));
+          genop_2(s, OP_STRING, cursp(), new_lit_cstr(s, ""));
           push();
           str_begin = TRUE;
         }
