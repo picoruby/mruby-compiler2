@@ -883,6 +883,8 @@ gen_move(mrc_codegen_scope *s, uint16_t dst, uint16_t src, int nopeep)
   genop_2(s, OP_MOVE, dst, src);
 }
 
+static int new_lit_int(mrc_codegen_scope *s, mrc_int num);
+
 static void
 gen_int(mrc_codegen_scope *s, uint16_t dst, mrc_int i)
 {
@@ -899,8 +901,7 @@ gen_int(mrc_codegen_scope *s, uint16_t dst, mrc_int i)
   else if (i <= INT32_MAX) genop_2SS(s, OP_LOADI32, dst, (uint32_t)i);
   else {
   int_lit:
-    // todo
-    //genop_2(s, OP_LOADL, dst, new_lit_int(s, i));
+    genop_2(s, OP_LOADL, dst, new_lit_int(s, i));
   }
 }
 
@@ -1331,6 +1332,41 @@ nsym(mrc_parser_state *p, const uint8_t *start, size_t length)
 }
 
 static int
+new_litbint(mrc_codegen_scope *s, const char *p, int base, mrc_bool neg)
+{
+  int i;
+  size_t plen;
+  mrc_pool_value *pv;
+
+  plen = strlen(p);
+  if (plen > 255) {
+    codegen_error(s, "integer too big");
+  }
+  for (i=0; i<s->irep->plen; i++) {
+    size_t len;
+    pv = &s->pool[i];
+    if (pv->tt != IREP_TT_BIGINT) continue;
+    len = pv->u.str[0];
+    if (len == plen && pv->u.str[1] == base && memcmp(pv->u.str+2, p, len) == 0)
+      return i;
+  }
+
+  pv = lit_pool_extend(s);
+
+  char *buf;
+  pv->tt = IREP_TT_BIGINT;
+  buf = (char*)codegen_realloc(s, NULL, plen+3);
+  buf[0] = (char)plen;
+  if (neg) buf[1] = -base;
+  else buf[1] = base;
+  memcpy(buf+2, p, plen);
+  buf[plen+2] = '\0';
+  pv->u.str = buf;
+
+  return i;
+}
+
+static int
 new_lit_str(mrc_codegen_scope *s, const char *str, mrc_int len)
 {
   int i;
@@ -1367,6 +1403,38 @@ static int
 new_lit_cstr(mrc_codegen_scope *s, const char *str)
 {
   return new_lit_str(s, str, (mrc_int)strlen(str));
+}
+
+static int
+new_lit_int(mrc_codegen_scope *s, mrc_int num)
+{
+  int i;
+  mrc_pool_value *pv;
+
+  for (i=0; i<s->irep->plen; i++) {
+    pv = &s->pool[i];
+    if (pv->tt == IREP_TT_INT32) {
+      if (num == pv->u.i32) return i;
+    }
+#ifdef MRC_64BIT
+    else if (pv->tt == IREP_TT_INT64) {
+      if (num == pv->u.i64) return i;
+    }
+    continue;
+#endif
+  }
+
+  pv = lit_pool_extend(s);
+
+#ifdef MRC_INT64
+  pv->tt = IREP_TT_INT64;
+  pv->u.i64 = num;
+#else
+  pv->tt = IREP_TT_INT32;
+  pv->u.i32 = num;
+#endif
+
+  return i;
 }
 
 static int
