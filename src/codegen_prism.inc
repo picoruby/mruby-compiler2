@@ -694,9 +694,26 @@ for_body(mrc_codegen_scope *s, mrc_node *tree)
 }
 
 static int
-lambda_body(mrc_codegen_scope *s, pm_parameters_node_t *parameters, mrc_node *body, pm_constant_id_list_t *locals, int blk)
+lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id_list_t *locals, int blk)
 {
   mrc_codegen_scope *parent = s;
+  pm_parameters_node_t *parameters;
+  int na = 0;
+  switch nint(tree) {
+    case PM_DEF_NODE:
+      parameters = ((pm_def_node_t *)tree)->parameters;
+      break;
+    case PM_BLOCK_PARAMETERS_NODE:
+      parameters = ((pm_block_parameters_node_t *)tree)->parameters;
+      break;
+    case PM_NUMBERED_PARAMETERS_NODE:
+      parameters = NULL;
+      na = ((pm_numbered_parameters_node_t *)tree)->maximum;
+      break;
+    default:
+      codegen_error(s, "should not happen");
+  }
+
 
   int ma, mma, oa, ra, pa, ppa, ka, kd, ba, i;
   pm_constant_id_list_t lv;
@@ -705,6 +722,10 @@ lambda_body(mrc_codegen_scope *s, pm_parameters_node_t *parameters, mrc_node *bo
   // Create lv regs from Prism's locals
   if (parameters == NULL) {
     pm_constant_id_list_init_capacity(&lv, 2);
+    for (i = 0; i < locals->size; i++) {
+      /* numbered parameters */
+      pm_constant_id_list_append(&lv, locals->ids[i]);
+    }
     pm_constant_id_list_append(&lv, null_mark);
     ma = mma = oa = ra = pa = ppa = ka = kd = ba = 0;
   }
@@ -842,9 +863,9 @@ lambda_body(mrc_codegen_scope *s, pm_parameters_node_t *parameters, mrc_node *bo
     struct loopinfo *lp = loop_push(s, LOOP_BLOCK);
     lp->pc0 = new_label(s);
   }
-  if (parameters == NULL) {
-    genop_W(s, OP_ENTER, 0);
-    s->ainfo = 0;
+  if (parameters == NULL) { /* empty parameter OR numbered parameters */
+    genop_W(s, OP_ENTER, MRC_ARGS_REQ(na));
+    s->ainfo = (na & 0x3f) << 7;
   }
   else {
     mrc_aspec a;
@@ -1931,7 +1952,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     {
       CAST(def);
       int sym = new_sym(s, cast->name);
-      int idx = lambda_body(s, cast->parameters, cast->body, &cast->locals, 0);
+      int idx = lambda_body(s, (mrc_node *)cast, cast->body, &cast->locals, 0);
 
       if (cast->receiver == NULL) {
         genop_1(s, OP_TCLASS, cursp());
@@ -1954,10 +1975,9 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     {
       if (val) {
         CAST(lambda);
-        pm_parameters_node_t *parameters = NULL;
+        mrc_node *parameters = NULL;
         if ((pm_block_parameters_node_t *)cast->parameters) {
-          parameters = ((pm_block_parameters_node_t *)cast->parameters)->parameters;
-          // TODO PM_NUMBERED_PARAMETERS_NODE
+          parameters = (mrc_node *)cast->parameters;
         }
         int idx = lambda_body(s, parameters, cast->body, &cast->locals, 1);
         genop_2(s, OP_LAMBDA, cursp(), idx);
@@ -1969,9 +1989,9 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     {
       if (val) {
         CAST(block);
-        pm_parameters_node_t *parameters = NULL;
+        mrc_node *parameters = NULL;
         if ((pm_block_parameters_node_t *)cast->parameters) {
-          parameters = ((pm_block_parameters_node_t *)cast->parameters)->parameters;
+          parameters = (mrc_node *)cast->parameters;
         }
         int idx = lambda_body(s, parameters, cast->body, &cast->locals, 1);
         genop_2(s, OP_BLOCK, cursp(), idx);
