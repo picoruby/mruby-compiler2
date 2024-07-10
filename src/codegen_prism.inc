@@ -2554,6 +2554,29 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       if (val) push();
       break;
     }
+    case PM_NEXT_NODE:
+    {
+      CAST(next);
+      if (!s->loop) {
+        raise_error(s, "unexpected next");
+      }
+      else if (s->loop->type == LOOP_NORMAL) {
+        codegen(s, (mrc_node *)cast->arguments, NOVAL);
+        genjmp(s, OP_JMPUW, s->loop->pc0);
+      }
+      else {
+        if ((mrc_node *)cast->arguments) {
+          codegen(s, (mrc_node *)cast->arguments, VAL);
+          pop();
+        }
+        else {
+          genop_1(s, OP_LOADNIL, cursp());
+        }
+        gen_return(s, OP_RETURN, cursp());
+      }
+      if (val) push();
+      break;
+    }
     case PM_BLOCK_ARGUMENT_NODE:
     {
       CAST(block_argument);
