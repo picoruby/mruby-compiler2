@@ -1775,7 +1775,6 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     }
     case PM_BACK_REFERENCE_READ_NODE:
     {
-      CAST(back_reference_read);
       if (val) {
         int sym = new_sym(s, MRC_SYM_2(back_ref));
         genop_2(s, OP_GETGV, cursp(), sym);
@@ -1790,7 +1789,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
         char buf[100];
         buf[0] = '$';
         sprintf(buf+1, "%d", cast->number);
-        int sym = new_sym(s, nsym(s->c->p, buf, strlen(buf)));
+        int sym = new_sym(s, nsym(s->c->p, (const uint8_t *)buf, strlen(buf)));
         genop_2(s, OP_GETGV, cursp(), sym);
         push();
       }
