@@ -579,61 +579,69 @@ loop_push(mrc_codegen_scope *s, enum looptype t)
 }
 
 static void
+raise_error(mrc_codegen_scope *s, const char *msg)
+{
+  int idx = new_lit_cstr(s, msg);
+
+  genop_1(s, OP_ERR, idx);
+}
+
+static void
 loop_break(mrc_codegen_scope *s, mrc_node *tree)
 {
-//  if (!s->loop) {
-//    codegen(s, tree, NOVAL);
-//    raise_error(s, "unexpected break");
-//  }
-//  else {
-//    struct loopinfo *loop;
-//
-//    loop = s->loop;
-//    if (tree) {
-//      if (loop->reg < 0) {
-//        codegen(s, tree, NOVAL);
-//      }
-//      else {
-//        gen_retval(s, tree);
-//      }
-//    }
-//    while (loop) {
-//      if (loop->type == LOOP_BEGIN) {
-//        loop = loop->prev;
-//      }
-//      else if (loop->type == LOOP_RESCUE) {
-//        loop = loop->prev;
-//      }
-//      else{
-//        break;
-//      }
-//    }
-//    if (!loop) {
-//      raise_error(s, "unexpected break");
-//      return;
-//    }
-//
-//    if (loop->type == LOOP_NORMAL) {
-//      int tmp;
-//
-//      if (loop->reg >= 0) {
-//        if (tree) {
-//          gen_move(s, loop->reg, cursp(), 0);
-//        }
-//        else {
-//          genop_1(s, OP_LOADNIL, loop->reg);
-//        }
-//      }
-//      tmp = genjmp(s, OP_JMPUW, loop->pc2);
-//      loop->pc2 = tmp;
-//    }
-//    else {
-//      if (!tree) {
-//        genop_1(s, OP_LOADNIL, cursp());
-//      }
-//      gen_return(s, OP_BREAK, cursp());
-//    }
-//  }
+  if (!s->loop) {
+    codegen(s, tree, NOVAL);
+    raise_error(s, "unexpected break");
+  }
+  else {
+    struct loopinfo *loop;
+
+    loop = s->loop;
+    if (tree) {
+      if (loop->reg < 0) {
+        codegen(s, tree, NOVAL);
+      }
+      else {
+        gen_retval(s, tree);
+      }
+    }
+    while (loop) {
+      if (loop->type == LOOP_BEGIN) {
+        loop = loop->prev;
+      }
+      else if (loop->type == LOOP_RESCUE) {
+        loop = loop->prev;
+      }
+      else{
+        break;
+      }
+    }
+    if (!loop) {
+      raise_error(s, "unexpected break");
+      return;
+    }
+
+    if (loop->type == LOOP_NORMAL) {
+      int tmp;
+
+      if (loop->reg >= 0) {
+        if (tree) {
+          gen_move(s, loop->reg, cursp(), 0);
+        }
+        else {
+          genop_1(s, OP_LOADNIL, loop->reg);
+        }
+      }
+      tmp = genjmp(s, OP_JMPUW, loop->pc2);
+      loop->pc2 = tmp;
+    }
+    else {
+      if (!tree) {
+        genop_1(s, OP_LOADNIL, cursp());
+      }
+      gen_return(s, OP_BREAK, cursp());
+    }
+  }
 }
 
 static void
@@ -2531,6 +2539,13 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       genop_2S(s, OP_BLKPUSH, cursp(), (ainfo<<4)|(lv & 0xf));
       if (sendv) n = CALL_MAXARGS;
       genop_3(s, OP_SEND, cursp(), new_sym(s, MRC_SYM_1(call)), n);
+      if (val) push();
+      break;
+    }
+    case PM_BREAK_NODE:
+    {
+      CAST(break);
+      loop_break(s, (mrc_node *)cast->arguments);
       if (val) push();
       break;
     }
