@@ -2577,6 +2577,17 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       if (val) push();
       break;
     }
+    case PM_REDO_NODE:
+    {
+      if (!s->loop || s->loop->type == LOOP_BEGIN || s->loop->type == LOOP_RESCUE) {
+        raise_error(s, "unexpected redo");
+      }
+      else {
+        genjmp(s, OP_JMPUW, s->loop->pc1);
+      }
+      if (val) push();
+      break;
+    }
     case PM_BLOCK_ARGUMENT_NODE:
     {
       CAST(block_argument);
