@@ -9,6 +9,12 @@ MRuby::Gem::Specification.new('mruby-compiler2') do |spec|
   prism_dir = "#{lib_dir}/prism"
   ruby_dir = "#{lib_dir}/ruby"
 
+  if ENV['MRB_NO_FLOAT'] || ENV['PICORUBY_NO_FLOAT']
+    cc.defines << "MRC_NO_FLOAT"
+  end
+  if ENV['MRB_INT64'] || ENV['PICORUBY_INT64']
+    cc.defines << "MRC_INT64"
+  end
   if ENV['MRB_DEBUG'] || ENV['PICORUBY_DEBUG']
     cc.defines << "MRC_DEBUG"
   end
