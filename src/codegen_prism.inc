@@ -707,19 +707,24 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id
   mrc_codegen_scope *parent = s;
   pm_parameters_node_t *parameters;
   int na = 0;
-  switch nint(tree) {
-    case PM_DEF_NODE:
-      parameters = ((pm_def_node_t *)tree)->parameters;
-      break;
-    case PM_BLOCK_PARAMETERS_NODE:
-      parameters = ((pm_block_parameters_node_t *)tree)->parameters;
-      break;
-    case PM_NUMBERED_PARAMETERS_NODE:
-      parameters = NULL;
-      na = ((pm_numbered_parameters_node_t *)tree)->maximum;
-      break;
-    default:
-      codegen_error(s, "should not happen");
+  if (tree) {
+    switch nint(tree) {
+      case PM_DEF_NODE:
+        parameters = ((pm_def_node_t *)tree)->parameters;
+        break;
+      case PM_BLOCK_PARAMETERS_NODE:
+        parameters = ((pm_block_parameters_node_t *)tree)->parameters;
+        break;
+      case PM_NUMBERED_PARAMETERS_NODE:
+        parameters = NULL;
+        na = ((pm_numbered_parameters_node_t *)tree)->maximum;
+        break;
+      default:
+        codegen_error(s, "should not happen");
+    }
+  }
+  else {
+    parameters = NULL;
   }
 
 
