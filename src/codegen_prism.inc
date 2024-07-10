@@ -1610,44 +1610,46 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     }
     case PM_INTEGER_NODE:
     {
-      CAST(integer);
-      if (cast->value.length == 0) {
-        if (!cast->value.negative) {
-          gen_int(s, cursp(), (mrc_int)cast->value.value);
+      if (val) {
+        CAST(integer);
+        if (cast->value.length == 0) {
+          if (!cast->value.negative) {
+            gen_int(s, cursp(), (mrc_int)cast->value.value);
+          }
+          else {
+            gen_int(s, cursp(), (mrc_int)cast->value.value * -1);
+          }
         }
         else {
-          gen_int(s, cursp(), (mrc_int)cast->value.value * -1);
-        }
-      }
-      else {
-        if (cast->value.length == 2) {
+          if (cast->value.length == 2) {
 #ifdef MRC_INT64
-          mrc_uint value = ((mrc_uint)cast->value.values[0])|((mrc_uint)cast->value.values[1] << 32);
-          if (!cast->value.negative && MRC_INT_MAX < value) goto overflow;
-          if (cast->value.negative) {
-            if (value < MRC_INT_MIN) goto overflow;
-            value *= -1;
-          }
-          gen_int(s, cursp(), value);
+            mrc_uint value = ((mrc_uint)cast->value.values[0])|((mrc_uint)cast->value.values[1] << 32);
+            if (!cast->value.negative && MRC_INT_MAX < value) goto overflow;
+            if (cast->value.negative) {
+              if (value < MRC_INT_MIN) goto overflow;
+              value *= -1;
+            }
+            gen_int(s, cursp(), value);
 #else
-          goto overflow;
+            goto overflow;
 #endif
-        }
-        else {
-        overflow:
-          pm_buffer_t buf = {0};
-          pm_integer_string(&buf, &cast->value);
-          buf.value[buf.length] = '\0';
-          if (cast->value.negative) {
-            memmove(buf.value, buf.value+1, buf.length);
-            buf.length--;
           }
-          int off = new_litbint(s, buf.value, 10, cast->value.negative);
-          genop_2(s, OP_LOADL, cursp(), off);
-          pm_buffer_free(&buf);
+          else {
+          overflow:
+            pm_buffer_t buf = {0};
+            pm_integer_string(&buf, &cast->value);
+            buf.value[buf.length] = '\0';
+            if (cast->value.negative) {
+              memmove(buf.value, buf.value+1, buf.length);
+              buf.length--;
+            }
+            int off = new_litbint(s, buf.value, 10, cast->value.negative);
+            genop_2(s, OP_LOADL, cursp(), off);
+            pm_buffer_free(&buf);
+          }
         }
+        push();
       }
-      push();
       break;
     }
 #ifndef MRC_NO_FLOAT
