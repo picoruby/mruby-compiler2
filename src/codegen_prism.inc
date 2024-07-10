@@ -2550,6 +2550,25 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       gen_assignment(s, (mrc_node *)lvar, (mrc_node *)cast->value, 0, val);
       break;
     }
+    case PM_RANGE_NODE:
+    {
+      CAST(range);
+      codegen(s, cast->left, val);
+      codegen(s, cast->right, val);
+      if (val) {
+        mrc_code op;
+        if (cast->base.flags & PM_RANGE_FLAGS_EXCLUDE_END) {
+          op = OP_RANGE_EXC;
+        }
+        else {
+          op = OP_RANGE_INC;
+        }
+        pop(); pop();
+        genop_1(s, op, cursp());
+        push();
+      }
+      break;
+    }
     default:
     {
       char buf[256];
