@@ -2379,22 +2379,39 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       }
       break;
     }
+    case PM_CONSTANT_PATH_NODE:
+    {
+      CAST(constant_path);
+      int sym = new_sym(s, cast->name);
+      if (cast->parent) {
+        codegen(s, cast->parent, VAL);
+        pop();
+      }
+      else { /* NODE_COLON3 */
+        genop_1(s, OP_OCLASS, cursp());
+      }
+      genop_2(s, OP_GETMCNST, cursp(), sym);
+      if (val) push();
+      break;
+    }
     case PM_CLASS_NODE:
     {
       int idx;
       CAST(class);
-      CAST3(constant_path, cast->constant_path, cpath);
-      if (cpath->parent == (mrc_node *)1) {
-        genop_1(s, OP_LOADNIL, cursp());
-        push();
+      mrc_node *cpath = (mrc_node *)cast->constant_path;
+      switch (nint(cpath)) {
+        case PM_CONSTANT_READ_NODE:
+          genop_1(s, OP_LOADNIL, cursp());
+          push();
+          break;
+        case PM_CONSTANT_PATH_NODE:
+          mrc_node *parent = ((pm_constant_path_node_t *)cpath)->parent;
+          codegen(s, parent, VAL);
+          break;
+        default:
+          codegen_error(s, "Invalid constant path node");
       }
-      else if (cpath->parent == (mrc_node *)0) {
-        genop_1(s, OP_OCLASS, cursp());
-        push();
-      }
-      else {
-        codegen(s, cpath->parent, VAL);
-      }
+
       if (cast->superclass) {
         codegen(s, cast->superclass, VAL);
       }
@@ -2474,21 +2491,6 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
         genop_1(s, OP_LOADNIL, cursp());
         push();
       }
-      break;
-    }
-    case PM_CONSTANT_PATH_NODE:
-    {
-      CAST(constant_path);
-      int sym = new_sym(s, cast->name);
-      if (cast->parent) {
-        codegen(s, cast->parent, VAL);
-        pop();
-      }
-      else { /* NODE_COLON3 */
-        genop_1(s, OP_OCLASS, cursp());
-      }
-      genop_2(s, OP_GETMCNST, cursp(), sym);
-      if (val) push();
       break;
     }
     case PM_SUPER_NODE:
