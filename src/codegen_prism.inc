@@ -1065,6 +1065,99 @@ regex_set_flags(pm_node_flags_t flags, char *p2, char *p3)
 }
 
 static void
+gen_begin(mrc_codegen_scope *s, mrc_node *tree, int val)
+{
+  CAST(begin);
+  if (val && !cast->statements) {
+    genop_1(s, OP_LOADNIL, cursp());
+    push();
+  }
+  if (cast->statements) {
+    size_t last_index = cast->statements->body.size;
+    for (uint32_t i = 0; i < last_index; i++) {
+      codegen(s, (mrc_node *)cast->statements->body.nodes[i], (i+1 < last_index) ? NOVAL : val);
+    }
+  }
+}
+
+static void
+gen_rescue(mrc_codegen_scope *s, mrc_node *tree, uint32_t *pos1, int *exc, uint32_t *extend, int val)
+{
+  CAST3(rescue, tree, rescue);
+  if (nint((mrc_node *)rescue) != PM_RESCUE_NODE) {
+    codegen_error(s, "should not happen");
+  }
+  int i;
+  uint32_t pos2, tmp;
+
+  dispatch(s, *pos1);
+  pos2 = JMPLINK_START;
+
+  /* handle classes */
+  if (rescue->exceptions.size == 0) {
+    genop_2(s, OP_GETCONST, cursp(), new_sym(s, MRC_SYM_1(StandardError)));
+    push();
+    pop();
+    genop_2(s, OP_RESCUE, *exc, cursp());
+    tmp = genjmp2(s, OP_JMPIF, cursp(), pos2, val);
+    pos2 = tmp;
+  }
+  else {
+    for (i = 0; i < rescue->exceptions.size; i++) {
+      if (nint((mrc_node *)rescue->exceptions.nodes[i]) == PM_SPLAT_NODE) {
+        codegen(s, (mrc_node *)rescue->exceptions.nodes[i], VAL);
+        gen_move(s, cursp(), *exc, 0);
+        push_n(2); pop_n(2); /* space for one arg and a block */
+        pop();
+        genop_3(s, OP_SEND, cursp(), new_sym(s, MRC_SYM_1(__case_eqq)), 1);
+      }
+      else {
+        codegen(s, (mrc_node *)rescue->exceptions.nodes[i], VAL);
+        pop();
+        genop_2(s, OP_RESCUE, *exc, cursp());
+      }
+      tmp = genjmp2(s, OP_JMPIF, cursp(), pos2, val);
+      pos2 = tmp;
+    }
+  }
+  *pos1 = genjmp_0(s, OP_JMP);
+  dispatch_linked(s, pos2);
+
+  pop();
+  /* exc_var: `=> e` */
+  if (rescue->reference) {
+    gen_assignment(s, rescue->reference, NULL, *exc, NOVAL);
+  }
+  /* handle body */
+  codegen(s, (mrc_node *)rescue->statements, val);
+  if (val) pop();
+  tmp = genjmp(s, OP_JMP, *extend);
+  *extend = tmp;
+  push();
+  /* rest of rescue(s) */
+  if (rescue->consequent) {
+    gen_rescue(s, (mrc_node *)rescue->consequent, pos1, exc, extend, val);
+  }
+}
+
+static void
+gen_ensure(mrc_codegen_scope *s, mrc_node *tree, uint32_t catch_entry, uint32_t begin)
+{
+  CAST3(ensure, tree, ensure);
+  int ensure_end, ensure_target;
+  int idx;
+  ensure_end = ensure_target = s->pc;
+  push();
+  idx = cursp();
+  genop_1(s, OP_EXCEPT, idx);
+  push();
+  codegen(s, (mrc_node *)ensure->statements, NOVAL);
+  pop();
+  genop_1(s, OP_RAISEIF, idx);
+  pop();
+  catch_handler_set(s, catch_entry, MRC_CATCH_ENSURE, begin, ensure_end, ensure_target);
+}
+static void
 codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
 {
   int rlev = s->rlev;
@@ -2588,6 +2681,65 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
         genjmp(s, OP_JMPUW, s->loop->pc1);
       }
       if (val) push();
+      break;
+    }
+    case PM_BEGIN_NODE:
+    {
+      CAST(begin);
+      int noexc;
+      uint32_t exend, pos1;
+      struct loopinfo *lp;
+      int catch_entry, begin, end;
+
+      /* for ensure */
+      int ensure_catch_entry, ensure_begin = 0;
+      if (cast->ensure_clause && cast->ensure_clause->statements) {
+        ensure_catch_entry = catch_handler_new(s);
+        ensure_begin = s->pc;
+      }
+
+      lp = loop_push(s, LOOP_BEGIN);
+      lp->pc0 = new_label(s);
+      catch_entry = catch_handler_new(s);
+      begin = s->pc;
+      /* begin */
+      gen_begin(s, (mrc_node *)cast, val);
+      pop();
+      lp->type = LOOP_RESCUE;
+      end = s->pc;
+      noexc = genjmp_0(s, OP_JMP);
+      catch_handler_set(s, catch_entry, MRC_CATCH_RESCUE, begin, end, s->pc);
+      exend = JMPLINK_START;
+      pos1 = JMPLINK_START;
+      if (cast->rescue_clause) {
+        int exc = cursp();
+        genop_1(s, OP_EXCEPT, exc);
+        push();
+        /* rescue */
+        gen_rescue(s, (mrc_node *)cast->rescue_clause, &pos1, &exc, &exend, val);
+        if (pos1 != JMPLINK_START) {
+          dispatch(s, pos1);
+          genop_1(s, OP_RAISEIF, exc);
+        }
+      }
+      pop();
+      dispatch(s, noexc);
+      if (cast->else_clause) {
+        codegen(s, (mrc_node *)cast->else_clause, val);
+      }
+      else if (val) {
+        push();
+      }
+      dispatch_linked(s, exend);
+      loop_pop(s, NOVAL);
+
+      /* ensure */
+      if (cast->ensure_clause && cast->ensure_clause->statements) {
+        gen_ensure(s, (mrc_node *)cast->ensure_clause, ensure_catch_entry, ensure_begin);
+      }
+      else {
+        /* empty ensure ignored */
+      }
       break;
     }
     case PM_BLOCK_ARGUMENT_NODE:
