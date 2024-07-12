@@ -79,6 +79,29 @@
  */
 #define MRC_ARGS_NONE()     ((mrc_aspec)0)
 
+
+#define MRC_INT_OVERFLOW_MASK ((mrc_uint)1 << (MRC_INT_BIT - 1))
+
+static inline mrc_bool
+mrc_int_add_overflow(mrc_int a, mrc_int b, mrc_int *c)
+{
+  mrc_uint x = (mrc_uint)a;
+  mrc_uint y = (mrc_uint)b;
+  mrc_uint z = (mrc_uint)(x + y);
+  *c = (mrc_int)z;
+  return !!(((x ^ z) & (y ^ z)) & MRC_INT_OVERFLOW_MASK);
+}
+
+static inline mrc_bool
+mrc_int_sub_overflow(mrc_int a, mrc_int b, mrc_int *c)
+{
+  mrc_uint x = (mrc_uint)a;
+  mrc_uint y = (mrc_uint)b;
+  mrc_uint z = (mrc_uint)(x - y);
+  *c = (mrc_int)z;
+  return !!(((x ^ z) & (~y ^ z)) & MRC_INT_OVERFLOW_MASK);
+}
+
 static inline mrc_bool
 mrc_int_mul_overflow(mrc_int a, mrc_int b, mrc_int *c)
 {
@@ -752,20 +775,19 @@ get_int_operand(mrc_codegen_scope *s, struct mrc_insn_data *data, mrc_int *n)
 
   case OP_LOADL:
     {
-      // TODO
-      //mrb_pool_value *pv = &s->pool[data->b];
+      mrc_pool_value *pv = &s->pool[data->b];
 
-      //if (pv->tt == IREP_TT_INT32) {
-      //  *n = (mrc_int)pv->u.i32;
-      //}
+      if (pv->tt == IREP_TT_INT32) {
+        *n = (mrc_int)pv->u.i32;
+      }
 #ifdef MRC_INT64
-      //else if (pv->tt == IREP_TT_INT64) {
-      //  *n = (mrc_int)pv->u.i64;
-      //}
+      else if (pv->tt == IREP_TT_INT64) {
+        *n = (mrc_int)pv->u.i64;
+      }
 #endif
-      //else {
+      else {
         return FALSE;
-      //}
+      }
     }
     return TRUE;
 
@@ -871,18 +893,6 @@ genjmp2(mrc_codegen_scope *s, mrc_code i, uint16_t a, uint32_t pc, int val)
 
 #define genjmp2_0(s,i,a,val) genjmp2(s,i,a,JMPLINK_START,val)
 
-static void
-gen_move(mrc_codegen_scope *s, uint16_t dst, uint16_t src, int nopeep)
-{
-  if (nopeep || no_peephole(s)) goto normal;
-  else if (dst == src) return;
-  else {
-    // todo: peephole
-  }
- normal:
-  genop_2(s, OP_MOVE, dst, src);
-}
-
 static int new_lit_int(mrc_codegen_scope *s, mrc_int num);
 
 static void
@@ -903,6 +913,116 @@ gen_int(mrc_codegen_scope *s, uint16_t dst, mrc_int i)
   int_lit:
     genop_2(s, OP_LOADL, dst, new_lit_int(s, i));
   }
+}
+
+static void
+gen_move(mrc_codegen_scope *s, uint16_t dst, uint16_t src, int nopeep)
+{
+  if (nopeep || no_peephole(s)) goto normal;
+  else if (dst == src) return;
+  else {
+    struct mrc_insn_data data = mrc_last_insn(s);
+
+    switch (data.insn) {
+    case OP_MOVE:
+      if (dst == src) return;   /* remove useless MOVE */
+      if (data.a == src) {
+        if (data.b == dst)      /* skip swapping MOVE */
+          return;
+        if (data.a < s->nlocals) goto normal;
+        rewind_pc(s);
+        s->lastpc = addr_pc(s, mrc_prev_pc(s, data.addr));
+        gen_move(s, dst, data.b, FALSE);
+        return;
+      }
+      if (dst == data.a) {      /* skip overwritten move */
+        rewind_pc(s);
+        s->lastpc = addr_pc(s, mrc_prev_pc(s, data.addr));
+        gen_move(s, dst, src, FALSE);
+        return;
+      }
+      goto normal;
+    case OP_LOADNIL: case OP_LOADSELF: case OP_LOADT: case OP_LOADF:
+    case OP_LOADI__1:
+    case OP_LOADI_0: case OP_LOADI_1: case OP_LOADI_2: case OP_LOADI_3:
+    case OP_LOADI_4: case OP_LOADI_5: case OP_LOADI_6: case OP_LOADI_7:
+      if (data.a != src || data.a < s->nlocals) goto normal;
+      rewind_pc(s);
+      genop_1(s, data.insn, dst);
+      return;
+    case OP_HASH:
+      if (data.b != 0) goto normal;
+      /* fall through */
+    case OP_LOADI: case OP_LOADINEG:
+    case OP_LOADL: case OP_LOADSYM:
+    case OP_GETGV: case OP_GETSV: case OP_GETIV: case OP_GETCV:
+    case OP_GETCONST: case OP_STRING:
+    case OP_LAMBDA: case OP_BLOCK: case OP_METHOD: case OP_BLKPUSH:
+      if (data.a != src || data.a < s->nlocals) goto normal;
+      rewind_pc(s);
+      genop_2(s, data.insn, dst, data.b);
+      return;
+    case OP_LOADI16:
+      if (data.a != src || data.a < s->nlocals) goto normal;
+      rewind_pc(s);
+      genop_2S(s, data.insn, dst, data.b);
+      return;
+    case OP_LOADI32:
+      if (data.a != src || data.a < s->nlocals) goto normal;
+      else {
+        uint32_t i = (uint32_t)data.b<<16|data.cc;
+        rewind_pc(s);
+        genop_2SS(s, data.insn, dst, i);
+      }
+      return;
+    case OP_ARRAY:
+      if (data.a != src || data.a < s->nlocals || data.a < dst) goto normal;
+      rewind_pc(s);
+      if (data.b == 0 || dst == data.a)
+        genop_2(s, OP_ARRAY, dst, 0);
+      else
+        genop_3(s, OP_ARRAY2, dst, data.a, data.b);
+      return;
+    case OP_ARRAY2:
+      if (data.a != src || data.a < s->nlocals || data.a < dst) goto normal;
+      rewind_pc(s);
+      genop_3(s, OP_ARRAY2, dst, data.b, data.cc);
+      return;
+    case OP_AREF:
+    case OP_GETUPVAR:
+      if (data.a != src || data.a < s->nlocals) goto normal;
+      rewind_pc(s);
+      genop_3(s, data.insn, dst, data.b, data.cc);
+      return;
+    case OP_ADDI: case OP_SUBI:
+      if (addr_pc(s, data.addr) == s->lastlabel || data.a != src || data.a < s->nlocals) goto normal;
+      else {
+        struct mrc_insn_data data0 = mrc_decode_insn(mrc_prev_pc(s, data.addr));
+        if (data0.insn != OP_MOVE || data0.a != data.a || data0.b != dst) goto normal;
+        s->pc = addr_pc(s, data0.addr);
+        if (addr_pc(s, data0.addr) != s->lastlabel) {
+          /* constant folding */
+          data0 = mrc_decode_insn(mrc_prev_pc(s, data0.addr));
+          mrc_int n;
+          if (data0.a == dst && get_int_operand(s, &data0, &n)) {
+            if ((data.insn == OP_ADDI && !mrc_int_add_overflow(n, data.b, &n)) ||
+                (data.insn == OP_SUBI && !mrc_int_sub_overflow(n, data.b, &n))) {
+              s->pc = addr_pc(s, data0.addr);
+              gen_int(s, dst, n);
+              return;
+            }
+          }
+        }
+      }
+      genop_2(s, data.insn, dst, data.b);
+      return;
+    default:
+      break;
+    }
+  }
+ normal:
+  genop_2(s, OP_MOVE, dst, src);
+  return;
 }
 
 static int
@@ -1161,11 +1281,10 @@ gen_addsub(mrc_codegen_scope *s, uint8_t op, uint16_t dst)
       return;
     }
     if (op == OP_ADD) {
-//TODO
-//      if (mrc_int_add_overflow(n0, n, &n)) goto normal;
+      if (mrc_int_add_overflow(n0, n, &n)) goto normal;
     }
     else { /* OP_SUB */
-//      if (mrc_int_sub_overflow(n0, n, &n)) goto normal;
+      if (mrc_int_sub_overflow(n0, n, &n)) goto normal;
     }
     s->pc = addr_pc(s, data0.addr);
     gen_int(s, dst, n);
@@ -1208,25 +1327,25 @@ static mrc_bool
 gen_uniop(mrc_codegen_scope *s, mrc_sym sym, uint16_t dst)
 {
   if (no_peephole(s)) return FALSE;
-//  struct mrc_insn_data data = mrc_last_insn(s);
-//  mrc_int n;
-//
-//  if (!get_int_operand(s, &data, &n)) return FALSE;
-//  if (sym == MRC_OPSYM_2(plus)) {
-//    /* unary plus does nothing */
-//  }
-//  else if (sym == MRC_OPSYM_2(minus)) {
-//    if (n == MRC_INT_MIN) return FALSE;
-//    n = -n;
-//  }
-//  else if (sym == MRC_OPSYM_2(neg)) {
-//    n = ~n;
-//  }
-//  else {
-//    return FALSE;
-//  }
-//  s->pc = addr_pc(s, data.addr);
-//  gen_int(s, dst, n);
+  struct mrc_insn_data data = mrc_last_insn(s);
+  mrc_int n;
+
+  if (!get_int_operand(s, &data, &n)) return FALSE;
+  if (sym == MRC_OPSYM_2(add)) {
+    /* unary plus does nothing */
+  }
+  else if (sym == MRC_OPSYM_2(sub)) {
+    if (n == MRC_INT_MIN) return FALSE;
+    n = -n;
+  }
+  else if (sym == MRC_OPSYM_2(neg)) {
+    n = ~n;
+  }
+  else {
+    return FALSE;
+  }
+  s->pc = addr_pc(s, data.addr);
+  gen_int(s, dst, n);
   return TRUE;
 }
 

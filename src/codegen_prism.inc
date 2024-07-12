@@ -476,51 +476,47 @@ gen_call(mrc_codegen_scope *s, mrc_node *tree, int val, int safe)
   push();pop();
   s->sp = sp_save;
 
-  if (!noop) {
-    if (sym == MRC_OPSYM_2(add) && n == 1)  {
-      gen_addsub(s, OP_ADD, cursp());
-    }
-    else if (sym == MRC_OPSYM_2(sub) && n == 1)  {
-      gen_addsub(s, OP_SUB, cursp());
-    }
-    else if (sym == MRC_OPSYM_2(mul) && n == 1)  {
-      gen_muldiv(s, OP_MUL, cursp());
-    }
-    else if (sym == MRC_OPSYM_2(div) && n == 1)  {
-      gen_muldiv(s, OP_DIV, cursp());
-    }
-    else if (sym == MRC_OPSYM_2(lt) && n == 1)  {
-      genop_1(s, OP_LT, cursp());
-    }
-    else if (sym == MRC_OPSYM_2(le) && n == 1)  {
-      genop_1(s, OP_LE, cursp());
-    }
-    else if (sym == MRC_OPSYM_2(gt) && n == 1)  {
-      genop_1(s, OP_GT, cursp());
-    }
-    else if (sym == MRC_OPSYM_2(ge) && n == 1)  {
-      genop_1(s, OP_GE, cursp());
-    }
-    else if (sym == MRC_OPSYM_2(eq) && n == 1)  {
-      genop_1(s, OP_EQ, cursp());
-    }
-    else if (sym == MRC_OPSYM_2(aset) && n == 2)  {
-      genop_1(s, OP_SETIDX, cursp());
-    }
-    else if (n == 0 && gen_uniop(s, sym, cursp())) {
-      /* constant folding succeeded */
-    }
-    else if (n == 1 && gen_binop(s, sym, cursp())) {
-      /* constant folding succeeded */
-    }
+  if (!noop && sym == MRC_OPSYM_2(add) && n == 1)  {
+    gen_addsub(s, OP_ADD, cursp());
   }
+  else if (!noop && sym == MRC_OPSYM_2(sub) && n == 1)  {
+    gen_addsub(s, OP_SUB, cursp());
+  }
+  else if (!noop && sym == MRC_OPSYM_2(mul) && n == 1)  {
+    gen_muldiv(s, OP_MUL, cursp());
+  }
+  else if (!noop && sym == MRC_OPSYM_2(div) && n == 1)  {
+    gen_muldiv(s, OP_DIV, cursp());
+  }
+  else if (!noop && sym == MRC_OPSYM_2(lt) && n == 1)  {
+    genop_1(s, OP_LT, cursp());
+  }
+  else if (!noop && sym == MRC_OPSYM_2(le) && n == 1)  {
+    genop_1(s, OP_LE, cursp());
+  }
+  else if (!noop && sym == MRC_OPSYM_2(gt) && n == 1)  {
+    genop_1(s, OP_GT, cursp());
+  }
+  else if (!noop && sym == MRC_OPSYM_2(ge) && n == 1)  {
+    genop_1(s, OP_GE, cursp());
+  }
+  else if (!noop && sym == MRC_OPSYM_2(eq) && n == 1)  {
+    genop_1(s, OP_EQ, cursp());
+  }
+  else if (!noop && sym == MRC_OPSYM_2(aset) && n == 2)  {
+    genop_1(s, OP_SETIDX, cursp());
+  }
+  else if (!noop && n == 0 && gen_uniop(s, sym, cursp())) {
+    /* constant folding succeeded */
+  }
+  else if (!noop && n == 1 && gen_binop(s, sym, cursp())) {
+    /* constant folding succeeded */
+  }
+  else if (noself) {
+    genop_3(s, blk ? OP_SSENDB : OP_SSEND, cursp(), new_sym(s, sym), n|(nk<<4));
+    }
   else {
-    if (noself) {
-      genop_3(s, blk ? OP_SSENDB : OP_SSEND, cursp(), new_sym(s, sym), n|(nk<<4));
-    }
-    else {
-      genop_3(s, blk ? OP_SENDB : OP_SEND, cursp(), new_sym(s, sym), n|(nk<<4));
-    }
+    genop_3(s, blk ? OP_SENDB : OP_SEND, cursp(), new_sym(s, sym), n|(nk<<4));
   }
   if (safe) {
     dispatch(s, skip);
