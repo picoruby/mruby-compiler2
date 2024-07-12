@@ -1038,7 +1038,7 @@ scope_finish(mrc_codegen_scope *s)
   }
   irep->flags = 0;
   if (s->iseq) {
-    size_t catchsize = sizeof(struct mrc_irep_catch_handler) * irep->rlen;
+    size_t catchsize = sizeof(struct mrc_irep_catch_handler) * irep->clen;
     irep->iseq = (const mrc_code *)codegen_realloc(s, s->iseq, sizeof(mrc_code)*s->pc + catchsize);
     irep->ilen = s->pc;
     if (0 < irep->clen) {
