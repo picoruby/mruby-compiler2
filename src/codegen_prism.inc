@@ -1700,6 +1700,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
         default: codegen_error(s, "Not implemented (or_write)");
       }
       dispatch(s, pos);
+      break;
     }
     case PM_INTEGER_NODE:
     {
