@@ -2718,7 +2718,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       catch_entry = catch_handler_new(s);
       begin = s->pc;
       /* begin */
-      gen_begin(s, (mrc_node *)cast, val);
+      gen_begin(s, (mrc_node *)cast, VAL);
       pop();
       lp->type = LOOP_RESCUE;
       end = s->pc;
