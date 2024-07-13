@@ -47,6 +47,7 @@ void mrc_ccontext_free(mrc_ccontext *c)
   mrc_free(c->syms);
 #if defined(MRC_PARSER_PRISM)
   pm_parser_free(c->p);
+  mrc_diagnostic_list_free(c);
 #elif defined(MRC_PARSER_LRAMA)
   kn_parser_free(c->p);
 #endif
