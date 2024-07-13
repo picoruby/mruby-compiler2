@@ -19,7 +19,6 @@ mrc_irep_remove_lv(mrc_ccontext *c, mrc_irep *irep)
 void
 mrc_irep_free(mrc_ccontext *c, mrc_irep *irep)
 {
-//  printf("mrc_irep_free %p\n", irep);
   int i;
 
   if (irep->flags & MRC_IREP_NO_FREE) return;
