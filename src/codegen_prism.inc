@@ -697,6 +697,29 @@ for_body(mrc_codegen_scope *s, mrc_node *tree)
   genop_3(s, OP_SENDB, cursp(), idx, 0);
 }
 
+static void
+mrc_constant_id_list_init_capacity(mrc_codegen_scope *s, pm_constant_id_list_t *list, size_t capacity)
+{
+  list->ids = (pm_constant_id_t *)codegen_palloc(s, capacity * sizeof(pm_constant_id_t));
+  if (list->ids == NULL) codegen_error(s, "memory allocation error");
+  list->size = 0;
+  list->capacity = capacity;
+}
+
+static mrc_bool
+mrc_constant_id_list_append(mrc_codegen_scope *s, pm_constant_id_list_t *list, pm_constant_id_t id)
+{
+  if (list->size >= list->capacity) {
+    size_t oldlen = sizeof(pm_constant_id_t) * list->capacity;
+    list->capacity = list->capacity == 0 ? 8 : list->capacity * 2;
+    size_t newlen = sizeof(pm_constant_id_t) * list->capacity;
+    list->ids = (pm_constant_id_t *)codegen_realloc(s, list->ids, oldlen, newlen);
+    if (list->ids == NULL) return FALSE;
+  }
+  list->ids[list->size++] = id;
+  return TRUE;
+}
+
 static int
 lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id_list_t *locals, int blk)
 {
@@ -725,17 +748,17 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id
 
 
   int ma, mma, oa, ra, pa, ppa, ka, kd, ba, i;
-  pm_constant_id_list_t lv;
+  pm_constant_id_list_t *lv = (pm_constant_id_list_t *)codegen_palloc(s, sizeof(pm_constant_id_list_t));
   pm_constant_id_t null_mark = pm_constant_pool_insert_constant(&s->c->p->constant_pool, NULL, 0);
 
   // Create lv regs from Prism's locals
   if (parameters == NULL) {
-    pm_constant_id_list_init_capacity(&lv, 2);
+    mrc_constant_id_list_init_capacity(s, lv, 2);
     for (i = 0; i < locals->size; i++) {
       /* numbered parameters */
-      pm_constant_id_list_append(&lv, locals->ids[i]);
+      mrc_constant_id_list_append(s, lv, locals->ids[i]);
     }
-    pm_constant_id_list_append(&lv, null_mark);
+    mrc_constant_id_list_append(s, lv, null_mark);
     ma = mma = oa = ra = pa = ppa = ka = kd = ba = 0;
   }
   else {
@@ -763,34 +786,34 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id
     kd = parameters->keyword_rest ? 1 : 0;
     ba = parameters->block ? 1 : 0;
     nregs = ma + mma + oa + ra + pa + ppa + ka + kd + ba;
-    pm_constant_id_list_init_capacity(&lv, nregs);
+    mrc_constant_id_list_init_capacity(s, lv, nregs);
     // mandatory
     for (i = 0; i < ma; i++) {
       if (nint(parameters->requireds.nodes[i]) == PM_MULTI_TARGET_NODE) {
-        pm_constant_id_list_append(&lv, null_mark);
+        mrc_constant_id_list_append(s, lv, null_mark);
       } else {
-        pm_constant_id_list_append(&lv, ((pm_required_parameter_node_t *)parameters->requireds.nodes[i])->name);
+        mrc_constant_id_list_append(s, lv, ((pm_required_parameter_node_t *)parameters->requireds.nodes[i])->name);
       }
     }
     // optional
     for (i = 0; i < oa; i++) {
-      pm_constant_id_list_append(&lv, ((pm_optional_parameter_node_t *)parameters->optionals.nodes[i])->name);
+      mrc_constant_id_list_append(s, lv, ((pm_optional_parameter_node_t *)parameters->optionals.nodes[i])->name);
     }
     // rest
     if (ra) {
       if (((pm_rest_parameter_node_t *)parameters->rest)->name) {
-        pm_constant_id_list_append(&lv, ((pm_rest_parameter_node_t *)parameters->rest)->name);
+        mrc_constant_id_list_append(s, lv, ((pm_rest_parameter_node_t *)parameters->rest)->name);
       } else {
         pm_constant_id_t astr = MRC_OPSYM_2(mul);
-        pm_constant_id_list_append(&lv, astr);
+        mrc_constant_id_list_append(s, lv, astr);
       }
     }
     // post
     for (i = 0; i < pa; i++) {
       if (nint(parameters->posts.nodes[i]) == PM_MULTI_TARGET_NODE) {
-        pm_constant_id_list_append(&lv, null_mark);
+        mrc_constant_id_list_append(s, lv, null_mark);
       } else {
-        pm_constant_id_list_append(&lv, ((pm_required_parameter_node_t *)parameters->posts.nodes[i])->name);
+        mrc_constant_id_list_append(s, lv, ((pm_required_parameter_node_t *)parameters->posts.nodes[i])->name);
       }
     }
     // keywords and block
@@ -802,7 +825,7 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id
           write_dastr = true;
         }
         else {
-          pm_constant_id_list_append(&lv, ((pm_keyword_rest_parameter_node_t *)parameters->keyword_rest)->name);
+          mrc_constant_id_list_append(s, lv, ((pm_keyword_rest_parameter_node_t *)parameters->keyword_rest)->name);
         }
       }
       else if (!ba) {
@@ -810,28 +833,28 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id
       }
       if (write_dastr) {
         pm_constant_id_t dastr = MRC_OPSYM_2(pow);
-        pm_constant_id_list_append(&lv, dastr);
+        mrc_constant_id_list_append(s, lv, dastr);
       }
       // block
       if (ba) {
         if (((pm_block_parameter_node_t *)parameters->block)->name) {
-          pm_constant_id_list_append(&lv, ((pm_block_parameter_node_t *)parameters->block)->name);
+          mrc_constant_id_list_append(s, lv, ((pm_block_parameter_node_t *)parameters->block)->name);
         }
         else {
           pm_constant_id_t and = MRC_OPSYM_2(and);
-          pm_constant_id_list_append(&lv, and);
+          mrc_constant_id_list_append(s, lv, and);
         }
       }
       else {
-        pm_constant_id_list_append(&lv, null_mark);
+        mrc_constant_id_list_append(s, lv, null_mark);
       }
       // keywords
       for (i = 0; i < ka; i++) {
         if (nint(parameters->keywords.nodes[i]) == PM_REQUIRED_KEYWORD_PARAMETER_NODE) {
-          pm_constant_id_list_append(&lv, ((pm_required_keyword_parameter_node_t *)parameters->keywords.nodes[i])->name);
+          mrc_constant_id_list_append(s, lv, ((pm_required_keyword_parameter_node_t *)parameters->keywords.nodes[i])->name);
         }
         else {
-          pm_constant_id_list_append(&lv, ((pm_optional_keyword_parameter_node_t *)parameters->keywords.nodes[i])->name);
+          mrc_constant_id_list_append(s, lv, ((pm_optional_keyword_parameter_node_t *)parameters->keywords.nodes[i])->name);
         }
       }
     }
@@ -839,7 +862,7 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id
       if (nint(parameters->requireds.nodes[i]) == PM_MULTI_TARGET_NODE) {
         CAST3(multi_target, parameters->requireds.nodes[i], m);
         for (int j = 0; j < m->lefts.size; j++) {
-          pm_constant_id_list_append(&lv, ((pm_required_parameter_node_t *)m->lefts.nodes[j])->name);
+          mrc_constant_id_list_append(s, lv, ((pm_required_parameter_node_t *)m->lefts.nodes[j])->name);
         }
       }
     }
@@ -847,15 +870,15 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id
       if (nint(parameters->posts.nodes[i]) == PM_MULTI_TARGET_NODE) {
         CAST3(multi_target, parameters->posts.nodes[i], m);
         for (int j = 0; j < m->lefts.size; j++) {
-          pm_constant_id_list_append(&lv, ((pm_required_parameter_node_t *)m->lefts.nodes[j])->name);
+          mrc_constant_id_list_append(s, lv, ((pm_required_parameter_node_t *)m->lefts.nodes[j])->name);
         }
       }
     }
   }
   if (locals) {
     for (i = 0; i < locals->size; i++) {
-      if (!pm_constant_id_list_includes(&lv, locals->ids[i])) {
-        pm_constant_id_list_append(&lv, locals->ids[i]);
+      if (!pm_constant_id_list_includes(lv, locals->ids[i])) {
+        mrc_constant_id_list_append(s, lv, locals->ids[i]);
       }
     }
     // free Prism's locals
@@ -864,7 +887,7 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id
     locals->size = locals->capacity = 0;
   }
 
-  s = scope_new(s->c, s, &lv);
+  s = scope_new(s->c, s, lv);
 
   s->mscope = !blk;
 
