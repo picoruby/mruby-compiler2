@@ -942,10 +942,8 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id
 
         if (nint((mrc_node *)kwd) == PM_OPTIONAL_KEYWORD_PARAMETER_NODE) {
           int idx;
-          //genop_2(s, OP_KEY_P, lv_idx(s, kwd_sym), new_sym(s, kwd_sym));
-          //jmpif_key_p = genjmp2_0(s, OP_JMPIF, lv_idx(s, kwd_sym), NOVAL);
-          genop_2(s, OP_KEY_P, kwd_sym, new_sym(s, kwd_sym));
-          jmpif_key_p = genjmp2_0(s, OP_JMPIF, kwd_sym, NOVAL);
+          genop_2(s, OP_KEY_P, lv_idx(s, kwd_sym), new_sym(s, kwd_sym));
+          jmpif_key_p = genjmp2_0(s, OP_JMPIF, lv_idx(s, kwd_sym), NOVAL);
           codegen(s, ((pm_optional_keyword_parameter_node_t *)kwd)->value, VAL);
           pop();
           idx = lv_idx(s, kwd_sym);
