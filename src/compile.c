@@ -41,7 +41,6 @@ mrc_load_exec(mrc_ccontext *c, mrc_node *ast)
 #if defined(MRC_DUMP_PRETTY)
       pm_prettyprint(&buffer, c->p, ast);
 #endif
-      printf("\n(ast buffer length: %ld)\n%s\n", buffer.length, buffer.value);
       pm_buffer_free(&buffer);
     }
     mrc_codedump_all(c, irep);

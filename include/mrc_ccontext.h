@@ -4,6 +4,7 @@
 #include "mrc_common.h"
 #include "mrc_diagnostic.h"
 #include "mrc_throw.h"
+#include "mrc_pool.h"
 #include <stddef.h>
 
 MRC_BEGIN_DECL
@@ -31,6 +32,7 @@ MRC_BEGIN_DECL
 
 struct mrc_diagnostic_list;
 typedef struct mrc_diagnostic_list mrc_diagnostic_list;
+typedef struct mrc_pool mrc_pool;
 
 typedef struct mrc_ccontext {
   mrb_state *mrb;
@@ -51,6 +53,10 @@ typedef struct mrc_ccontext {
 
   //size_t parser_nerr;
   mrc_diagnostic_list *diagnostic_list;
+
+#ifndef MRC_NO_STDIO
+  mrc_pool *pool; // for codedump
+#endif
 } mrc_ccontext;                 /* compiler context */
 
 mrc_ccontext *mrc_ccontext_new(mrb_state *mrb);

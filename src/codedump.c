@@ -20,9 +20,7 @@ mrc_sym_dump(mrc_ccontext *c, mrc_sym sym)
     return name;
   }
   else {
-    // FIXME: memory leak
-    //char *buf = (char*)mrc_pool_alloc(c->pool, lenp+1);
-    char *buf = (char*)mrc_malloc(lenp+1);
+    char *buf = (char*)mrc_pool_alloc(c->pool, lenp+1);
     memcpy(buf, name, lenp);
     buf[lenp] = '\0';
     return buf;
@@ -675,8 +673,10 @@ codedump_recur(mrc_ccontext *c, const mrc_irep *irep, FILE *out)
 void
 mrc_codedump_all_file(mrc_ccontext *c, mrc_irep *irep, FILE *out)
 {
+  c->pool = mrc_pool_open(c);
   codedump_recur(c, irep, out);
   fflush(out);
+  mrc_pool_close(c->pool);
 }
 
 #endif // MRC_NO_STDIO

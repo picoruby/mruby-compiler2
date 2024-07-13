@@ -6,6 +6,7 @@
 MRC_BEGIN_DECL
 
 typedef struct mrc_pool mrc_pool;
+typedef struct mrc_ccontext mrc_ccontext;
 
 mrc_pool *mrc_pool_open(mrc_ccontext *c);
 void mrc_pool_close(mrc_pool *pool);
