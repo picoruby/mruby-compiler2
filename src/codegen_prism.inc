@@ -1191,7 +1191,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
   if (s->rlev > MRC_CODEGEN_LEVEL_MAX) {
     codegen_error(s, "too complex expression");
   }
-  // FIXME
+  // TODO
   //if (s->irep && s->filename_index != tree->filename_index) {
   //  const char *filename = s->c->filename;
 

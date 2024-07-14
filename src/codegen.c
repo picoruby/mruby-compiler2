@@ -1137,7 +1137,6 @@ gen_setupvar(mrc_codegen_scope *s, uint16_t dst, mrc_sym id, int depth)
 static void
 gen_return(mrc_codegen_scope *s, uint8_t op, uint16_t src)
 {
-  // todo: peephole
   if (no_peephole(s)) {
     genop_1(s, op, src);
   }
@@ -1187,7 +1186,7 @@ scope_finish(mrc_codegen_scope *s)
   irep->syms = (const mrc_sym *)simple_realloc(s->syms, sizeof(mrc_sym)*irep->slen);
   irep->reps = (const mrc_irep **)simple_realloc(s->reps, sizeof(mrc_irep *)*irep->rlen);
   if (s->filename_sym) {
-    // todo
+    // TODO
     //mrc_sym fname = mrc_parser_get_filename(s->parser, s->filename_index);
     //const char *filename = mrc_sym_name_len(fname, NULL);
 
@@ -1592,19 +1591,20 @@ catch_handler_set(mrc_codegen_scope *s, int ent, enum mrc_catch_type type, uint3
 static mrc_irep *
 generate_code(mrc_ccontext *c, mrc_node *node, int val)
 {
-  // FIXME: memory leak of scope
   mrc_codegen_scope *scope = scope_new(c, NULL, NULL);
-  struct mrc_jmpbuf *prev_jmp = c->jmp; // FIXME: c->jmp is not initialized
+  struct mrc_jmpbuf *prev_jmp = c->jmp;
   struct mrc_jmpbuf jmpbuf;
 
   c->jmp = &jmpbuf;
 
   scope->c = c;
+  // TODO
   //scope->filename_sym = c->filename_sym;
   //scppe->filename_index = c->filename_index;
 
   MRC_TRY(c->jmp) {
     codegen(scope, node, val);
+    // TODO
     //proc->c = NULL;
     //if (mrb->c->cibase && mrb->c->cibase->proc == proc->upper) {
     //  proc->upper = NULL;
@@ -1616,6 +1616,7 @@ generate_code(mrc_ccontext *c, mrc_node *node, int val)
     return irep;
   }
   MRC_CATCH(c->jmp) {
+    // TODO
     //mrc_irep_free(c, scope->irep);
     mrc_pool_close(scope->mpool);
     c->jmp = prev_jmp;
