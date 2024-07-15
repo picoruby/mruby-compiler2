@@ -2829,6 +2829,18 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       }
       break;
     }
+    case PM_SOURCE_FILE_NODE:
+    {
+      if (val) {
+        CAST(source_file);
+        char *p = (char *)cast->filepath.source;
+        mrc_int len = cast->filepath.length;
+        int off = new_lit_str(s, p, len);
+        genop_2(s, OP_STRING, cursp(), off);
+        push();
+      }
+      break;
+    }
     default:
     {
       char buf[256];
