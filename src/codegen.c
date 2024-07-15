@@ -1600,7 +1600,7 @@ generate_code(mrc_ccontext *c, mrc_node *node, int val)
   scope->c = c;
   // TODO
   //scope->filename_sym = c->filename_sym;
-  //scppe->filename_index = c->filename_index;
+  //scppe->filename_index = c->current_filename_index;
 
   MRC_TRY(c->jmp) {
     codegen(scope, node, val);

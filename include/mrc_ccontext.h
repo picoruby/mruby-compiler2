@@ -34,6 +34,11 @@ struct mrc_diagnostic_list;
 typedef struct mrc_diagnostic_list mrc_diagnostic_list;
 typedef struct mrc_pool mrc_pool;
 
+typedef struct mrc_filename_table {
+  pm_string_t filename;
+  uint32_t start;
+} mrc_filename_table;
+
 typedef struct mrc_ccontext {
   mrb_state *mrb;
   struct mrc_jmpbuf *jmp;
@@ -56,6 +61,10 @@ typedef struct mrc_ccontext {
 
 #ifndef MRC_NO_STDIO
   mrc_pool *pool; // for codedump
+
+  mrc_filename_table *filename_table;
+  uint16_t filename_table_length;
+  uint16_t current_filename_index;
 #endif
 } mrc_ccontext;                 /* compiler context */
 

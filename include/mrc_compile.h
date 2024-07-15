@@ -6,7 +6,7 @@
 
 MRC_BEGIN_DECL
 
-mrc_irep *mrc_load_file_cxt(mrc_ccontext *c, const char *filename);
+mrc_irep *mrc_load_file_cxt(mrc_ccontext *c, const char **filenames, uint8_t *source);
 mrc_irep *mrc_load_string_cxt(mrc_ccontext *c, const uint8_t *source, size_t length);
 
 MRC_END_DECL

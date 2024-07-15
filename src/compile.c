@@ -52,13 +52,36 @@ mrc_load_exec(mrc_ccontext *c, mrc_node *ast)
   return irep;
 }
 
+static void
+partial_hook(void *data, pm_parser_t *p, pm_token_t *token)
+{
+  mrc_ccontext *c = (mrc_ccontext *)data;
+  if (c->current_filename_index + 1 == c->filename_table_length) {
+    return;
+  }
+  uint32_t token_pos = (uint32_t)(token->start - p->start);
+  if (token_pos < c->filename_table[c->current_filename_index].start) {
+    return;
+  }
+  if (c->filename_table[c->current_filename_index + 1].start <= token_pos) {
+    c->current_filename_index++;
+    p->filepath = c->filename_table[c->current_filename_index].filename;
+  }
+}
 
 #if defined(MRC_PARSER_PRISM)
 static void
-mrc_pm_parser_init(mrc_parser_state *p, const uint8_t *source, size_t size)
+mrc_pm_parser_init(mrc_parser_state *p, const uint8_t *source, size_t size, mrc_ccontext *c)
 {
+  pm_lex_callback_t *cb = (pm_lex_callback_t *)mrc_malloc(sizeof(pm_lex_callback_t));
+  cb->data = c;
+  cb->callback = partial_hook;
   pm_parser_init(p, source, size, NULL);
+  p->lex_callback = cb;
   mrc_init_presym(&p->constant_pool);
+  if (c->filename_table) {
+    p->filepath = c->filename_table[0].filename;
+  }
 }
 #elif defined(MRC_PARSER_LRAMA)
 
@@ -81,13 +104,112 @@ rb_parser_gets(struct parser_params *p, rb_parser_input_data input, int line)
 #endif
 
 #ifndef MRC_NO_STDIO
+
+#define INITIAL_BUF_SIZE 1024
+static ssize_t
+append_from_stdin(uint8_t **source, size_t source_length)
+{
+  uint8_t *buffer = mrc_malloc(INITIAL_BUF_SIZE);
+  if (buffer == NULL) return -1;
+
+  int capacity = INITIAL_BUF_SIZE;
+  size_t length = 0;
+
+  while (1) {
+    int ch = getchar();
+    if (ch == EOF) {
+      buffer[length] = '\0';
+      memccpy(*source + source_length, buffer, 1, length);
+      mrc_free(buffer);
+      return length;
+    }
+
+    buffer[length++] = (uint8_t)ch;
+
+    if (capacity <= length) {
+      capacity *= 2;
+      uint8_t *new_buffer = mrc_realloc(buffer, capacity);
+      if (new_buffer == NULL) {
+        mrc_free(buffer);
+        return -1;
+      }
+      buffer = new_buffer;
+    }
+  }
+}
+
+static ssize_t
+read_input_files(char **filenames, uint8_t **source, mrc_filename_table *filename_table)
+{
+  int i = 0;
+  size_t pos = 0;
+  ssize_t length = 0;
+  ssize_t each_size;
+  FILE *file;
+  char *filename = filenames[0];
+  while (filename) {
+    pm_string_t filename_string = { (uint8_t *)filenames[i], strlen(filenames[i]) };
+    mrc_filename_table entry = { filename_string, pos };
+    filename_table[i] = entry;
+    if (filename[0] == '-' && filename[1] == '\0') {
+      if (*source == NULL) {
+        *source = (uint8_t *)mrc_malloc(length);
+      }
+      each_size = append_from_stdin(source, length);
+      if (each_size < 0) {
+        fprintf(stderr, "compile.c: cannot read from stdin\n");
+        return -1;
+      }
+      length += each_size;
+    }
+    else {
+      file = NULL;
+      file = fopen(filename, "rb");
+      if (!file) {
+        fprintf(stderr, "compile.c: cannot open program file. (%s)\n", filename);
+        return -1;
+      }
+      fseek(file, 0, SEEK_END);
+      each_size = ftell(file);
+      fseek(file, 0, SEEK_SET);
+      length += each_size;
+      if (*source == NULL) {
+        *source = (uint8_t *)mrc_malloc(length + 1);
+      }
+      else {
+        *source = (uint8_t *)mrc_realloc(*source, length + 1);
+      }
+      if (fread(*source + pos, sizeof(char), each_size, file) != each_size) {
+        fprintf(stderr, "compile.c: cannot read program file. (%s)\n", filename);
+        fclose(file);
+        return -1;
+      }
+      fclose(file);
+      (*source)[length] = '\0';
+    }
+    pos += each_size;
+    filename = filenames[++i];
+  }
+  return length;
+}
+
 static mrc_node *
-mrc_parse_file_cxt(mrc_ccontext *c, const char *filename)
+mrc_parse_file_cxt(mrc_ccontext *c, const char **filenames, uint8_t *source)
 {
 #if defined(MRC_PARSER_PRISM)
-  pm_string_t string;
-  pm_string_mapped_init(&string, filename);
-  mrc_pm_parser_init(c->p, string.source, string.length);
+  size_t filecount = 0;
+  while (filenames[filecount]) {
+    filecount++;
+  }
+  c->filename_table = (mrc_filename_table *)mrc_malloc(sizeof(mrc_filename_table) * filecount);
+  c->filename_table_length = filecount;
+  c->current_filename_index = 0;
+  ssize_t length = read_input_files((char **)filenames, &source, c->filename_table);
+  if (length < 0) {
+    fprintf(stderr, "cannot open files\n");
+    return NULL;
+  }
+  mrc_pm_parser_init(c->p, source, length, c);
   return pm_parse(c->p);
 #elif defined(MRC_PARSER_LRAMA)
   FILE *f = fopen(filename, "r");
@@ -102,9 +224,12 @@ mrc_parse_file_cxt(mrc_ccontext *c, const char *filename)
 }
 
 mrc_irep *
-mrc_load_file_cxt(mrc_ccontext *c, const char *filename)
+mrc_load_file_cxt(mrc_ccontext *c, const char **filenames, uint8_t *source)
 {
-  mrc_node *root = mrc_parse_file_cxt(c, filename);
+  mrc_node *root = mrc_parse_file_cxt(c, filenames, source);
+  if (root == NULL) {
+    return NULL;
+  }
   mrc_irep *irep = mrc_load_exec(c, root);
 #if defined(MRC_PARSER_PRISM)
   pm_node_destroy(c->p, root);
@@ -119,7 +244,13 @@ mrc_parse_string_cxt(mrc_ccontext *c, const uint8_t *source, size_t length)
 #if defined(MRC_PARSER_PRISM)
   pm_string_t string;
   pm_string_owned_init(&string, (uint8_t *)source, length);
-  mrc_pm_parser_init(c->p, string.source, string.length);
+  c->filename_table = (mrc_filename_table *)mrc_malloc(sizeof(mrc_filename_table));
+  pm_string_t filename_string = { (uint8_t *)"eval", 4 };
+  mrc_filename_table entry = { filename_string, length };
+  c->filename_table[0] = entry;
+  c->filename_table_length = 1;
+  c->current_filename_index = 0;
+  mrc_pm_parser_init(c->p, string.source, string.length, NULL);
   return pm_parse(c->p);
 #elif defined(MRC_PARSER_LRAMA)
   //VALUE str = (VALUE)string_new_with_str_len((const char *)source, length);
