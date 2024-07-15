@@ -1201,6 +1201,17 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
   //  s->filename_index = tree->filename_index;
   //  s->filename_sym = mrc_parser_get_filename(s->c->p, tree->filename_index);
   //}
+  uint32_t token_pos = (uint32_t)(tree->location.start - s->c->p->start);
+  if (s->filename_index < s->c->filename_table_length) {
+    if (s->c->filename_table[s->filename_index+1].start <= token_pos) {
+      s->filename_index++;
+      s->filename = &s->c->filename_table[s->filename_index].filename;
+
+      //mrc_debug_info_append_file(c, s->irep->debug_info,
+      //                          s->filename->source, s->lines, s->debug_start_pos, s->pc);
+      s->debug_start_pos = s->pc;
+    }
+  }
 
   int nt = nint(tree);
 //  s->lineno = tree->lineno;

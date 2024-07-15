@@ -8,6 +8,7 @@
 #include "../include/mrc_presym.h"
 #include "../include/mrc_pool.h"
 #include "../include/mrc_dump.h"
+#include "../include/mrc_debug.h"
 
 #if defined(MRC_INT64)
   typedef int64_t mrc_int;
@@ -210,7 +211,8 @@ typedef struct scope {
   mrc_bool mscope:1;
 
   struct loopinfo *loop;
-  mrc_sym filename_sym;
+  //mrc_sym filename_sym;
+  pm_string_t *filename;
   uint16_t lineno;
 
   mrc_code *iseq;
@@ -238,12 +240,6 @@ typedef struct scope {
 static void codegen(mrc_codegen_scope *s, mrc_node *tree, int val);
 
 static void
-mrc_debug_info_alloc(mrc_irep *irep)
-{
-  // TODO
-}
-
-static void
 codegen_error(mrc_codegen_scope *s, const char *message)
 {
   if (!s) return;
@@ -252,8 +248,9 @@ codegen_error(mrc_codegen_scope *s, const char *message)
   mrc_diagnostic_list_append(s->c, 0, message, MRC_GENERATOR_ERROR);
 
 #ifndef MRC_NO_STDIO
-  if (s->filename_sym && s->lineno) {
-    const char *filename = mrc_sym_name_len(s->c, s->filename_sym, NULL);
+  if (s->filename && s->lineno) {
+    //const char *filename = mrc_sym_name_len(s->c, s->filename_sym, NULL);
+    const char *filename = (const char *)s->filename->source;
     fprintf(stderr, "%s:%d: %s\n", filename, s->lineno, message);
   }
   else {
@@ -573,15 +570,15 @@ scope_new(mrc_ccontext *c, mrc_codegen_scope *prev, mrc_constant_id_list *nlv)
     mrc_assert(nlv->size < UINT16_MAX);
   }
   // s->ai = gc_areba_save(mrc);
-  s->filename_sym = prev->filename_sym;
-  if (s->filename_sym) {
+  s->filename = prev->filename;
+  if (s->filename) {
     s->lines = (uint16_t *)mrc_malloc(sizeof(uint16_t)*s->icapa);
   }
   s->lineno = prev->lineno;
 
   /* degug info */
   s->debug_start_pos = 0;
-  if (s->filename_sym) {
+  if (s->filename) {
     mrc_debug_info_alloc(s->irep);
   }
   else {
@@ -1185,7 +1182,7 @@ scope_finish(mrc_codegen_scope *s)
   irep->pool = (const mrc_pool_value *)simple_realloc(s->pool, sizeof(mrc_pool_value)*irep->plen);
   irep->syms = (const mrc_sym *)simple_realloc(s->syms, sizeof(mrc_sym)*irep->slen);
   irep->reps = (const mrc_irep **)simple_realloc(s->reps, sizeof(mrc_irep *)*irep->rlen);
-  if (s->filename_sym) {
+  if (s->filename) {
     // TODO
     //mrc_sym fname = mrc_parser_get_filename(s->parser, s->filename_index);
     //const char *filename = mrc_sym_name_len(fname, NULL);
@@ -1598,9 +1595,8 @@ generate_code(mrc_ccontext *c, mrc_node *node, int val)
   c->jmp = &jmpbuf;
 
   scope->c = c;
-  // TODO
-  //scope->filename_sym = c->filename_sym;
-  //scppe->filename_index = c->current_filename_index;
+  scope->filename_index = 0;
+  scope->filename = &c->filename_table[0].filename;
 
   MRC_TRY(c->jmp) {
     codegen(scope, node, val);
@@ -1616,7 +1612,7 @@ generate_code(mrc_ccontext *c, mrc_node *node, int val)
     return irep;
   }
   MRC_CATCH(c->jmp) {
-    // TODO
+    // TODO?
     //mrc_irep_free(c, scope->irep);
     mrc_pool_close(scope->mpool);
     c->jmp = prev_jmp;

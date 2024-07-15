@@ -7,6 +7,7 @@
 #include "../include/mrc_opcode.h"
 #include "../include/mrc_parser_util.h"
 #include "../include/mrc_pool.h"
+#include "../include/mrc_debug.h"
 
 const char *
 mrc_sym_dump(mrc_ccontext *c, mrc_sym sym)
@@ -31,12 +32,6 @@ int32_t
 mrc_debug_get_line(mrc_ccontext *c, const mrc_irep *irep, uint32_t pc)
 {
   return -1; //TODO
-}
-
-const char *
-mrc_debug_get_filename(mrc_ccontext *c, const mrc_irep *irep, uint32_t pc)
-{
-  return "TODO";
 }
 
 static inline const struct mrc_irep_catch_handler *

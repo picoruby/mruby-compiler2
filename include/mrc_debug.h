@@ -7,7 +7,8 @@
 #ifndef MRC_DEBUG_H
 #define MRC_DEBUG_H
 
-//#include "common.h"
+#include "mrc_ccontext.h"
+#include "mrc_irep.h"
 
 /**
  * mruby Debugging.
@@ -63,7 +64,8 @@ int32_t mrc_debug_get_line(mrc_ccontext *c, const mrc_irep *irep, uint32_t pc);
  */
 mrc_bool mrc_debug_get_position(mrc_ccontext *c, const mrc_irep *irep, uint32_t pc, int32_t *lp, const char **fp);
 
-mrc_irep_debug_info *mrc_debug_info_alloc(mrc_ccontext *c, mrc_irep *irep);
+const char *mrc_debug_get_filename(mrc_ccontext *c, const mrc_irep *irep, uint32_t pc);
+mrc_irep_debug_info *mrc_debug_info_alloc(mrc_irep *irep);
 mrc_irep_debug_info_file *mrc_debug_info_append_file(
     mrc_ccontext *c, mrc_irep_debug_info *info,
     const char *filename, uint16_t *lines,
