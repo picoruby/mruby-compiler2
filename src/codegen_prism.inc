@@ -1174,6 +1174,7 @@ gen_ensure(mrc_codegen_scope *s, mrc_node *tree, uint32_t catch_entry, uint32_t 
   pop();
   catch_handler_set(s, catch_entry, MRC_CATCH_ENSURE, begin, ensure_end, ensure_target);
 }
+
 static void
 codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
 {
@@ -1191,24 +1192,14 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
   if (s->rlev > MRC_CODEGEN_LEVEL_MAX) {
     codegen_error(s, "too complex expression");
   }
-  // TODO
-  //if (s->irep && s->filename_index != tree->filename_index) {
-  //  const char *filename = s->c->filename;
-
-  //  mrc_debug_info_append_file(c, s->irep->debug_info,
-  //                             filename, s->lines, s->debug_start_pos, s->pc);
-  //  s->debug_start_pos = s->pc;
-  //  s->filename_index = tree->filename_index;
-  //  s->filename_sym = mrc_parser_get_filename(s->c->p, tree->filename_index);
-  //}
   uint32_t token_pos = (uint32_t)(tree->location.start - s->c->p->start);
   if (s->filename_index < s->c->filename_table_length) {
     if (s->c->filename_table[s->filename_index+1].start <= token_pos) {
       s->filename_index++;
-      s->filename = &s->c->filename_table[s->filename_index].filename;
+      s->filename = (const char *)s->c->filename_table[s->filename_index].filename;
 
-      //mrc_debug_info_append_file(c, s->irep->debug_info,
-      //                          s->filename->source, s->lines, s->debug_start_pos, s->pc);
+      mrc_debug_info_append_file(s->c, s->irep->debug_info,
+                                s->filename, s->lines, s->debug_start_pos, s->pc);
       s->debug_start_pos = s->pc;
     }
   }

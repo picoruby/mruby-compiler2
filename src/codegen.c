@@ -212,7 +212,7 @@ typedef struct scope {
 
   struct loopinfo *loop;
   //mrc_sym filename_sym;
-  pm_string_t *filename;
+  const char *filename;
   uint16_t lineno;
 
   mrc_code *iseq;
@@ -250,7 +250,7 @@ codegen_error(mrc_codegen_scope *s, const char *message)
 #ifndef MRC_NO_STDIO
   if (s->filename && s->lineno) {
     //const char *filename = mrc_sym_name_len(s->c, s->filename_sym, NULL);
-    const char *filename = (const char *)s->filename->source;
+    const char *filename = (const char *)s->filename;
     fprintf(stderr, "%s:%d: %s\n", filename, s->lineno, message);
   }
   else {
@@ -1596,7 +1596,7 @@ generate_code(mrc_ccontext *c, mrc_node *node, int val)
 
   scope->c = c;
   scope->filename_index = 0;
-  scope->filename = &c->filename_table[0].filename;
+  scope->filename = (const char *)c->filename_table[0].filename;
 
   MRC_TRY(c->jmp) {
     codegen(scope, node, val);

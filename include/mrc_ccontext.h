@@ -35,7 +35,7 @@ typedef struct mrc_diagnostic_list mrc_diagnostic_list;
 typedef struct mrc_pool mrc_pool;
 
 typedef struct mrc_filename_table {
-  pm_string_t filename;
+  const char *filename;
   uint32_t start;
 } mrc_filename_table;
 

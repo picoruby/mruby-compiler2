@@ -66,7 +66,12 @@ partial_hook(void *data, pm_parser_t *p, pm_token_t *token)
   }
   if (c->filename_table[c->current_filename_index + 1].start <= token_pos) {
     c->current_filename_index++;
-    p->filepath = c->filename_table[c->current_filename_index].filename;
+    pm_string_t filename_string;
+    pm_string_constant_init(
+        &filename_string,
+        c->filename_table[c->current_filename_index].filename,
+        strlen(c->filename_table[c->current_filename_index].filename));
+    p->filepath = filename_string;
   }
 }
 
@@ -81,7 +86,10 @@ mrc_pm_parser_init(mrc_parser_state *p, const uint8_t *source, size_t size, mrc_
   p->lex_callback = cb;
   mrc_init_presym(&p->constant_pool);
   if (c->filename_table) {
-    p->filepath = c->filename_table[0].filename;
+    pm_string_t filename_string;
+    pm_string_constant_init(&filename_string, c->filename_table[0].filename,
+                                             strlen(c->filename_table[0].filename));
+    p->filepath = filename_string;
   }
 }
 #elif defined(MRC_PARSER_LRAMA)
@@ -149,8 +157,7 @@ read_input_files(char **filenames, uint8_t **source, mrc_filename_table *filenam
   FILE *file;
   char *filename = filenames[0];
   while (filename) {
-    pm_string_t filename_string = { (uint8_t *)filenames[i], strlen(filenames[i]) };
-    mrc_filename_table entry = { filename_string, pos };
+    mrc_filename_table entry = { filenames[i], pos };
     filename_table[i] = entry;
     if (filename[0] == '-' && filename[1] == '\0') {
       if (*source == NULL) {
@@ -246,8 +253,7 @@ mrc_parse_string_cxt(mrc_ccontext *c, const uint8_t *source, size_t length)
   pm_string_t string;
   pm_string_owned_init(&string, (uint8_t *)source, length);
   c->filename_table = (mrc_filename_table *)mrc_malloc(sizeof(mrc_filename_table));
-  pm_string_t filename_string = { (uint8_t *)"eval", 4 };
-  mrc_filename_table entry = { filename_string, length };
+  mrc_filename_table entry = { "eval", length };
   c->filename_table[0] = entry;
   c->filename_table_length = 1;
   c->current_filename_index = 0;
