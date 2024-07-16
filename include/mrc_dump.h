@@ -11,7 +11,6 @@ MRC_BEGIN_DECL
 #define MRC_DUMP_STATIC 2
 
 #ifndef MRC_NO_STDIO
-int mrc_dump_irep_cstruct(mrc_ccontext *c, const mrc_irep *irep, uint8_t flags, FILE *fp, const char *initname);
 int mrc_dump_irep_cfunc(mrc_ccontext *c, const mrc_irep *irep, uint8_t flags, FILE *fp, const char *initname);
 int mrc_dump_irep_binary(mrc_ccontext *c, const mrc_irep *irep, uint8_t flags, FILE* fp);
 #endif

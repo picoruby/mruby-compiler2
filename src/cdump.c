@@ -5,5 +5,6 @@
 int
 mrc_dump_irep_cstruct(mrc_ccontext, const mrc_irep *irep, uint8_t flags, FILE *fp, const char *initname)
 {
+  // TODO
   return 0;
 }
