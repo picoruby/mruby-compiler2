@@ -40,6 +40,7 @@ mrc_load_exec(mrc_ccontext *c, mrc_node *ast)
       pm_buffer_t buffer = { 0 };
 #if defined(MRC_DUMP_PRETTY)
       pm_prettyprint(&buffer, c->p, ast);
+      printf("%s\n", buffer.value);
 #endif
       pm_buffer_free(&buffer);
     }
