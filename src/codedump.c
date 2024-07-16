@@ -28,12 +28,6 @@ mrc_sym_dump(mrc_ccontext *c, mrc_sym sym)
   }
 }
 
-int32_t
-mrc_debug_get_line(mrc_ccontext *c, const mrc_irep *irep, uint32_t pc)
-{
-  return -1; //TODO
-}
-
 static inline const struct mrc_irep_catch_handler *
 mrc_irep_catch_handler_table(const mrc_irep *irep)
 {
