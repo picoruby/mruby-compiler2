@@ -1157,6 +1157,14 @@ simple_realloc(void *p, size_t len)
   return mrc_realloc(p, len);
 }
 
+static const char*
+mrc_parser_get_filename(mrc_ccontext *c, uint16_t idx) {
+  if (idx >= c->filename_table_length) return 0;
+  else {
+    return c->filename_table[idx].filename;
+  }
+}
+
 static void
 scope_finish(mrc_codegen_scope *s)
 {
@@ -1183,17 +1191,15 @@ scope_finish(mrc_codegen_scope *s)
   irep->syms = (const mrc_sym *)simple_realloc(s->syms, sizeof(mrc_sym)*irep->slen);
   irep->reps = (const mrc_irep **)simple_realloc(s->reps, sizeof(mrc_irep *)*irep->rlen);
   if (s->filename) {
-    // TODO
-    //mrc_sym fname = mrc_parser_get_filename(s->parser, s->filename_index);
-    //const char *filename = mrc_sym_name_len(fname, NULL);
-
-    //mrc_debug_info_append_file(s->irep->debug_info,
-    //                           filename, s->lines, s->debug_start_pos, s->pc);
+    const char *filename = mrc_parser_get_filename(s->c, s->filename_index);
+    mrc_debug_info_append_file(s->c, s->irep->debug_info,
+                               filename, s->lines, s->debug_start_pos, s->pc);
   }
   mrc_free(s->lines);
   irep->nlocals = s->nlocals;
   irep->nregs = s->nregs;
 
+  // TODO?
   //mrb_gc_arena_restore(mrb, s->ai);
   mrc_pool_close(s->mpool);
 }

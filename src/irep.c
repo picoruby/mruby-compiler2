@@ -1,4 +1,5 @@
 #include "../include/mrc_irep.h"
+#include "../include/mrc_debug.h"
 
 void
 mrc_irep_remove_lv(mrc_ccontext *c, mrc_irep *irep)
@@ -43,7 +44,7 @@ mrc_irep_free(mrc_ccontext *c, mrc_irep *irep)
     mrc_free((void*)irep->reps);
   }
   mrc_free((void*)irep->lv);
-//  mrb_debug_info_free(irep->debug_info);
+  mrc_debug_info_free(c, irep->debug_info);
 #ifdef MRC_DEBUG
   memset(irep, -1, sizeof(*irep));
 #endif

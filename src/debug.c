@@ -112,12 +112,11 @@ mrc_debug_get_line(mrc_ccontext *c, const mrc_irep *irep, uint32_t pc)
 }
 
 static char const*
-debug_get_filename(mrc_irep_debug_info_file* f)
+debug_get_filename(mrc_ccontext *c, mrc_irep_debug_info_file* f)
 {
   if (f == NULL) return NULL;
-  //return mrb_sym_name_len(mrb, f->filename_sym, NULL);
-  // TODO
-  return NULL;
+  pm_constant_t *fn_constant = pm_constant_pool_id_to_constant(&c->p->constant_pool, f->filename_sym);
+  return (const char *)fn_constant->start;
 }
 
 const char *
@@ -125,7 +124,7 @@ mrc_debug_get_filename(mrc_ccontext *c, const mrc_irep *irep, uint32_t pc)
 {
   if (irep && pc < irep->ilen) {
     if (!irep->debug_info) return NULL;
-    return debug_get_filename(get_file(irep->debug_info, pc));
+    return debug_get_filename(c, get_file(irep->debug_info, pc));
   }
   return NULL;
 }
@@ -154,9 +153,16 @@ mrc_debug_info_append_file(mrc_ccontext *c, mrc_irep_debug_info *d,
   mrc_assert(lines);
 
   if (d->flen > 0) {
-    const char *fn = mrc_sym_name_len(mrb, d->files[d->flen - 1]->filename_sym, NULL);
-    if (strcmp(filename, fn) == 0)
+    //const char *fn = mrc_sym_name_len(mrb, d->files[d->flen - 1]->filename_sym, NULL);
+    //if (strcmp(filename, fn) == 0)
+    //  return NULL;
+    pm_constant_t *fn_constant = pm_constant_pool_id_to_constant(&c->p->constant_pool, d->files[d->flen - 1]->filename_sym);
+    mrc_assert(fn_constant);
+    if (strlen(filename) == fn_constant->length &&
+        strncmp(filename, (const char *)fn_constant->start, fn_constant->length) == 0)
+    {
       return NULL;
+    }
   }
 
   mrc_irep_debug_info_file *f = (mrc_irep_debug_info_file*)mrc_malloc(sizeof(*f));
@@ -168,7 +174,9 @@ mrc_debug_info_append_file(mrc_ccontext *c, mrc_irep_debug_info *d,
   d->pc_count = end_pos;
 
   size_t fn_len = strlen(filename);
-  f->filename_sym = mrc_intern(mrb, filename, fn_len);
+  //f->filename_sym = mrc_intern(mrb, filename, fn_len);
+  f->filename_sym = pm_constant_pool_insert_constant(&c->p->constant_pool, (const uint8_t *)filename, fn_len);
+
   f->line_type = mrc_debug_line_packed_map;
   f->lines.ptr = NULL;
 
@@ -198,19 +206,19 @@ mrc_debug_info_append_file(mrc_ccontext *c, mrc_irep_debug_info *d,
   return f;
 }
 
-//MRC_API void
-//mrc_debug_info_free(mrc_state *mrb, mrc_irep_debug_info *d)
-//{
-//  if (!d) { return; }
-//
-//  if (d->files) {
-//    for (uint32_t i = 0; i < d->flen; i++) {
-//      if (d->files[i]) {
-//        mrc_free(mrb, d->files[i]->lines.ptr);
-//        mrc_free(mrb, d->files[i]);
-//      }
-//    }
-//    mrc_free(mrb, d->files);
-//  }
-//  mrc_free(mrb, d);
-//}
+void
+mrc_debug_info_free(mrc_ccontext *c, mrc_irep_debug_info *d)
+{
+  if (!d) { return; }
+
+  if (d->files) {
+    for (uint32_t i = 0; i < d->flen; i++) {
+      if (d->files[i]) {
+        mrc_free(d->files[i]->lines.ptr);
+        mrc_free(d->files[i]);
+      }
+    }
+    mrc_free(d->files);
+  }
+  mrc_free(d);
+}

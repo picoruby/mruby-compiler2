@@ -1193,10 +1193,10 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     codegen_error(s, "too complex expression");
   }
   uint32_t token_pos = (uint32_t)(tree->location.start - s->c->p->start);
+
   if (s->filename_index < s->c->filename_table_length) {
     if (s->c->filename_table[s->filename_index+1].start <= token_pos) {
-      s->filename_index++;
-      s->filename = (const char *)s->c->filename_table[s->filename_index].filename;
+      s->filename = (const char *)s->c->filename_table[s->filename_index++].filename;
 
       mrc_debug_info_append_file(s->c, s->irep->debug_info,
                                 s->filename, s->lines, s->debug_start_pos, s->pc);
