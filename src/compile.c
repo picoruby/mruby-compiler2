@@ -77,12 +77,12 @@ partial_hook(void *data, pm_parser_t *p, pm_token_t *token)
 
 #if defined(MRC_PARSER_PRISM)
 static void
-mrc_pm_parser_init(mrc_parser_state *p, const uint8_t *source, size_t size, mrc_ccontext *c)
+mrc_pm_parser_init(mrc_parser_state *p, uint8_t **source, size_t size, mrc_ccontext *c)
 {
   pm_lex_callback_t *cb = (pm_lex_callback_t *)mrc_malloc(sizeof(pm_lex_callback_t));
   cb->data = c;
   cb->callback = partial_hook;
-  pm_parser_init(p, source, size, NULL);
+  pm_parser_init(p, *source, size, NULL);
   p->lex_callback = cb;
   mrc_init_presym(&p->constant_pool);
   if (c->filename_table) {
@@ -202,7 +202,7 @@ read_input_files(char **filenames, uint8_t **source, mrc_filename_table *filenam
 }
 
 static mrc_node *
-mrc_parse_file_cxt(mrc_ccontext *c, const char **filenames, uint8_t *source)
+mrc_parse_file_cxt(mrc_ccontext *c, const char **filenames, uint8_t **source)
 {
 #if defined(MRC_PARSER_PRISM)
   size_t filecount = 0;
@@ -212,7 +212,7 @@ mrc_parse_file_cxt(mrc_ccontext *c, const char **filenames, uint8_t *source)
   c->filename_table = (mrc_filename_table *)mrc_malloc(sizeof(mrc_filename_table) * filecount);
   c->filename_table_length = filecount;
   c->current_filename_index = 0;
-  ssize_t length = read_input_files((char **)filenames, &source, c->filename_table);
+  ssize_t length = read_input_files((char **)filenames, source, c->filename_table);
   if (length < 0) {
     fprintf(stderr, "cannot open files\n");
     return NULL;
@@ -232,7 +232,7 @@ mrc_parse_file_cxt(mrc_ccontext *c, const char **filenames, uint8_t *source)
 }
 
 mrc_irep *
-mrc_load_file_cxt(mrc_ccontext *c, const char **filenames, uint8_t *source)
+mrc_load_file_cxt(mrc_ccontext *c, const char **filenames, uint8_t **source)
 {
   mrc_node *root = mrc_parse_file_cxt(c, filenames, source);
   if (root == NULL) {
@@ -247,7 +247,7 @@ mrc_load_file_cxt(mrc_ccontext *c, const char **filenames, uint8_t *source)
 #endif
 
 static mrc_node *
-mrc_parse_string_cxt(mrc_ccontext *c, const uint8_t *source, size_t length)
+mrc_parse_string_cxt(mrc_ccontext *c, const uint8_t **source, size_t length)
 {
 #if defined(MRC_PARSER_PRISM)
   pm_string_t string;
@@ -257,7 +257,7 @@ mrc_parse_string_cxt(mrc_ccontext *c, const uint8_t *source, size_t length)
   c->filename_table[0] = entry;
   c->filename_table_length = 1;
   c->current_filename_index = 0;
-  mrc_pm_parser_init(c->p, string.source, string.length, NULL);
+  mrc_pm_parser_init(c->p, (uint8_t **)string.source, string.length, NULL);
   return pm_parse(c->p);
 #elif defined(MRC_PARSER_LRAMA)
   //VALUE str = (VALUE)string_new_with_str_len((const char *)source, length);
@@ -268,7 +268,7 @@ mrc_parse_string_cxt(mrc_ccontext *c, const uint8_t *source, size_t length)
 }
 
 mrc_irep *
-mrc_load_string_cxt(mrc_ccontext *c, const uint8_t *source, size_t length)
+mrc_load_string_cxt(mrc_ccontext *c, const uint8_t **source, size_t length)
 {
   mrc_node *root = mrc_parse_string_cxt(c, source, length);
   mrc_irep *irep = mrc_load_exec(c, root);
