@@ -1194,7 +1194,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
   }
   uint32_t token_pos = (uint32_t)(tree->location.start - s->c->p->start);
 
-  if (s->filename_index < s->c->filename_table_length) {
+  if (s->filename_index+1 < s->c->filename_table_length) {
     if (s->c->filename_table[s->filename_index+1].start <= token_pos) {
       s->filename = (const char *)s->c->filename_table[s->filename_index++].filename;
 
