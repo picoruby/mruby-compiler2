@@ -43,6 +43,7 @@ kn_parser_free(mrc_parser_state *p)
 
 void mrc_ccontext_free(mrc_ccontext *c)
 {
+  mrc_free(c->filename_table);
   mrc_free(c->filename);
   mrc_free(c->syms);
 #if defined(MRC_PARSER_PRISM)
@@ -51,6 +52,9 @@ void mrc_ccontext_free(mrc_ccontext *c)
 #elif defined(MRC_PARSER_LRAMA)
   kn_parser_free(c->p);
 #endif
+  if (c->p->lex_callback) {
+    mrc_free(c->p->lex_callback);
+  }
   mrc_free(c->p);
   mrc_free(c);
 }
