@@ -35,10 +35,16 @@ mrc_find_presym(const uint8_t *lit, size_t len)
 void
 mrc_init_presym(pm_constant_pool_t *pool)
 {
+#ifdef PICORUBY_DEBUG
   pm_constant_id_t id;
+#endif
   for (int i = 0; ; i++) {
     if (symTable[i].lit == NULL) { break; }
+#ifdef PICORUBY_DEBUG
     id = pm_constant_pool_insert_constant(pool, (const uint8_t *)symTable[i].lit, strlen(symTable[i].lit));
     mrc_assert(id == symTable[i].index);
+#else
+    pm_constant_pool_insert_constant(pool, (const uint8_t *)symTable[i].lit, strlen(symTable[i].lit));
+#endif
   }
 }
