@@ -98,14 +98,14 @@ struct rite_binary_footer {
 };
 
 static inline size_t
-uint8_to_bin(uint8_t s, uint8_t *bin)
+mrc_uint8_to_bin(uint8_t s, uint8_t *bin)
 {
   *bin = s;
   return sizeof(uint8_t);
 }
 
 static inline size_t
-uint16_to_bin(uint16_t s, uint8_t *bin)
+mrc_uint16_to_bin(uint16_t s, uint8_t *bin)
 {
   *bin++ = (s >> 8) & 0xff;
   *bin   = s & 0xff;
@@ -113,7 +113,7 @@ uint16_to_bin(uint16_t s, uint8_t *bin)
 }
 
 static inline size_t
-uint32_to_bin(uint32_t l, uint8_t *bin)
+mrc_uint32_to_bin(uint32_t l, uint8_t *bin)
 {
   *bin++ = (l >> 24) & 0xff;
   *bin++ = (l >> 16) & 0xff;
@@ -123,7 +123,7 @@ uint32_to_bin(uint32_t l, uint8_t *bin)
 }
 
 static inline uint32_t
-bin_to_uint32(const uint8_t *bin)
+mrc_bin_to_uint32(const uint8_t *bin)
 {
   return (uint32_t)bin[0] << 24 |
          (uint32_t)bin[1] << 16 |
@@ -132,14 +132,14 @@ bin_to_uint32(const uint8_t *bin)
 }
 
 static inline uint16_t
-bin_to_uint16(const uint8_t *bin)
+mrc_bin_to_uint16(const uint8_t *bin)
 {
   return (uint16_t)bin[0] << 8 |
          (uint16_t)bin[1];
 }
 
 static inline uint8_t
-bin_to_uint8(const uint8_t *bin)
+mrc_bin_to_uint8(const uint8_t *bin)
 {
   return (uint8_t)bin[0];
 }

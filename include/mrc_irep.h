@@ -89,8 +89,8 @@ struct mrc_insn_data {
   const mrc_code *addr;
 };
 
-#define mrc_irep_catch_handler_pack(n, v)   uint32_to_bin(n, v)
-#define mrc_irep_catch_handler_unpack(v)    bin_to_uint32(v)
+#define mrc_irep_catch_handler_pack(n, v)   mrc_uint32_to_bin(n, v)
+#define mrc_irep_catch_handler_unpack(v)    mrc_bin_to_uint32(v)
 
 void mrc_irep_remove_lv(mrc_ccontext *c, mrc_irep *irep);
 void mrc_irep_free(mrc_ccontext *c, mrc_irep *irep);

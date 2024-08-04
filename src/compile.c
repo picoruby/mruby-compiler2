@@ -219,7 +219,7 @@ mrc_parse_string_cxt(mrc_ccontext *c, const uint8_t **source, size_t length)
   c->filename_table[0] = entry;
   c->filename_table_length = 1;
   c->current_filename_index = 0;
-  mrc_pm_parser_init(c->p, (uint8_t **)string.source, string.length, NULL);
+  mrc_pm_parser_init(c->p, (uint8_t **)string.source, string.length, c);
   return pm_parse(c->p);
 }
 

@@ -1580,7 +1580,7 @@ catch_handler_set(mrc_codegen_scope *s, int ent, enum mrc_catch_type type, uint3
   struct mrc_irep_catch_handler *e;
   mrc_assert(ent >= 0 && ent < s->irep->clen);
   e = &s->catch_table[ent];
-  uint8_to_bin(type, &e->type);
+  mrc_uint8_to_bin(type, &e->type);
   mrc_irep_catch_handler_pack(begin, e->begin);
   mrc_irep_catch_handler_pack(end, e->end);
   mrc_irep_catch_handler_pack(target, e->target);
