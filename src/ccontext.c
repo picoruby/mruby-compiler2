@@ -7,13 +7,7 @@ mrc_ccontext *
 mrc_ccontext_new(mrb_state *mrb)
 {
   mrc_ccontext *c = (mrc_ccontext*)mrc_calloc(1, sizeof(mrc_ccontext));
-#if defined(MRC_PARSER_PRISM)
   c->p = (mrc_parser_state *)mrc_malloc(sizeof(mrc_parser_state));
-#elif defined(MRC_PARSER_LRAMA)
-  rb_parser_config_t *config = (rb_parser_config_t *)malloc(sizeof(rb_parser_config_t));
-  parser_config_initialize(config);
-  c->p = (mrc_parser_state *)rb_ruby_parser_new(config);
-#endif
   c->mrb = mrb;
   return c;
 }
@@ -35,23 +29,13 @@ mrc_ccontext_filename(mrc_ccontext *c, const char *s)
   return c->filename;
 }
 
-static void
-kn_parser_free(mrc_parser_state *p)
-{
-  // TODO
-}
-
 void mrc_ccontext_free(mrc_ccontext *c)
 {
   mrc_free(c->filename_table);
   mrc_free(c->filename);
   mrc_free(c->syms);
-#if defined(MRC_PARSER_PRISM)
   pm_parser_free(c->p);
   mrc_diagnostic_list_free(c);
-#elif defined(MRC_PARSER_LRAMA)
-  kn_parser_free(c->p);
-#endif
   if (c->p->lex_callback) {
     mrc_free(c->p->lex_callback);
   }

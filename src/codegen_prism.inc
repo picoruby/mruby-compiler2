@@ -724,7 +724,7 @@ static int
 lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id_list_t *locals, int blk)
 {
   mrc_codegen_scope *parent = s;
-  pm_parameters_node_t *parameters;
+  pm_parameters_node_t *parameters = NULL;
   int na = 0;
   if (tree) {
     switch nint(tree) {
@@ -1363,8 +1363,8 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     case PM_CLASS_VARIABLE_OPERATOR_WRITE_NODE:
     case PM_CONSTANT_OPERATOR_WRITE_NODE:
     {
-      mrc_sym name, binary_operator;
-      mrc_node *value;
+      mrc_sym name = -1, binary_operator = -1;
+      mrc_node *value = NULL;
       int op_set = -1, op_get = -1, depth = -1;
 #define CAST_OP_WRITE(type) \
   CAST(type); \
@@ -1447,8 +1447,8 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
   value = (mrc_node *)cast->value; \
   read_name = cast->read_name; \
   write_name = cast->write_name;
-      mrc_node *receiver, *value;
-      mrc_sym read_name, write_name, binary_operator = -1, op_jmp = -1;
+      mrc_node *receiver = NULL, *value = NULL;
+      mrc_sym read_name = -1, write_name = -1, binary_operator = -1, op_jmp = -1;
       uint32_t pos = -1;
       switch (nt) {
         case PM_CALL_OPERATOR_WRITE_NODE:
@@ -1612,8 +1612,8 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     case PM_CONSTANT_OR_WRITE_NODE:
     case PM_CONSTANT_AND_WRITE_NODE:
     {
-      mrc_sym name;
-      mrc_node *value;
+      mrc_sym name = 0;
+      mrc_node *value = NULL;
       int op_set = -1, op_get = -1, depth = -1;
       int op_jmp = OP_JMPNOT;
 #define CAST_OR_WRITE(type) \
@@ -2726,7 +2726,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       int catch_entry, begin, end;
 
       /* for ensure */
-      int ensure_catch_entry, ensure_begin = 0;
+      int ensure_catch_entry = -1, ensure_begin = 0;
       if (cast->ensure_clause && cast->ensure_clause->statements) {
         ensure_catch_entry = catch_handler_new(s);
         ensure_begin = s->pc;

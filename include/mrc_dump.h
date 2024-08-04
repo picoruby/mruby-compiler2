@@ -39,14 +39,11 @@ int mrc_dump_irep_binary(mrc_ccontext *c, const mrc_irep *irep, uint8_t flags, F
 #define RITE_BINARY_MAJOR_VER          "03"
 #define RITE_BINARY_MINOR_VER          "00"
 #define RITE_BINARY_FORMAT_VER         RITE_BINARY_MAJOR_VER RITE_BINARY_MINOR_VER
-#if defined(MRC_PARSER_PRISM)
-  #define RITE_COMPILER_NAME           "PRHS"
-  #define RITE_PARSER_NAME             "Prism"
-#elif defined(MRC_PARSER_LRAMA)
-  #define RITE_COMPILER_NAME           "LRHS"
+#define RITE_COMPILER_NAME             "HSMK"
+#if defined(MRC_PARSER_LRAMA)
   #define RITE_PARSER_NAME             "Lrama-generated"
 #else
-  #error "You must define MRC_PARSER_PRISM or MRC_PARSER_LRAMA"
+  #define RITE_PARSER_NAME             "Prism"
 #endif
 #define RITE_COMPILER_VERSION          "0000"
 

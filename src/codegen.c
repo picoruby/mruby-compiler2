@@ -1456,13 +1456,8 @@ dispatch_linked(mrc_codegen_scope *s, uint32_t pos)
 static mrc_sym
 nsym(mrc_parser_state *p, const uint8_t *start, size_t length)
 {
-#if defined(MRC_PARSER_PRISM)
   mrc_sym sym = pm_constant_pool_insert_constant(&p->constant_pool, start, length);
   return sym;
-#elif defined(MRC_PARSER_LRAMA)
-  // TODO!!!
-  return 1;
-#endif
 }
 
 static int
@@ -1640,10 +1635,4 @@ mrc_generate_code(mrc_ccontext *c, mrc_node *node)
  * Parser dependent code
  *------------------------------------------------------------------------*/
 
-#if defined(MRC_PARSER_PRISM)
-  #include "codegen_prism.inc"
-#elif defined(MRC_PARSER_LRAMA)
-  #include "codegen_lrama.inc"
-#else
-  #error "Unknown parser"
-#endif
+#include "codegen_prism.inc"
