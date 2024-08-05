@@ -215,7 +215,7 @@ mrc_parse_string_cxt(mrc_ccontext *c, const uint8_t **source, size_t length)
   pm_string_t string;
   pm_string_owned_init(&string, (uint8_t *)source, length);
   c->filename_table = (mrc_filename_table *)mrc_malloc(sizeof(mrc_filename_table));
-  mrc_filename_table entry = { "eval", length };
+  mrc_filename_table entry = { "-e", length };
   c->filename_table[0] = entry;
   c->filename_table_length = 1;
   c->current_filename_index = 0;
