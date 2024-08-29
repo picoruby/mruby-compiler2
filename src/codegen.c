@@ -228,7 +228,9 @@ typedef struct scope {
 
   uint16_t nlocals;
   uint16_t nregs;
-//  int ai;
+#if defined(MRC_TARGET_MRUBY)
+  int ai;
+#endif
 
   int debug_start_pos;
   uint16_t filename_index;
@@ -489,7 +491,7 @@ pop_n_(mrc_codegen_scope *s, int n)
 #define cursp() (s->sp)
 
 static mrc_irep*
-mrc_add_irep(void)
+mrc_add_irep(mrc_ccontext *c)
 {
   static const mrc_irep mrc_irep_zero = { 0 };
   mrc_irep *irep = (mrc_irep *)mrc_malloc(sizeof(mrc_irep));
@@ -504,7 +506,7 @@ scope_add_irep(mrc_codegen_scope *s)
   mrc_irep *irep;
   mrc_codegen_scope *prev = s->prev;
   if (prev->irep == NULL) {
-    irep = mrc_add_irep();
+    irep = mrc_add_irep(s->c);
     prev->irep = s->irep = irep;
     return;
   }
@@ -512,7 +514,7 @@ scope_add_irep(mrc_codegen_scope *s)
     if (prev->irep->rlen == UINT16_MAX) {
       codegen_error(s, "too many nested blocks/methods");
     }
-    s->irep = irep = mrc_add_irep();
+    s->irep = irep = mrc_add_irep(s->c);
     if (prev->irep->rlen == prev->rcapa) {
       prev->rcapa *= 2;
       prev->reps = (mrc_irep **)mrc_realloc(prev->reps, sizeof(mrc_irep *)*prev->rcapa);
@@ -569,7 +571,10 @@ scope_new(mrc_ccontext *c, mrc_codegen_scope *prev, mrc_constant_id_list *nlv)
     }
     mrc_assert(nlv->size < UINT16_MAX);
   }
-  // s->ai = gc_areba_save(mrc);
+
+#if defined(MRC_TARGET_MRUBY)
+  s->ai = gc_arena_save(c->mrb);
+#endif
   s->filename = prev->filename;
   if (s->filename) {
     s->lines = (uint16_t *)mrc_malloc(sizeof(uint16_t)*s->icapa);
@@ -579,7 +584,7 @@ scope_new(mrc_ccontext *c, mrc_codegen_scope *prev, mrc_constant_id_list *nlv)
   /* degug info */
   s->debug_start_pos = 0;
   if (s->filename) {
-    mrc_debug_info_alloc(s->irep);
+    mrc_debug_info_alloc(c, s->irep);
   }
   else {
     s->irep->debug_info = NULL;
@@ -1199,8 +1204,9 @@ scope_finish(mrc_codegen_scope *s)
   irep->nlocals = s->nlocals;
   irep->nregs = s->nregs;
 
-  // TODO?
-  //mrb_gc_arena_restore(mrb, s->ai);
+#if defined(MRC_TARGET_MRUBY)
+  mrb_gc_arena_restore(s->c->mrb, s->ai);
+#endif
   mrc_pool_close(s->mpool);
 }
 

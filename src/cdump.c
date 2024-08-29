@@ -29,7 +29,7 @@ typedef struct mrc_string {
 } mrc_string;
 
 static mrc_string*
-mrc_str_new_capa(size_t capa)
+mrc_str_new_capa(mrc_ccontext *c, size_t capa)
 {
   mrc_string *s = (mrc_string *)mrc_malloc(sizeof(mrc_string));
   if (s) {
@@ -45,9 +45,9 @@ mrc_str_new_capa(size_t capa)
 }
 
 static mrc_string*
-mrc_str_new(const char *ptr, size_t len)
+mrc_str_new(mrc_ccontext *c, const char *ptr, size_t len)
 {
-  mrc_string *s = mrc_str_new_capa(len+1);
+  mrc_string *s = mrc_str_new_capa(c, len+1);
   if (s) {
     memcpy(s->ptr, ptr, len);
     s->len = len;
@@ -57,9 +57,9 @@ mrc_str_new(const char *ptr, size_t len)
 }
 
 static mrc_string*
-mrc_str_new_cstr(const char *cstr)
+mrc_str_new_cstr(mrc_ccontext *c, const char *cstr)
 {
-  return mrc_str_new(cstr, strlen(cstr));
+  return mrc_str_new(c, cstr, strlen(cstr));
 }
 
 static void
@@ -102,9 +102,9 @@ mrc_str_free(mrc_string *s)
 }
 
 static mrc_string*
-mrc_str_escape(mrc_string *s)
+mrc_str_escape(mrc_ccontext *c, mrc_string *s)
 {
-  mrc_string *s2 = mrc_str_new_capa(s->len*2+1);
+  mrc_string *s2 = mrc_str_new_capa(c, s->len*2+1);
   if (s2) {
     for (size_t i=0; i<s->len; i++) {
       char c = s->ptr[i];
@@ -274,7 +274,7 @@ static mrc_string*
 sym_var_name_str(mrc_ccontext *c, const char *initname, const char *key, int n)
 {
   char buf[32];
-  mrc_string *s = mrc_str_new_cstr(initname);
+  mrc_string *s = mrc_str_new_cstr(c, initname);
   mrc_str_cat_lit(s, "_");
   mrc_str_cat_cstr(s, key);
   mrc_str_cat_lit(s, "_");
@@ -292,7 +292,7 @@ cdump_sym(mrc_ccontext *c, mrc_sym sym, const char *var_name, int idx, mrc_strin
   }
 
   const pm_constant_t *constant = pm_constant_pool_id_to_constant(&c->p->constant_pool, sym);
-  mrc_string *name_obj = mrc_str_new((const char *)constant->start, constant->length);
+  mrc_string *name_obj = mrc_str_new(c, (const char *)constant->start, constant->length);
   const char *name = MRC_STRING_PTR(name_obj);
   const char *op_name;
   mrc_int len = constant->length;
@@ -324,13 +324,13 @@ cdump_sym(mrc_ccontext *c, mrc_sym sym, const char *var_name, int idx, mrc_strin
   }
   else {
     char buf[32];
-    mrc_string *name_obj = mrc_str_new(name, len);
+    mrc_string *name_obj = mrc_str_new(c, name, len);
     mrc_str_cat_lit(init_syms_code, "  ");
     mrc_str_cat_cstr(init_syms_code, var_name);
     snprintf(buf, sizeof(buf), "[%d] = ", idx);
     mrc_str_cat_cstr(init_syms_code, buf);
     mrc_str_cat_lit(init_syms_code, "mrc_intern_lit(mrb, ");
-    mrc_string *escaped = mrc_str_escape(name_obj);
+    mrc_string *escaped = mrc_str_escape(c, name_obj);
     mrc_str_free(name_obj);
     mrc_str_cat_str(init_syms_code, escaped);
     mrc_str_free(escaped);
@@ -345,7 +345,9 @@ cdump_sym(mrc_ccontext *c, mrc_sym sym, const char *var_name, int idx, mrc_strin
 static int
 cdump_syms(mrc_ccontext *c, const char *name, const char *key, int n, int syms_len, const mrc_sym *syms, mrc_string *init_syms_code, FILE *fp)
 {
-//  int ai = mrb_gc_arena_save(mrb);
+#if defined(MRC_TARGET_MRUBY)
+  int ai = mrb_gc_arena_save(c->mrb);
+#endif
   mrc_int code_len = MRC_STRING_LEN(init_syms_code);
   mrc_string *var_name = sym_var_name_str(c, name, key, n);
 
@@ -357,7 +359,9 @@ cdump_syms(mrc_ccontext *c, const char *name, const char *key, int n, int syms_l
   fputs("), ", fp);
   if (code_len == MRC_STRING_LEN(init_syms_code)) fputs("const", fp);
   fputs(");\n", fp);
-//  mrb_gc_arena_restore(mrb, ai);
+#if defined(MRC_TARGET_MRUBY)
+  mrb_gc_arena_restore(c->mrb, ai);
+#endif
   return MRC_DUMP_OK;
 }
 
@@ -379,7 +383,9 @@ static int
 cdump_debug(mrc_ccontext *c, const char *name, int n, mrc_irep_debug_info *info,
             mrc_string *init_syms_code, FILE *fp)
 {
-//  int ai = mrb_gc_arena_save(mrb);
+#if defined(MRC_TARGET_MRUBY)
+  int ai = mrb_gc_arena_save(c->mrb);
+#endif
   char buffer[256];
   const char *line_type = "mrb_debug_line_ary";
 
@@ -392,8 +398,8 @@ cdump_debug(mrc_ccontext *c, const char *name, int n, mrc_irep_debug_info *info,
   const char *filename = (const char *)fn_constant->start;
   snprintf(buffer, sizeof(buffer), "  %s_debug_file_%d.filename_sym = mrb_intern_lit(mrb,", name, n);
   mrc_str_cat_cstr(init_syms_code, buffer);
-  mrc_string *filename_str = mrc_str_new_cstr(filename);
-  mrc_string *escaped = mrc_str_escape(filename_str);
+  mrc_string *filename_str = mrc_str_new_cstr(c, filename);
+  mrc_string *escaped = mrc_str_escape(c, filename_str);
   mrc_str_free(filename_str);
   mrc_str_cat_str(init_syms_code, escaped);
   mrc_str_free(escaped);
@@ -441,7 +447,9 @@ cdump_debug(mrc_ccontext *c, const char *name, int n, mrc_irep_debug_info *info,
   fprintf(fp, "static mrb_irep_debug_info %s_debug_%d = {\n", name, n);
   fprintf(fp, "%d, %d, &%s_debug_file_%d_};\n", info->pc_count, info->flen, name, n);
 
-//  mrb_gc_arena_restore(mrb, ai);
+#if defined(MRC_TARGET_MRUBY)
+  mrb_gc_arena_restore(c->mrb, ai);
+#endif
   return MRC_DUMP_OK;
 }
 
@@ -556,7 +564,7 @@ mrc_dump_irep_cstruct(mrc_ccontext *c, const mrc_irep *irep, uint8_t flags, FILE
   fputs("#define mrb_DEFINE_SYMS_VAR(name, len, syms, qualifier) \\\n", fp);
   fputs("  static qualifier mrb_sym name[len] = mrb_BRACED syms\n", fp);
   fputs("\n", fp);
-  mrc_string *init_syms_code = mrc_str_new_capa(1);
+  mrc_string *init_syms_code = mrc_str_new_capa(c, 1);
   int max = 1;
   int n = cdump_irep_struct(c, irep, flags, fp, initname, 0, init_syms_code, &max);
   if (n != MRC_DUMP_OK) return n;

@@ -8,7 +8,11 @@ mrc_ccontext_new(mrb_state *mrb)
 {
   mrc_ccontext *c = (mrc_ccontext*)mrc_calloc(1, sizeof(mrc_ccontext));
   c->p = (mrc_parser_state *)mrc_malloc(sizeof(mrc_parser_state));
+#if defined(MRC_TARGET_MRUBY)
   c->mrb = mrb;
+#else
+  (void)mrb;
+#endif
   return c;
 }
 

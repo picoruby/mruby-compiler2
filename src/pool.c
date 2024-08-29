@@ -83,6 +83,9 @@ mrc_pool_close(mrc_pool *pool)
 static struct mrc_pool_page*
 page_alloc(mrc_pool *pool, size_t len)
 {
+#if defined(MRC_TARGET_MRUBY)
+  mrc_ccontext *c = pool->c;
+#endif
   struct mrc_pool_page *page;
 
   if (len < POOL_PAGE_SIZE)

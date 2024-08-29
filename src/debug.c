@@ -130,7 +130,7 @@ mrc_debug_get_filename(mrc_ccontext *c, const mrc_irep *irep, uint32_t pc)
 }
 
 mrc_irep_debug_info*
-mrc_debug_info_alloc(mrc_irep *irep)
+mrc_debug_info_alloc(mrc_ccontext *c, mrc_irep *irep)
 {
   static const mrc_irep_debug_info initial = { 0, 0, NULL };
 
