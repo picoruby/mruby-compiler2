@@ -53,7 +53,7 @@ typedef struct mrc_pool {
 #  define ALIGN_PADDING(x) (0)
 #endif
 
-mrc_pool*
+MRC_API mrc_pool*
 mrc_pool_open(mrc_ccontext *c)
 {
   mrc_pool *pool = (mrc_pool*)mrc_malloc(sizeof(mrc_pool));
@@ -65,7 +65,7 @@ mrc_pool_open(mrc_ccontext *c)
   return pool;
 }
 
-void
+MRC_API void
 mrc_pool_close(mrc_pool *pool)
 {
   struct mrc_pool_page *page;
@@ -99,7 +99,7 @@ page_alloc(mrc_pool *pool, size_t len)
   return page;
 }
 
-void*
+MRC_API void*
 mrc_pool_alloc(mrc_pool *pool, size_t len)
 {
   struct mrc_pool_page *page;
@@ -124,7 +124,7 @@ mrc_pool_alloc(mrc_pool *pool, size_t len)
   return page->last;
 }
 
-void*
+MRC_API void*
 mrc_pool_realloc(mrc_pool *pool, void *p, size_t oldlen, size_t newlen)
 {
   if (!pool) return NULL;

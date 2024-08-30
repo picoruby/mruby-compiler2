@@ -124,4 +124,17 @@ typedef uint8_t mrc_code;
  */
 typedef uint32_t mrc_aspec;
 
+/** Declare a public mruby API function. */
+#ifndef MRC_API
+#if defined(MRC_BUILD_AS_DLL)
+#if defined(MRC_CORE) || defined(MRC_LIB)
+# define MRC_API __declspec(dllexport)
+#else
+# define MRC_API __declspec(dllimport)
+#endif
+#else
+# define MRC_API extern
+#endif
+#endif
+
 #endif  /* MRC_COMMON_H */

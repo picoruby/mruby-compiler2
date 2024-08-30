@@ -196,7 +196,7 @@ mrc_parse_file_cxt(mrc_ccontext *c, const char **filenames, uint8_t **source)
   return pm_parse(c->p);
 }
 
-mrc_irep *
+MRC_API mrc_irep *
 mrc_load_file_cxt(mrc_ccontext *c, const char **filenames, uint8_t **source)
 {
   mrc_node *root = mrc_parse_file_cxt(c, filenames, source);
@@ -223,7 +223,7 @@ mrc_parse_string_cxt(mrc_ccontext *c, const uint8_t **source, size_t length)
   return pm_parse(c->p);
 }
 
-mrc_irep *
+MRC_API mrc_irep *
 mrc_load_string_cxt(mrc_ccontext *c, const uint8_t **source, size_t length)
 {
   mrc_node *root = mrc_parse_string_cxt(c, source, length);

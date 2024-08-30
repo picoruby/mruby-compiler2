@@ -3,7 +3,7 @@
 #include "../include/mrc_ccontext.h"
 #include "../include/mrc_parser_util.h"
 
-mrc_ccontext *
+MRC_API mrc_ccontext *
 mrc_ccontext_new(mrb_state *mrb)
 {
   mrc_ccontext *c = (mrc_ccontext*)mrc_calloc(1, sizeof(mrc_ccontext));
@@ -16,7 +16,7 @@ mrc_ccontext_new(mrb_state *mrb)
   return c;
 }
 
-const char *
+MRC_API const char *
 mrc_ccontext_filename(mrc_ccontext *c, const char *s)
 {
   if (s) {
@@ -33,7 +33,7 @@ mrc_ccontext_filename(mrc_ccontext *c, const char *s)
   return c->filename;
 }
 
-void mrc_ccontext_free(mrc_ccontext *c)
+MRC_API void mrc_ccontext_free(mrc_ccontext *c)
 {
   mrc_free(c->filename_table);
   mrc_free(c->filename);

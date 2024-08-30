@@ -1628,7 +1628,7 @@ generate_code(mrc_ccontext *c, mrc_node *node, int val)
   MRC_END_EXC(c->jmp);
 }
 
-mrc_irep *
+MRC_API mrc_irep *
 mrc_generate_code(mrc_ccontext *c, mrc_node *node)
 {
   return generate_code(c, node, VAL);
