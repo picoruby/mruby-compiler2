@@ -118,4 +118,12 @@ class DefTest < PicoRubyTest
   assert_equal(<<~RUBY, ":>")
     p(def >() end)
   RUBY
+
+  desc "multi target case"
+  assert_equal(<<~RUBY, "1\nnil\n[2, 3]")
+    def m((a, b), *c)
+      p a, b, c
+    end
+    m(1,2,3)
+  RUBY
 end

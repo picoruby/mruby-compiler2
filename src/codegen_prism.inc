@@ -541,9 +541,7 @@ gen_massignment(mrc_codegen_scope *s, mrc_node *tree, int rhs, int val)
       pop();
     }
   }
-  if (cast->rest || 0 < post || nint(tree)==PM_MULTI_TARGET_NODE) {
-                              //^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-                              // def ((a,b),c)
+  if (cast->rest || 0 < post) {
     gen_move(s, cursp(), rhs, val);
     push_n(post+1);
     pop_n(post+1);
@@ -998,6 +996,12 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id
       for (i = 0; i < ma; i++) {
         if (nint(margs[i]) == PM_MULTI_TARGET_NODE) {
           gen_massignment(s, margs[i], pos, NOVAL);
+          // Enabling the following three lines would generate VM code equivalent to mruby-compiler,
+          // but it would not work in mruby/c.
+          // It appears to work correctly even when commented out, so it is left commented out
+          //uint16_t n = ((pm_multi_target_node_t *)margs[i])->lefts.size;
+          //gen_move(s, cursp(), pos, 0);
+          //genop_3(s, OP_APOST, cursp(), n, 0);
         }
         pos++;
       }
@@ -1007,6 +1011,12 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id
       for (i = 0; i < pa; i++) {
         if (nint(pargs[i]) == PM_MULTI_TARGET_NODE) {
           gen_massignment(s, pargs[i], pos, NOVAL);
+          // Enabling the following three lines would generate VM code equivalent to mruby-compiler,
+          // but it would not work in mruby/c.
+          // It appears to work correctly even when commented out, so it is left commented out
+          //uint16_t n = ((pm_multi_target_node_t *)pargs[i])->lefts.size;
+          //gen_move(s, cursp(), pos, 0);
+          //genop_3(s, OP_APOST, cursp(), n, 0);
         }
         pos++;
       }
@@ -1292,7 +1302,6 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
 
       if (!val && nint((mrc_node *)t) == PM_ARRAY_NODE && !(t->base.flags & PM_ARRAY_NODE_FLAGS_CONTAINS_SPLAT) ) {
         /* fixed rhs */
-        n = 1;
         len = t->elements.size;
         for (int i = 0; i < len; i++) {
           codegen(s, t->elements.nodes[i], VAL);

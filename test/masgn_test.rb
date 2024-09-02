@@ -55,12 +55,11 @@ class MasgnTest < PicoRubyTest
     p post
   RUBY
 
-  # TODO
-  #desc "post should be nil"
-  #assert_equal(<<~RUBY, "1\n2\n3")
-  #  (foo, bar), baz = [1, 2], 3
-  #  p foo, bar, baz
-  #RUBY
+  desc "grouping"
+  assert_equal(<<~RUBY, "1\n2\n3")
+    (foo, bar), baz = [1, 2], 3
+    p foo, bar, baz
+  RUBY
 
   desc "complecated case"
   assert_equal(<<~'RUBY', "1\n[\"a\", \"b\", 2]")
