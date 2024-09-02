@@ -74,7 +74,7 @@ class MasgnTest < PicoRubyTest
       end
     end
     obj = C.new
-    obj.foo, obj[2] = 1, 2
+    obj.foo, obj[2] = 1, 2, 3, 4
     p obj.foo, obj.bar
   RUBY
 

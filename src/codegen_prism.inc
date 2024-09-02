@@ -98,6 +98,81 @@ gen_assignment_lvar(mrc_codegen_scope *s, int sp, mrc_sym name, int depth, int v
   }
 }
 
+static int
+gen_values(mrc_codegen_scope *s, mrc_node *tree, int val, int limit)
+{
+  CAST(arguments);
+  mrc_node *t;
+
+  int n = 0;
+  int first = 1;
+  int slimit = GEN_VAL_STACK_MAX;
+
+  if (limit == 0) limit = GEN_LIT_ARY_MAX;
+  if (cursp() >= slimit) slimit = INT16_MAX;
+
+  if (!val) {
+    for (int i = 0; i < cast->arguments.size; i++) {
+      t = (mrc_node *)cast->arguments.nodes[i];
+      codegen(s, t, NOVAL);
+      n++;
+    }
+    return n;
+  }
+
+  for (int i = 0; i < cast->arguments.size; i++) {
+    t = (mrc_node *)cast->arguments.nodes[i];
+    if (nint(t) == PM_KEYWORD_HASH_NODE) break;
+    int is_splat = nint(t) == PM_SPLAT_NODE;
+
+    if (is_splat || cursp() >= slimit) { /* flush stack */
+      pop_n(n);
+      if (first) {
+        if (n == 0) {
+          genop_1(s, OP_LOADNIL, cursp());
+        }
+        else {
+          genop_2(s, OP_ARRAY, cursp(), n);
+        }
+        push();
+        first = 0;
+        limit = GEN_LIT_ARY_MAX;
+      }
+      else if (n > 0) {
+        pop();
+        genop_2(s, OP_ARYPUSH, cursp(), n);
+        push();
+      }
+      n = 0;
+    }
+    if (is_splat) {
+      CAST3(array, ((pm_splat_node_t *)t)->expression, a);
+      codegen(s, (mrc_node *)a, val);
+      pop(); pop();
+      genop_1(s, OP_ARYCAT, cursp());
+      push();
+    }
+    else {
+      codegen(s, t, val);
+      n++;
+    }
+  }
+  if (!first) {
+    pop();
+    if (n > 0) {
+      pop_n(n);
+      genop_2(s, OP_ARYPUSH, cursp(), n);
+    }
+    return -1;                  /* variable length */
+  }
+  else if (n > limit) {
+    pop_n(n);
+    genop_2(s, OP_ARRAY, cursp(), n);
+    return -1;
+  }
+  return n;
+}
+
 static void
 gen_assignment(mrc_codegen_scope *s, mrc_node *tree, mrc_node *rhs, int sp, int val)
 {
@@ -116,6 +191,8 @@ gen_assignment(mrc_codegen_scope *s, mrc_node *tree, mrc_node *rhs, int sp, int 
     case PM_CLASS_VARIABLE_TARGET_NODE:
     case PM_MULTI_TARGET_NODE:
     case PM_REQUIRED_PARAMETER_NODE:
+    case PM_INDEX_TARGET_NODE:
+    case PM_CALL_TARGET_NODE:
     {
       if (rhs) {
         codegen(s, rhs, VAL);
@@ -201,6 +278,31 @@ gen_assignment(mrc_codegen_scope *s, mrc_node *tree, mrc_node *rhs, int sp, int 
       gen_massignment(s, tree, sp, val);
       break;
     }
+    case PM_INDEX_TARGET_NODE:
+    {
+      CAST(index_target);
+      codegen(s, cast->receiver, VAL);
+      int n = gen_values(s, (mrc_node *)cast->arguments, VAL, 14);
+      genop_2(s, OP_MOVE, cursp(), cursp() - n * 2 + 1);
+      if (n == 1) {
+        pop_n(2);
+        genop_1(s, OP_SETIDX, cursp());
+      }
+      else {
+        pop_n(n+1);
+        genop_3(s, OP_SEND, cursp(), new_sym(s, MRC_OPSYM_2(aset)), n+1);
+      }
+      break;
+    }
+    case PM_CALL_TARGET_NODE:
+    {
+      CAST(call_target);
+      codegen(s, cast->receiver, VAL);
+      genop_2(s, OP_MOVE, cursp(), sp);
+      pop();
+      genop_3(s, OP_SEND, cursp(), new_sym(s, cast->name), 1);
+      break;
+    }
     default:
     {
       codegen_error(s, "Not implemented (#2)");
@@ -265,81 +367,6 @@ scope_body(mrc_codegen_scope *s, mrc_node *tree, int val)
     return 0;
   }
   return s->irep->rlen - 1;
-}
-
-static int
-gen_values(mrc_codegen_scope *s, mrc_node *tree, int val, int limit)
-{
-  CAST(arguments);
-  mrc_node *t;
-
-  int n = 0;
-  int first = 1;
-  int slimit = GEN_VAL_STACK_MAX;
-
-  if (limit == 0) limit = GEN_LIT_ARY_MAX;
-  if (cursp() >= slimit) slimit = INT16_MAX;
-
-  if (!val) {
-    for (int i = 0; i < cast->arguments.size; i++) {
-      t = (mrc_node *)cast->arguments.nodes[i];
-      codegen(s, t, NOVAL);
-      n++;
-    }
-    return n;
-  }
-
-  for (int i = 0; i < cast->arguments.size; i++) {
-    t = (mrc_node *)cast->arguments.nodes[i];
-    if (nint(t) == PM_KEYWORD_HASH_NODE) break;
-    int is_splat = nint(t) == PM_SPLAT_NODE;
-
-    if (is_splat || cursp() >= slimit) { /* flush stack */
-      pop_n(n);
-      if (first) {
-        if (n == 0) {
-          genop_1(s, OP_LOADNIL, cursp());
-        }
-        else {
-          genop_2(s, OP_ARRAY, cursp(), n);
-        }
-        push();
-        first = 0;
-        limit = GEN_LIT_ARY_MAX;
-      }
-      else if (n > 0) {
-        pop();
-        genop_2(s, OP_ARYPUSH, cursp(), n);
-        push();
-      }
-      n = 0;
-    }
-    if (is_splat) {
-      CAST3(array, ((pm_splat_node_t *)t)->expression, a);
-      codegen(s, (mrc_node *)a, val);
-      pop(); pop();
-      genop_1(s, OP_ARYCAT, cursp());
-      push();
-    }
-    else {
-      codegen(s, t, val);
-      n++;
-    }
-  }
-  if (!first) {
-    pop();
-    if (n > 0) {
-      pop_n(n);
-      genop_2(s, OP_ARYPUSH, cursp(), n);
-    }
-    return -1;                  /* variable length */
-  }
-  else if (n > limit) {
-    pop_n(n);
-    genop_2(s, OP_ARRAY, cursp(), n);
-    return -1;
-  }
-  return n;
 }
 
 
@@ -434,6 +461,10 @@ gen_call(mrc_codegen_scope *s, mrc_node *tree, int val, int safe)
 {
   CAST(call);
   const mrc_sym sym = cast->name;
+  int save_sp = cursp();
+  if (sym == MRC_OPSYM_2(aset)) {
+    push();
+  }
   int skip = 0, n = 0, nk = 0, noop = no_optimize(s), noself = 0, blk = 0, sp_save = cursp();
 
   if (cast->receiver == NULL) {
@@ -504,7 +535,9 @@ gen_call(mrc_codegen_scope *s, mrc_node *tree, int val, int safe)
     genop_1(s, OP_EQ, cursp());
   }
   else if (!noop && sym == MRC_OPSYM_2(aset) && n == 2)  {
+    genop_2(s, OP_MOVE, save_sp, save_sp + 3);
     genop_1(s, OP_SETIDX, cursp());
+    pop();
   }
   else if (!noop && n == 0 && gen_uniop(s, sym, cursp())) {
     /* constant folding succeeded */
@@ -1239,6 +1272,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     {
       CAST(instance_variable_read);
       int sym = new_sym(s, cast->name);
+
       genop_2(s, OP_GETIV, cursp(), sym);
       if (val) push();
       break;
