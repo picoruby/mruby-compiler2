@@ -754,11 +754,11 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id
   // Create lv regs from Prism's locals
   if (parameters == NULL) {
     mrc_constant_id_list_init_capacity(s, lv, 2);
+    mrc_constant_id_list_append(s, lv, null_mark);
     for (i = 0; i < locals->size; i++) {
       /* numbered parameters */
       mrc_constant_id_list_append(s, lv, locals->ids[i]);
     }
-    mrc_constant_id_list_append(s, lv, null_mark);
     ma = mma = oa = ra = pa = ppa = ka = kd = ba = 0;
   }
   else {
