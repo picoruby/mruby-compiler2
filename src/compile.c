@@ -104,6 +104,10 @@ append_from_stdin(mrc_ccontext *c, uint8_t **source, size_t source_length)
     int ch = getchar();
     if (ch == EOF) {
       buffer[length] = '\0';
+      if (*source == NULL)
+        *source = (uint8_t *)mrc_malloc(source_length + length + 1);
+      else
+        *source = (uint8_t *)mrc_realloc(*source, source_length + length + 1);
       memccpy(*source + source_length, buffer, 1, length);
       mrc_free(buffer);
       return length;
@@ -124,21 +128,18 @@ append_from_stdin(mrc_ccontext *c, uint8_t **source, size_t source_length)
 }
 
 static ssize_t
-read_input_files(mrc_ccontext *c, char **filenames, uint8_t **source, mrc_filename_table *filename_table)
+read_input_files(mrc_ccontext *c, const char **filenames, uint8_t **source, mrc_filename_table *filename_table)
 {
   int i = 0;
   size_t pos = 0;
   ssize_t length = 0;
   ssize_t each_size;
   FILE *file;
-  char *filename = filenames[0];
+  const char *filename = filenames[0];
   while (filename) {
-    mrc_filename_table entry = { filenames[i], pos };
-    filename_table[i] = entry;
+    filename_table[i].filename = filenames[i];
+    filename_table[i].start = pos;
     if (filename[0] == '-' && filename[1] == '\0') {
-      if (*source == NULL) {
-        *source = (uint8_t *)mrc_malloc(length);
-      }
       each_size = append_from_stdin(c, source, length);
       if (each_size < 0) {
         fprintf(stderr, "compile.c: cannot read from stdin\n");
@@ -187,7 +188,7 @@ mrc_parse_file_cxt(mrc_ccontext *c, const char **filenames, uint8_t **source)
   c->filename_table = (mrc_filename_table *)mrc_malloc(sizeof(mrc_filename_table) * filecount);
   c->filename_table_length = filecount;
   c->current_filename_index = 0;
-  ssize_t length = read_input_files(c, (char **)filenames, source, c->filename_table);
+  ssize_t length = read_input_files(c, filenames, source, c->filename_table);
   if (length < 0) {
     fprintf(stderr, "cannot open files\n");
     return NULL;
@@ -215,8 +216,8 @@ mrc_parse_string_cxt(mrc_ccontext *c, const uint8_t **source, size_t length)
   pm_string_t string;
   pm_string_owned_init(&string, (uint8_t *)source, length);
   c->filename_table = (mrc_filename_table *)mrc_malloc(sizeof(mrc_filename_table));
-  mrc_filename_table entry = { "-e", length };
-  c->filename_table[0] = entry;
+  c->filename_table[0].filename = "-e";
+  c->filename_table[0].start = length;
   c->filename_table_length = 1;
   c->current_filename_index = 0;
   mrc_pm_parser_init(c->p, (uint8_t **)string.source, string.length, c);
