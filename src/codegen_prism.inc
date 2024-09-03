@@ -2760,6 +2760,22 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       if (val) push();
       break;
     }
+    case PM_RETRY_NODE:
+    {
+      const char *msg = "unexpected retry";
+      const struct loopinfo *lp = s->loop;
+      while (lp && lp->type != LOOP_RESCUE) {
+        lp = lp->prev;
+      }
+      if (!lp) {
+        raise_error(s, msg);
+      }
+      else {
+        genjmp(s, OP_JMPUW, lp->pc0);
+      }
+      if (val) push();
+      break;
+    }
     case PM_BEGIN_NODE:
     {
       CAST(begin);
