@@ -1992,6 +1992,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       CAST(singleton_class);
       int idx;
       codegen(s, cast->expression, VAL);
+      pop();
       genop_1(s, OP_SCLASS, cursp());
       if (cast->body == NULL) {
         genop_1(s, OP_LOADNIL, cursp());
