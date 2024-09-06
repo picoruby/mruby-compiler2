@@ -7,8 +7,8 @@
 #define MRC_STRINGIZE(expr) MRC_STRINGIZE0(expr)
 
 #define MRC_RELEASE_YEAR    2024
-#define MRC_RELEASE_MONTH   5
-#define MRC_RELEASE_DAY     8
+#define MRC_RELEASE_MONTH   9
+#define MRC_RELEASE_DAY     9
 #define MRC_RELEASE_DATE    MRC_STRINGIZE(MRC_RELEASE_YEAR) "-" \
                             MRC_STRINGIZE(MRC_RELEASE_MONTH) "-" \
                             MRC_STRINGIZE(MRC_RELEASE_DAY)

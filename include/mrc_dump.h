@@ -41,11 +41,7 @@ int mrc_dump_irep(mrc_ccontext *c, const mrc_irep *irep, uint8_t flags, uint8_t 
 #define RITE_BINARY_MINOR_VER          "00"
 #define RITE_BINARY_FORMAT_VER         RITE_BINARY_MAJOR_VER RITE_BINARY_MINOR_VER
 #define RITE_COMPILER_NAME             "HSMK"
-#if defined(MRC_PARSER_LRAMA)
-  #define RITE_PARSER_NAME             "Lrama-generated"
-#else
-  #define RITE_PARSER_NAME             "Prism"
-#endif
+#define RITE_PARSER_NAME               "Prism"
 #define RITE_COMPILER_VERSION          "0000"
 
 #define RITE_VM_VER                    "0300"
@@ -147,7 +143,7 @@ mrc_bin_to_uint8(const uint8_t *bin)
 static inline const char*
 mrc_description(void)
 {
-  return RITE_BINARY_MAJOR_VER "." RITE_BINARY_MINOR_VER " (" MRC_RELEASE_DATE ") " RITE_PARSER_NAME " parser";
+  return  "(" MRC_RELEASE_DATE ") Parser: " RITE_PARSER_NAME ", RITE: " RITE_BINARY_FORMAT_VER;
 }
 
 MRC_END_DECL
