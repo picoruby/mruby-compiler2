@@ -251,7 +251,6 @@ codegen_error(mrc_codegen_scope *s, const char *message)
 
 #ifndef MRC_NO_STDIO
   if (s->filename && s->lineno) {
-    //const char *filename = mrc_sym_name_len(s->c, s->filename_sym, NULL);
     const char *filename = (const char *)s->filename;
     fprintf(stderr, "%s:%d: %s\n", filename, s->lineno, message);
   }
@@ -1064,6 +1063,7 @@ search_upvar(mrc_codegen_scope *s, mrc_sym id, int *idx)
     up = up->prev;
   }
 
+  // TODO: mrc_ccontext has an upper Proc if MRC_TARGET_MRUBY
 //  if (lv < 1) lv = 1;
 //  u = s->parser->upper;
 //  while (u && !MRC_PROC_CFUNC_P(u)) {
@@ -1459,13 +1459,6 @@ dispatch_linked(mrc_codegen_scope *s, uint32_t pos)
   }
 }
 
-static mrc_sym
-nsym(mrc_parser_state *p, const uint8_t *start, size_t length)
-{
-  mrc_sym sym = pm_constant_pool_insert_constant(&p->constant_pool, start, length);
-  return sym;
-}
-
 static int
 new_litbint(mrc_codegen_scope *s, const char *p, int base, mrc_bool neg)
 {
@@ -1592,6 +1585,131 @@ catch_handler_set(mrc_codegen_scope *s, int ent, enum mrc_catch_type type, uint3
   mrc_irep_catch_handler_pack(target, e->target);
 }
 
+static void
+raise_error(mrc_codegen_scope *s, const char *msg)
+{
+  int idx = new_lit_cstr(s, msg);
+
+  genop_1(s, OP_ERR, idx);
+}
+
+static struct loopinfo*
+loop_push(mrc_codegen_scope *s, enum looptype t)
+{
+  struct loopinfo *p = (struct loopinfo*)codegen_palloc(s, sizeof(struct loopinfo));
+
+  p->type = t;
+  p->pc0 = p->pc1 = p->pc2 = JMPLINK_START;
+  p->prev = s->loop;
+  p->reg = cursp();
+  s->loop = p;
+
+  return p;
+}
+
+// Implementation in codegen_prism.inc
+static void gen_retval(mrc_codegen_scope *s, mrc_node *tree);
+
+static void
+loop_break(mrc_codegen_scope *s, mrc_node *tree)
+{
+  if (!s->loop) {
+    codegen(s, tree, NOVAL);
+    raise_error(s, "unexpected break");
+  }
+  else {
+    struct loopinfo *loop;
+
+    loop = s->loop;
+    if (tree) {
+      if (loop->reg < 0) {
+        codegen(s, tree, NOVAL);
+      }
+      else {
+        gen_retval(s, tree);
+      }
+    }
+    while (loop) {
+      if (loop->type == LOOP_BEGIN) {
+        loop = loop->prev;
+      }
+      else if (loop->type == LOOP_RESCUE) {
+        loop = loop->prev;
+      }
+      else{
+        break;
+      }
+    }
+    if (!loop) {
+      raise_error(s, "unexpected break");
+      return;
+    }
+
+    if (loop->type == LOOP_NORMAL) {
+      int tmp;
+
+      if (loop->reg >= 0) {
+        if (tree) {
+          gen_move(s, loop->reg, cursp(), 0);
+        }
+        else {
+          genop_1(s, OP_LOADNIL, loop->reg);
+        }
+      }
+      tmp = genjmp(s, OP_JMPUW, loop->pc2);
+      loop->pc2 = tmp;
+    }
+    else {
+      if (!tree) {
+        genop_1(s, OP_LOADNIL, cursp());
+      }
+      gen_return(s, OP_BREAK, cursp());
+    }
+  }
+}
+
+static void
+loop_pop(mrc_codegen_scope *s, int val)
+{
+  if (val) {
+    genop_1(s, OP_LOADNIL, cursp());
+  }
+  dispatch_linked(s, s->loop->pc2);
+  s->loop = s->loop->prev;
+  if (val) push();
+}
+
+static void
+gen_blkmove(mrc_codegen_scope *s, uint16_t ainfo, int lv)
+{
+  int m1 = (ainfo>>7)&0x3f;
+  int r  = (ainfo>>6)&0x1;
+  int m2 = (ainfo>>1)&0x1f;
+  int kd = (ainfo)&0x1;
+  int off = m1+r+m2+kd+1;
+  if (lv == 0) {
+    gen_move(s, cursp(), off, 0);
+  }
+  else {
+    genop_3(s, OP_GETUPVAR, cursp(), off, lv);
+  }
+  push();
+}
+
+static void
+gen_setxv(mrc_codegen_scope *s, uint8_t op, uint16_t dst, mrc_sym sym, int val)
+{
+  int idx = new_sym(s, sym);
+  if (!val && !no_peephole(s)) {
+    struct mrc_insn_data data = mrc_last_insn(s);
+    if (data.insn == OP_MOVE && data.a == dst) {
+      dst = data.b;
+      rewind_pc(s);
+    }
+  }
+  genop_2(s, op, dst, idx);
+}
+
 static mrc_irep *
 generate_code(mrc_ccontext *c, mrc_node *node, int val)
 {
@@ -1607,7 +1725,7 @@ generate_code(mrc_ccontext *c, mrc_node *node, int val)
 
   MRC_TRY(c->jmp) {
     codegen(scope, node, val);
-    // TODO
+    // TODO: mrc_ccontext has an upper Proc if MRC_TARGET_MRUBY
     //proc->c = NULL;
     //if (mrb->c->cibase && mrb->c->cibase->proc == proc->upper) {
     //  proc->upper = NULL;

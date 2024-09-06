@@ -6,18 +6,11 @@
 
 static void gen_massignment(mrc_codegen_scope *s, mrc_node *tree, int rhs, int val);
 
-static void
-gen_setxv(mrc_codegen_scope *s, uint8_t op, uint16_t dst, mrc_sym sym, int val)
+static mrc_sym
+nsym(mrc_parser_state *p, const uint8_t *start, size_t length)
 {
-  int idx = new_sym(s, sym);
-  if (!val && !no_peephole(s)) {
-    struct mrc_insn_data data = mrc_last_insn(s);
-    if (data.insn == OP_MOVE && data.a == dst) {
-      dst = data.b;
-      rewind_pc(s);
-    }
-  }
-  genop_2(s, op, dst, idx);
+  mrc_sym sym = pm_constant_pool_insert_constant(&p->constant_pool, start, length);
+  return sym;
 }
 
 static mrc_bool
@@ -44,23 +37,6 @@ false_always(mrc_node *tree)
   default:
     return FALSE;
   }
-}
-
-static void
-gen_blkmove(mrc_codegen_scope *s, uint16_t ainfo, int lv)
-{
-  int m1 = (ainfo>>7)&0x3f;
-  int r  = (ainfo>>6)&0x1;
-  int m2 = (ainfo>>1)&0x1f;
-  int kd = (ainfo)&0x1;
-  int off = m1+r+m2+kd+1;
-  if (lv == 0) {
-    gen_move(s, cursp(), off, 0);
-  }
-  else {
-    genop_3(s, OP_GETUPVAR, cursp(), off, lv);
-  }
-  push();
 }
 
 static void
@@ -589,97 +565,6 @@ gen_massignment(mrc_codegen_scope *s, mrc_node *tree, int rhs, int val)
       gen_move(s, cursp(), rhs, 0);
     }
   }
-}
-
-static struct loopinfo*
-loop_push(mrc_codegen_scope *s, enum looptype t)
-{
-  struct loopinfo *p = (struct loopinfo*)codegen_palloc(s, sizeof(struct loopinfo));
-
-  p->type = t;
-  p->pc0 = p->pc1 = p->pc2 = JMPLINK_START;
-  p->prev = s->loop;
-  p->reg = cursp();
-  s->loop = p;
-
-  return p;
-}
-
-static void
-raise_error(mrc_codegen_scope *s, const char *msg)
-{
-  int idx = new_lit_cstr(s, msg);
-
-  genop_1(s, OP_ERR, idx);
-}
-
-static void
-loop_break(mrc_codegen_scope *s, mrc_node *tree)
-{
-  if (!s->loop) {
-    codegen(s, tree, NOVAL);
-    raise_error(s, "unexpected break");
-  }
-  else {
-    struct loopinfo *loop;
-
-    loop = s->loop;
-    if (tree) {
-      if (loop->reg < 0) {
-        codegen(s, tree, NOVAL);
-      }
-      else {
-        gen_retval(s, tree);
-      }
-    }
-    while (loop) {
-      if (loop->type == LOOP_BEGIN) {
-        loop = loop->prev;
-      }
-      else if (loop->type == LOOP_RESCUE) {
-        loop = loop->prev;
-      }
-      else{
-        break;
-      }
-    }
-    if (!loop) {
-      raise_error(s, "unexpected break");
-      return;
-    }
-
-    if (loop->type == LOOP_NORMAL) {
-      int tmp;
-
-      if (loop->reg >= 0) {
-        if (tree) {
-          gen_move(s, loop->reg, cursp(), 0);
-        }
-        else {
-          genop_1(s, OP_LOADNIL, loop->reg);
-        }
-      }
-      tmp = genjmp(s, OP_JMPUW, loop->pc2);
-      loop->pc2 = tmp;
-    }
-    else {
-      if (!tree) {
-        genop_1(s, OP_LOADNIL, cursp());
-      }
-      gen_return(s, OP_BREAK, cursp());
-    }
-  }
-}
-
-static void
-loop_pop(mrc_codegen_scope *s, int val)
-{
-  if (val) {
-    genop_1(s, OP_LOADNIL, cursp());
-  }
-  dispatch_linked(s, s->loop->pc2);
-  s->loop = s->loop->prev;
-  if (val) push();
 }
 
 static void
@@ -1248,7 +1133,10 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
   }
 
   int nt = nint(tree);
-//  s->lineno = tree->lineno;
+
+  //TODO lineno
+  // s->lineno = tree->lineno;
+
   switch (nt) {
     case PM_PROGRAM_NODE: {
       scope_body(s, tree, val);
@@ -1827,7 +1715,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       break;
     }
     case PM_ARRAY_NODE:
-    case PM_ARGUMENTS_NODE: /* ???: Multi args in return */
+    case PM_ARGUMENTS_NODE: /* TODO: Confirm when multi args in return */
     {
       int n;
       n = gen_values(s, tree, val, 0);
@@ -2087,8 +1975,6 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       push();
       codegen(s, (mrc_node *)cast->parts.nodes[0], VAL);
       for (i = 1; i < cast->parts.size; i++) {
-        //if (nint(cast->parts.node[i]) == PM_X_STRING_NODE) {
-        //}
         codegen(s, (mrc_node *)cast->parts.nodes[i], VAL);
         pop(); pop();
         genop_1(s, OP_STRCAT, cursp());

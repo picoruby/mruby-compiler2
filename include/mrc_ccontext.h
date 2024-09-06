@@ -58,6 +58,9 @@ typedef struct mrc_ccontext {
   uint16_t filename_table_length;
   uint16_t current_filename_index;
 #endif
+#if defined(MRC_TARGET_MRUBY)
+  const struct RProc *upper;
+#endif
 } mrc_ccontext;                 /* compiler context */
 
 mrc_ccontext *mrc_ccontext_new(mrb_state *mrb);
