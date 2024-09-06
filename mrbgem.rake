@@ -25,7 +25,6 @@ MRuby::Gem::Specification.new('mruby-compiler2') do |spec|
     cc.defines << "PRISM_BUILD_MINIMAL"
   end
 
-  objs.delete_if {|obj| obj =~ /lrama_helper/}
   prism_templates_dir = "#{lib_dir}/prism/templates"
   cc.include_paths << "#{prism_dir}/include"
 
