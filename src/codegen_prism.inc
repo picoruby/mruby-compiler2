@@ -791,6 +791,10 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id
       }
     }
   }
+  if (ba == 0) {
+    // Insert implicit block parameter before locals
+    mrc_constant_id_list_append(s, lv, null_mark);
+  }
   if (locals) {
     for (i = 0; i < locals->size; i++) {
       if (!pm_constant_id_list_includes(lv, locals->ids[i])) {
