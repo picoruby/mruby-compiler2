@@ -333,6 +333,10 @@ scope_body(mrc_codegen_scope *s, mrc_node *tree, int val)
   mrc_codegen_scope *scope = scope_new(s->c, s, nlv);
 
   codegen(scope, statements, VAL);
+
+  // For PICOIRB
+  s->c->scope_sp = scope->sp - 1;
+
   gen_return(scope, OP_RETURN, scope->sp-1);
   if (!s->iseq) {
     genop_0(scope, OP_STOP);
@@ -972,22 +976,21 @@ gen_lvar(mrc_codegen_scope *s, mrc_sym name, int depth)
 static void
 gen_binary_operator(mrc_codegen_scope *s, mrc_sym binary_operator)
 {
-  switch (binary_operator) {
-    case MRC_OPSYM_2(add):
-      gen_addsub(s, OP_ADD, cursp());
-      break;
-    case MRC_OPSYM_2(sub):
-      gen_addsub(s, OP_SUB, cursp());
-      break;
-    case MRC_OPSYM_2(mul):
-      genop_1(s, OP_MUL, cursp());
-      break;
-    case MRC_OPSYM_2(div):
-      genop_1(s, OP_DIV, cursp());
-      break;
-    default:
-      int idx = new_sym(s, binary_operator);
-      genop_3(s, OP_SEND, cursp(), idx, 1);
+  if (binary_operator == MRC_OPSYM_2(add)) {
+    gen_addsub(s, OP_ADD, cursp());
+  }
+  else if (binary_operator == MRC_OPSYM_2(sub)) {
+    gen_addsub(s, OP_SUB, cursp());
+  }
+  else if (binary_operator == MRC_OPSYM_2(mul)) {
+    genop_1(s, OP_MUL, cursp());
+  }
+  else if (binary_operator == MRC_OPSYM_2(div)) {
+    genop_1(s, OP_DIV, cursp());
+  }
+  else {
+    int idx = new_sym(s, binary_operator);
+    genop_3(s, OP_SEND, cursp(), idx, 1);
   }
 }
 

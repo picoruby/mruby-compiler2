@@ -18,31 +18,22 @@ static mrc_sym_entry symTable[] = {
   {0, NULL} // sentinel
 };
 
-mrc_sym
-mrc_find_presym(const uint8_t *lit, size_t len)
+static uint32_t offset = 0;
+
+mrc_sym mrc_sym_offset(mrc_sym sym)
 {
-  for (int i = 0; ; i++) {
-    if (symTable[i].lit == NULL) {
-      return 0;
-    }
-    if (strlen(symTable[i].lit) == len && memcmp(symTable[i].lit, lit, len) == 0) {
-      return symTable[i].index;
-    }
-  }
-  return 0; //should not happen. Todo: error handling
+  return sym + offset;
 }
 
 void
 mrc_init_presym(pm_constant_pool_t *pool)
 {
-#ifdef PICORUBY_DEBUG
-  pm_constant_id_t id;
-#endif
+  offset = pool->size;
   for (int i = 0; ; i++) {
     if (symTable[i].lit == NULL) { break; }
 #ifdef PICORUBY_DEBUG
-    id = pm_constant_pool_insert_constant(pool, (const uint8_t *)symTable[i].lit, strlen(symTable[i].lit));
-    mrc_assert(id == symTable[i].index);
+    pm_constant_id_t id = pm_constant_pool_insert_constant(pool, (const uint8_t *)symTable[i].lit, strlen(symTable[i].lit));
+    mrc_assert(id == symTable[i].index + offset);
 #else
     pm_constant_pool_insert_constant(pool, (const uint8_t *)symTable[i].lit, strlen(symTable[i].lit));
 #endif

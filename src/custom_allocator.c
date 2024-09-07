@@ -1,4 +1,4 @@
-#ifdef MRC_TARGET_PICORUBY
+#ifdef MRC_CUSTOM_ALLOC
 
 #include "alloc.h"
 #include <string.h>
@@ -36,4 +36,4 @@ picorb_realloc(void *ptr, unsigned int size)
   }
 }
 
-#endif // MRC_TARGET_PICORUBY
+#endif // MRC_CUSTOM_ALLOC

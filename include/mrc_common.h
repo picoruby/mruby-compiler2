@@ -14,7 +14,7 @@
                             MRC_STRINGIZE(MRC_RELEASE_DAY)
 
 #ifdef MRC_CUSTOM_ALLOC
-  #include <mrc_custom_alloc.h>
+  #include <prism_xallocator.h>
 #else
   #include <stdlib.h>
   #define mrc_malloc   malloc

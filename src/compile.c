@@ -39,7 +39,6 @@ mrc_load_exec(mrc_ccontext *c, mrc_node *ast)
       pm_buffer_t buffer = { 0 };
 #if defined(MRC_DUMP_PRETTY)
       pm_prettyprint(&buffer, c->p, ast);
-      printf("%s\n", buffer.value);
 #endif
       pm_buffer_free(&buffer);
     }
@@ -77,7 +76,7 @@ mrc_pm_parser_init(mrc_parser_state *p, uint8_t **source, size_t size, mrc_ccont
   pm_lex_callback_t *cb = (pm_lex_callback_t *)mrc_malloc(sizeof(pm_lex_callback_t));
   cb->data = c;
   cb->callback = partial_hook;
-  pm_parser_init(p, *source, size, NULL);
+  pm_parser_init(p, *source, size, c->options);
   p->lex_callback = cb;
   mrc_init_presym(&p->constant_pool);
   if (c->filename_table) {
@@ -179,6 +178,45 @@ read_input_files(mrc_ccontext *c, const char **filenames, uint8_t **source, mrc_
 }
 
 static mrc_node *
+mrc_pm_parse(mrc_ccontext *c)
+{
+  mrc_node *node = pm_parse(c->p);
+
+  // save top-level locals for IRB
+  pm_program_node_t *program = (pm_program_node_t *)node;
+  uint32_t nlocals = program->locals.size;
+  pm_options_t *options = (pm_options_t *)mrc_malloc(sizeof(pm_options_t));
+  memset(options, 0, sizeof(pm_options_t));
+  pm_string_t *encoding = &options->encoding;
+  pm_string_constant_init(encoding, "UTF-8", 5);
+  pm_options_scopes_init(options, 1);
+  pm_options_scope_t *options_scope = &options->scopes[0];
+  pm_options_scope_init(options_scope, nlocals);
+  pm_constant_id_t id;
+  pm_constant_t *local;
+  pm_string_t *scope_local;
+  char *allocated;
+  for (int i = 0; i < nlocals; i++) {
+    scope_local = &options_scope->locals[i];
+    id = program->locals.ids[i];
+    local = pm_constant_pool_id_to_constant(&c->p->constant_pool, id);
+    allocated = (char *)mrc_malloc(local->length);
+    memcpy(allocated, local->start, local->length);
+    pm_string_constant_init(scope_local, (const char *)allocated, local->length);
+  }
+  if (c->options) {
+    for (int i = 0; i < c->options->scopes[0].locals_count; i++) {
+      mrc_free((void *)c->options->scopes[0].locals[i].source);
+    }
+    mrc_free(c->options);
+  }
+  c->options = options;
+
+  return node;
+}
+
+
+static mrc_node *
 mrc_parse_file_cxt(mrc_ccontext *c, const char **filenames, uint8_t **source)
 {
   size_t filecount = 0;
@@ -194,7 +232,7 @@ mrc_parse_file_cxt(mrc_ccontext *c, const char **filenames, uint8_t **source)
     return NULL;
   }
   mrc_pm_parser_init(c->p, source, length, c);
-  return pm_parse(c->p);
+  return mrc_pm_parse(c);
 }
 
 MRC_API mrc_irep *
@@ -217,11 +255,11 @@ mrc_parse_string_cxt(mrc_ccontext *c, const uint8_t **source, size_t length)
   pm_string_owned_init(&string, (uint8_t *)source, length);
   c->filename_table = (mrc_filename_table *)mrc_malloc(sizeof(mrc_filename_table));
   c->filename_table[0].filename = "-e";
-  c->filename_table[0].start = length;
+  c->filename_table[0].start = 0;
   c->filename_table_length = 1;
   c->current_filename_index = 0;
   mrc_pm_parser_init(c->p, (uint8_t **)string.source, string.length, c);
-  return pm_parse(c->p);
+  return mrc_pm_parse(c);
 }
 
 MRC_API mrc_irep *
@@ -229,6 +267,5 @@ mrc_load_string_cxt(mrc_ccontext *c, const uint8_t **source, size_t length)
 {
   mrc_node *root = mrc_parse_string_cxt(c, source, length);
   mrc_irep *irep = mrc_load_exec(c, root);
-  pm_node_destroy(c->p, root);
   return irep;
 }

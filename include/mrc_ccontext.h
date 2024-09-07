@@ -46,10 +46,18 @@ typedef struct mrc_ccontext {
   mrc_bool keep_lv:1;
   mrc_bool no_optimize:1;
   mrc_bool no_ext_ops:1;
+#if defined(MRC_TARGET_MRUBY)
   const struct RProc *upper;
+#endif
 
+  // TODO
   //size_t parser_nerr;
   mrc_diagnostic_list *diagnostic_list;
+
+  // For PICOIRB
+  uint16_t scope_sp;
+
+  pm_options_t *options;
 
 #ifndef MRC_NO_STDIO
   mrc_pool *pool; // for codedump
@@ -57,9 +65,6 @@ typedef struct mrc_ccontext {
   mrc_filename_table *filename_table;
   uint16_t filename_table_length;
   uint16_t current_filename_index;
-#endif
-#if defined(MRC_TARGET_MRUBY)
-  const struct RProc *upper;
 #endif
 } mrc_ccontext;                 /* compiler context */
 

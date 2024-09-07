@@ -1,5 +1,6 @@
 
 #include <string.h>
+#include "../include/mrc_common.h"
 #include "../include/mrc_irep.h"
 #include "../include/mrc_ccontext.h"
 #include "../include/mrc_parser_util.h"
@@ -9,6 +10,13 @@
 #include "../include/mrc_pool.h"
 #include "../include/mrc_dump.h"
 #include "../include/mrc_debug.h"
+
+#ifdef MRBC_REQUIRE_32BIT_ALIGNMENT
+#include <mrubyc.h>
+#define printf(...) console_printf(__VA_ARGS__)
+#else
+#define printf(n) ((void)0)
+#endif
 
 #if defined(MRC_INT64)
   typedef int64_t mrc_int;
@@ -1751,6 +1759,7 @@ mrc_generate_code(mrc_ccontext *c, mrc_node *node)
 {
   return generate_code(c, node, VAL);
 }
+
 #define CALL_MAXARGS 15
 #define GEN_LIT_ARY_MAX 64
 #define GEN_VAL_STACK_MAX 99

@@ -11,5 +11,10 @@ void  picorb_free(void *ptr);
 #define xrealloc     picorb_realloc
 #define xfree        picorb_free
 
+#define mrc_malloc   picorb_alloc
+#define mrc_calloc   picorb_calloc
+#define mrc_realloc  picorb_realloc
+#define mrc_free     picorb_free
+
 #endif
 

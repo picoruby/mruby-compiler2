@@ -6,6 +6,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include "../include/mrc_common.h"
 #include "../include/mrc_ccontext.h"
 #include "../include/mrc_irep.h"
 #include "../include/mrc_dump.h"
@@ -14,7 +15,7 @@
 #ifndef MRC_NO_STDIO
 
 #ifndef MRC_NO_FLOAT
-#include <../include/endian.h>
+//#include <../include/endian.h>
 #define MRC_FLOAT_FMT "%.17g"
 #endif
 

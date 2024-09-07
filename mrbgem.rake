@@ -19,6 +19,10 @@ MRuby::Gem::Specification.new('mruby-compiler2') do |spec|
     cc.defines << "MRC_DEBUG"
   end
 
+  if cc.defines.flatten.include? "MRC_CUSTOM_ALLOC"
+    cc.defines << "PRISM_XALLOCATOR"
+  end
+
   if cc.defines.flatten.include? "MRC_DEBUG"
     cc.defines << "MRC_DUMP_PRETTY"
   else

@@ -13,12 +13,12 @@ enum mrc_opsym {
 #undef MRC_SYM_2
 };
 
-#define MRC_OPSYM_2(name) MRC_OPSYM_2__##name
-#define MRC_SYM_1(name)   MRC_SYM_1__##name
-#define MRC_SYM_2(name)   MRC_SYM_2__##name
+#define MRC_OPSYM_2(name) mrc_sym_offset(MRC_OPSYM_2__##name)
+#define MRC_SYM_1(name)   mrc_sym_offset(MRC_SYM_1__##name)
+#define MRC_SYM_2(name)   mrc_sym_offset(MRC_SYM_2__##name)
 
-mrc_sym mrc_find_presym(const uint8_t *name, size_t len);
 void mrc_init_presym(pm_constant_pool_t *pool);
+mrc_sym mrc_sym_offset(mrc_sym sym);
 
 MRC_END_DECL
 

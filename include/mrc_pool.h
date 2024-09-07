@@ -1,6 +1,7 @@
 #ifndef MRC_POOL_H
 #define MRC_POOL_H
 
+#include <stddef.h>
 #include "mrc_ccontext.h"
 
 MRC_BEGIN_DECL
