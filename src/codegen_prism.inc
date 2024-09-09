@@ -1757,6 +1757,12 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       }
       break;
     }
+    case PM_SPLAT_NODE:
+    {
+      CAST(splat);
+      codegen(s, (mrc_node *)cast->expression, val);
+      break;
+    }
     case PM_STRING_NODE:
     {
       if (val) {
