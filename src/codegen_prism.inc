@@ -562,10 +562,8 @@ gen_massignment(mrc_codegen_scope *s, mrc_node *tree, int rhs, int val)
     if (cast->rest) { /* rest */
       gen_assignment(s, ((pm_splat_node_t *)cast->rest)->expression, NULL, cursp(), NOVAL);
     }
-    for (int i = 1; i <= post; i++) {
-      if (cast->rights.nodes[i]) { // TODO: check if this is correct
-        gen_assignment(s, cast->rights.nodes[i], NULL, cursp()+i, NOVAL);
-      }
+    for (int i = 0; i < post; i++) {
+      gen_assignment(s, cast->rights.nodes[i], NULL, cursp()+i+1, NOVAL);
     }
     if (val) {
       gen_move(s, cursp(), rhs, 0);
