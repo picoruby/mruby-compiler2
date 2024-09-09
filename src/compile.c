@@ -30,17 +30,19 @@ mrc_load_exec(mrc_ccontext *c, mrc_node *ast)
       w = (pm_diagnostic_t *)w->node.next;
     }
   }
+#if defined(MRC_DUMP_PRETTY) && !defined(MRC_NO_STDIO)
+  if (c->dump_result) {
+    pm_buffer_t buffer = { 0 };
+    pm_prettyprint(&buffer, c->p, ast);
+    fprintf(stderr, "%s\n", buffer.value);
+    pm_buffer_free(&buffer);
+  }
+#endif
   irep = mrc_generate_code(c, ast);
   if (c->capture_errors) {
     return NULL;
   }
   if (c->dump_result) {
-#if defined(MRC_DUMP_PRETTY) && !defined(MRC_NO_STDIO)
-    pm_buffer_t buffer = { 0 };
-    pm_prettyprint(&buffer, c->p, ast);
-    fprintf(stderr, "%s\n", buffer.value);
-    pm_buffer_free(&buffer);
-#endif
     mrc_codedump_all(c, irep);
   }
 
