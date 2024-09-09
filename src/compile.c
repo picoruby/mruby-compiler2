@@ -35,13 +35,12 @@ mrc_load_exec(mrc_ccontext *c, mrc_node *ast)
     return NULL;
   }
   if (c->dump_result) {
-    {
-      pm_buffer_t buffer = { 0 };
-#if defined(MRC_DUMP_PRETTY)
-      pm_prettyprint(&buffer, c->p, ast);
+#if defined(MRC_DUMP_PRETTY) && !defined(MRC_NO_STDIO)
+    pm_buffer_t buffer = { 0 };
+    pm_prettyprint(&buffer, c->p, ast);
+    fprintf(stderr, "%s\n", buffer.value);
+    pm_buffer_free(&buffer);
 #endif
-      pm_buffer_free(&buffer);
-    }
     mrc_codedump_all(c, irep);
   }
 
