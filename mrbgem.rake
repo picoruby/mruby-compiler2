@@ -36,7 +36,7 @@ MRuby::Gem::Specification.new('mruby-compiler2') do |spec|
     rm_rf prism_dir
   end
 
-  next if Rake.application.top_level_tasks.first == "deep_clean"
+  next if %w(clean deep_clean).include?(Rake.application.top_level_tasks.first)
 
   directory prism_dir do
     FileUtils.cd lib_dir do
