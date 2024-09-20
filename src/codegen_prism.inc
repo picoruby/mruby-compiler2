@@ -1087,8 +1087,8 @@ gen_rescue(mrc_codegen_scope *s, mrc_node *tree, uint32_t *pos1, int *exc, uint3
   *extend = tmp;
   push();
   /* rest of rescue(s) */
-  if (rescue->consequent) {
-    gen_rescue(s, (mrc_node *)rescue->consequent, pos1, exc, extend, val);
+  if (rescue->subsequent) {
+    gen_rescue(s, (mrc_node *)rescue->subsequent, pos1, exc, extend, val);
   }
 }
 
@@ -2073,24 +2073,24 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     case PM_IF_NODE:
     case PM_UNLESS_NODE:
     {
-      mrc_node *predicate, *consequent, *statements;
+      mrc_node *predicate, *subsequent, *statements;
       if (nt == PM_IF_NODE) {
         CAST(if);
         predicate = (mrc_node *)cast->predicate;
-        consequent = (mrc_node *)cast->consequent;
+        subsequent = (mrc_node *)cast->subsequent;
         statements = (mrc_node *)cast->statements;
       }
       else { /* unless */
         CAST(unless);
         predicate = (mrc_node *)cast->predicate;
-        consequent = (mrc_node *)cast->statements; /* opposite */
-        statements = (mrc_node *)cast->consequent; /* opposite */
+        subsequent = (mrc_node *)cast->statements; /* opposite */
+        statements = (mrc_node *)cast->else_clause; /* opposite */
       }
       uint32_t pos1, pos2;
       mrc_bool nil_p = FALSE;
 
       if (!predicate) {
-        codegen(s, consequent, val);
+        codegen(s, subsequent, val);
         goto exit;
       }
       if (true_always(predicate)) {
@@ -2098,7 +2098,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
         goto exit;
       }
       if (false_always(predicate)) {
-        codegen(s, consequent, val);
+        codegen(s, subsequent, val);
         goto exit;
       }
       if (nint(predicate) == PM_CALL_NODE) {
@@ -2125,10 +2125,10 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
         }
         codegen(s, statements, val);
         if (val) pop();
-        if (consequent || val) {
+        if (subsequent || val) {
           pos2 = genjmp_0(s, OP_JMP);
           dispatch(s, pos1);
-          codegen(s, consequent, val);
+          codegen(s, subsequent, val);
           dispatch(s, pos2);
         }
         else {
@@ -2136,14 +2136,14 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
         }
       }
       else {                   /* empty then-part */
-        if (consequent) {
+        if (subsequent) {
           if (nil_p) {
             pos1 = genjmp2_0(s, OP_JMPNIL, cursp(), val);
           }
           else {
             pos1 = genjmp2_0(s, OP_JMPIF, cursp(), val);
           }
-          codegen(s, consequent, val);
+          codegen(s, subsequent, val);
           dispatch(s, pos1);
         }
         else if (val && !nil_p) {
@@ -2300,8 +2300,8 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
         pos3 = tmp;
         dispatch(s, pos1);
       }
-      if (cast->consequent) {
-        codegen(s, (mrc_node *)cast->consequent, val);
+      if (cast->else_clause) {
+        codegen(s, (mrc_node *)cast->else_clause, val);
         if (val) pop();
         tmp = genjmp(s, OP_JMP, pos3);
         pos3 = tmp;
