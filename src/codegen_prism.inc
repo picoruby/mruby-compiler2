@@ -1478,7 +1478,11 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
             op_jmp = OP_JMPNOT;
             break;
           }
-        default: codegen_error(s, "Not implemented (index_operator|or|and_write)");
+        default:
+          {
+            codegen_error(s, "Not implemented (index_operator|or|and_write)");
+            return;
+          }
       }
       int base, nargs = 0;
       int idx, callargs = -1, vsp = -1;
