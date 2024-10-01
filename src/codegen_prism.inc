@@ -918,7 +918,6 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id
     /* argument destructuring */
     if (margs) {
       pos = 1;
-      push();
       for (i = 0; i < ma; i++) {
         if (nint(margs[i]) == PM_MULTI_TARGET_NODE) {
           gen_massignment(s, margs[i], pos, NOVAL);
