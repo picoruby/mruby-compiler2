@@ -1615,26 +1615,28 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
           break;
         case PM_CLASS_VARIABLE_OR_WRITE_NODE:
         case PM_CONSTANT_OR_WRITE_NODE:
-          int catch_entry, begin, end;
-          int noexc, exc;
-          struct loopinfo *lp;
+          {
+            int catch_entry, begin, end;
+            int noexc, exc;
+            struct loopinfo *lp;
 
-          lp = loop_push(s, LOOP_BEGIN);
-          lp->pc0 = new_label(s);
-          catch_entry = catch_handler_new(s);
-          begin = s->pc;
-          exc = cursp();
-          genop_2(s, op_get, cursp(), new_sym(s, name));
-          push();
-          end = s->pc;
-          noexc = genjmp_0(s, OP_JMP);
-          lp->type = LOOP_RESCUE;
-          catch_handler_set(s, catch_entry, MRC_CATCH_RESCUE, begin, end, s->pc);
-          genop_1(s, OP_EXCEPT, exc);
-          genop_1(s, OP_LOADF, exc);
-          dispatch(s, noexc);
-          loop_pop(s, NOVAL);
-          break;
+            lp = loop_push(s, LOOP_BEGIN);
+            lp->pc0 = new_label(s);
+            catch_entry = catch_handler_new(s);
+            begin = s->pc;
+            exc = cursp();
+            genop_2(s, op_get, cursp(), new_sym(s, name));
+            push();
+            end = s->pc;
+            noexc = genjmp_0(s, OP_JMP);
+            lp->type = LOOP_RESCUE;
+            catch_handler_set(s, catch_entry, MRC_CATCH_RESCUE, begin, end, s->pc);
+            genop_1(s, OP_EXCEPT, exc);
+            genop_1(s, OP_LOADF, exc);
+            dispatch(s, noexc);
+            loop_pop(s, NOVAL);
+            break;
+          }
         default: codegen_error(s, "Not implemented (or_write_node)");
       }
       uint32_t pos;
@@ -1691,16 +1693,18 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
           }
           else {
           overflow:
-            pm_buffer_t buf = {0};
-            pm_integer_string(&buf, &cast->value);
-            buf.value[buf.length] = '\0';
-            if (cast->value.negative) {
-              memmove(buf.value, buf.value+1, buf.length);
-              buf.length--;
+            {
+              pm_buffer_t buf = {0};
+              pm_integer_string(&buf, &cast->value);
+              buf.value[buf.length] = '\0';
+              if (cast->value.negative) {
+                memmove(buf.value, buf.value+1, buf.length);
+                buf.length--;
+              }
+              int off = new_litbint(s, buf.value, 10, cast->value.negative);
+              genop_2(s, OP_LOADL, cursp(), off);
+              pm_buffer_free(&buf);
             }
-            int off = new_litbint(s, buf.value, 10, cast->value.negative);
-            genop_2(s, OP_LOADL, cursp(), off);
-            pm_buffer_free(&buf);
           }
         }
         push();
@@ -2380,13 +2384,17 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       mrc_node *cpath = (mrc_node *)cast->constant_path;
       switch (nint(cpath)) {
         case PM_CONSTANT_READ_NODE:
-          genop_1(s, OP_LOADNIL, cursp());
-          push();
-          break;
+          {
+            genop_1(s, OP_LOADNIL, cursp());
+            push();
+            break;
+          }
         case PM_CONSTANT_PATH_NODE:
-          mrc_node *parent = ((pm_constant_path_node_t *)cpath)->parent;
-          codegen(s, parent, VAL);
-          break;
+          {
+            mrc_node *parent = ((pm_constant_path_node_t *)cpath)->parent;
+            codegen(s, parent, VAL);
+            break;
+          }
         default:
           codegen_error(s, "Invalid constant path node");
       }
@@ -2419,20 +2427,22 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       CAST(module);
       switch nint(cast->constant_path) {
         case PM_CONSTANT_PATH_NODE:
-          CAST3(constant_path, cast->constant_path, cpath);
-          // TODO: they should be wrong
-          if (cpath->parent == (mrc_node *)1) {
-            genop_1(s, OP_LOADNIL, cursp());
-            push();
+          {
+            CAST3(constant_path, cast->constant_path, cpath);
+            // TODO: they should be wrong
+            if (cpath->parent == (mrc_node *)1) {
+              genop_1(s, OP_LOADNIL, cursp());
+              push();
+            }
+            else if (cpath->parent == (mrc_node *)0) {
+              genop_1(s, OP_OCLASS, cursp());
+              push();
+            }
+            else {
+              codegen(s, cpath->parent, VAL);
+            }
+            break;
           }
-          else if (cpath->parent == (mrc_node *)0) {
-            genop_1(s, OP_OCLASS, cursp());
-            push();
-          }
-          else {
-            codegen(s, cpath->parent, VAL);
-          }
-          break;
         case PM_CONSTANT_READ_NODE:
           // CAST3(constant_read, cast->constant_path, read);
           genop_1(s, OP_LOADNIL, cursp());
