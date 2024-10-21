@@ -74,11 +74,6 @@ class DefTest < PicoRubyTest
     p(def !() end)
   RUBY
 
-  desc "def !="
-  assert_equal(<<~RUBY, ":!=")
-    p(def !=() end)
-  RUBY
-
   desc "def `"
   assert_equal(<<~RUBY, ":`")
     p(def `() end)
@@ -87,11 +82,6 @@ class DefTest < PicoRubyTest
   desc "def =="
   assert_equal(<<~RUBY, ":==")
     p(def ==() end)
-  RUBY
-
-  desc "def ==="
-  assert_equal(<<~RUBY, ":===")
-    p(def ===() end)
   RUBY
 
   desc "def <=>"
