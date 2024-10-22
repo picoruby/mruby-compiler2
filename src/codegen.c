@@ -19,8 +19,6 @@
 #endif
 
 #if defined(MRC_INT64)
-  typedef int64_t mrc_int;
-  typedef uint64_t mrc_uint;
 # define MRC_INT_BIT 64
 # define MRC_INT_MIN INT64_MIN
 # define MRC_INT_MAX INT64_MAX

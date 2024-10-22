@@ -22,10 +22,9 @@ typedef struct mrc_diagnostic_list {
 } mrc_diagnostic_list;
 
 struct mrc_ccontext;
-typedef struct mrc_ccontext mrc_ccontext;
 
-void mrc_diagnostic_list_append(mrc_ccontext *c, const uint8_t *location_start, const char *message, mrc_diagnostic_code code);
-void mrc_diagnostic_list_free(mrc_ccontext *c);
+void mrc_diagnostic_list_append(struct mrc_ccontext *c, const uint8_t *location_start, const char *message, mrc_diagnostic_code code);
+void mrc_diagnostic_list_free(struct mrc_ccontext *c);
 
 MRC_END_DECL
 

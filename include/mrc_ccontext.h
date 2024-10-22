@@ -21,8 +21,6 @@ typedef struct {
 } pm_parse_result_t;
 
 struct mrc_diagnostic_list;
-typedef struct mrc_diagnostic_list mrc_diagnostic_list;
-typedef struct mrc_pool mrc_pool;
 
 typedef struct mrc_filename_table {
   const char *filename;
@@ -52,7 +50,7 @@ typedef struct mrc_ccontext {
 
   // TODO
   //size_t parser_nerr;
-  mrc_diagnostic_list *diagnostic_list;
+  struct mrc_diagnostic_list *diagnostic_list;
 
   // For PICOIRB
   uint16_t scope_sp;

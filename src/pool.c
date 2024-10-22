@@ -42,11 +42,6 @@ struct mrc_pool_page {
 #pragma warning(pop)
 #endif
 
-typedef struct mrc_pool {
-  mrc_ccontext *c;
-  struct mrc_pool_page *pages;
-} mrc_pool;
-
 #ifdef POOL_ALIGNMENT
 #  define ALIGN_PADDING(x) ((SIZE_MAX - (x) + 1) & (POOL_ALIGNMENT - 1))
 #else
