@@ -1,6 +1,6 @@
 #ifdef MRC_CUSTOM_ALLOC
 
-#include "alloc.h"
+#include <mrubyc.h>
 #include <string.h>
 
 void*
