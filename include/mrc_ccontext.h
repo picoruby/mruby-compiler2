@@ -1,0 +1,75 @@
+#ifndef MRC_CCONTEXT_H
+#define MRC_CCONTEXT_H
+
+#include "mrc_common.h"
+#include "mrc_diagnostic.h"
+#include "mrc_throw.h"
+#include "mrc_pool.h"
+#include <stddef.h>
+
+MRC_BEGIN_DECL
+
+#include "prism.h" // in lib/prism/include
+typedef pm_node_t mrc_node;
+typedef pm_parser_t mrc_parser_state;
+typedef pm_constant_id_list_t mrc_constant_id_list;
+typedef struct {
+  pm_parser_t parser;
+  pm_options_t options;
+  pm_string_t input;
+  bool parsed;
+} pm_parse_result_t;
+
+struct mrc_diagnostic_list;
+
+typedef struct mrc_filename_table {
+  const char *filename;
+  uint32_t start;
+} mrc_filename_table;
+
+typedef struct mrc_ccontext {
+#if defined(MRC_TARGET_MRUBY)
+  mrb_state *mrb;
+#endif
+  struct mrc_jmpbuf *jmp;
+  mrc_parser_state *p;
+  mrc_sym *syms;
+  int slen;
+  char *filename;
+  uint16_t lineno;
+  struct RClass *target_class;
+  mrc_bool capture_errors:1;
+  mrc_bool dump_result:1;
+  mrc_bool no_exec:1;
+  mrc_bool keep_lv:1;
+  mrc_bool no_optimize:1;
+  mrc_bool no_ext_ops:1;
+#if defined(MRC_TARGET_MRUBY)
+  const struct RProc *upper;
+#endif
+
+  // TODO
+  //size_t parser_nerr;
+  struct mrc_diagnostic_list *diagnostic_list;
+
+  // For PICOIRB
+  uint16_t scope_sp;
+
+  pm_options_t *options;
+
+#ifndef MRC_NO_STDIO
+  mrc_pool *pool; // for codedump
+
+  mrc_filename_table *filename_table;
+  uint16_t filename_table_length;
+  uint16_t current_filename_index;
+#endif
+} mrc_ccontext;                 /* compiler context */
+
+mrc_ccontext *mrc_ccontext_new(mrb_state *mrb);
+const char *mrc_ccontext_filename(mrc_ccontext *c, const char *s);
+void mrc_ccontext_free(mrc_ccontext *c);
+
+MRC_END_DECL
+
+#endif // MRC_CCONTEXT_H
