@@ -11,13 +11,15 @@ MRuby::Gem::Specification.new('mruby-compiler2') do |spec|
 
   cc.defines.flatten!
 
-  if cc.defines.any? { _1.match?(/\APICORUBY_NO_FLOAT(=|\z)/ || _1.match?(/\AMRB_NO_FLOAT(=|\z)/) }
+  if cc.defines.any? { _1.match?(/\APICORUBY_NO_FLOAT(=|\z)/) || _1.match?(/\AMRB_NO_FLOAT(=|\z)/) }
     cc.defines << "MRC_NO_FLOAT"
   end
   if cc.defines.any? { _1.match?(/\APICORUBY_INT64(=|\z)/) || _1.match?(/\AMRB_INT64(=|\z)/) }
     cc.defines << "MRC_INT64"
   end
   if cc.defines.any? { _1.match?(/\APICORUBY_DEBUG(=|\z)/) || _1.match?(/\AMRB_DEBUG(=|\z)/) }
+    cc.defines << "MRC_DEBUG"
+  end
 
   if cc.defines.include? "MRC_CUSTOM_ALLOC"
     cc.defines << "PRISM_XALLOCATOR"
