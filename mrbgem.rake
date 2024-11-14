@@ -31,18 +31,11 @@ MRuby::Gem::Specification.new('mruby-compiler2') do |spec|
   prism_templates_dir = "#{lib_dir}/prism/templates"
   cc.include_paths << "#{prism_dir}/include"
 
-  task :deep_clean do
-    rm_rf prism_dir
-  end
-
   next if %w(clean deep_clean).include?(Rake.application.top_level_tasks.first)
 
   directory prism_dir do
-    FileUtils.cd lib_dir do
-      sh "git clone https://github.com/ruby/prism.git"
-    end
-    FileUtils.cd prism_dir do
-      sh "git checkout v0.30.0"
+    FileUtils.cd dir do
+      sh "git submodule update --init"
     end
   end
 
@@ -52,9 +45,7 @@ MRuby::Gem::Specification.new('mruby-compiler2') do |spec|
     end
   end
 
-  TEMPLATE_GENERATES = %w(node prettyprint serialize token_type)
-
-  TEMPLATE_GENERATES.each do |name|
+  %w(node prettyprint serialize token_type).each do |name|
     dst = "#{prism_dir}/src/#{name}.c"
     # file task does not work when dst does not exist. why?
     Rake::Task[:prism_templates].invoke unless File.exist?(dst)
