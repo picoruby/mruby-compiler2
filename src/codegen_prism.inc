@@ -1091,6 +1091,7 @@ gen_ensure(mrc_codegen_scope *s, mrc_node *tree, uint32_t catch_entry, uint32_t 
   CAST3(ensure, tree, ensure);
   int ensure_end, ensure_target;
   int idx;
+  push();
   ensure_end = ensure_target = s->pc;
   push();
   idx = cursp();
