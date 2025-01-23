@@ -23,7 +23,8 @@
   #define mrc_free     free
 #endif
 
-typedef void mrb_state;
+//typedef void mrb_state;
+#define mrb_state void
 
 #ifdef MRB_USE_CXX_ABI
 #define MRC_USE_CXX_ABI

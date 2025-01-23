@@ -298,7 +298,7 @@ cdump_sym(mrc_ccontext *c, mrc_sym sym, const char *var_name, int idx, mrc_strin
   const char *op_name;
   mrc_int len = constant->length;
 
-  if (!name) {
+  if (*name == '\0') {
     mrc_str_free(name_obj);
     return MRC_DUMP_INVALID_ARGUMENT;
   }
@@ -330,7 +330,7 @@ cdump_sym(mrc_ccontext *c, mrc_sym sym, const char *var_name, int idx, mrc_strin
     mrc_str_cat_cstr(init_syms_code, var_name);
     snprintf(buf, sizeof(buf), "[%d] = ", idx);
     mrc_str_cat_cstr(init_syms_code, buf);
-    mrc_str_cat_lit(init_syms_code, "mrc_intern_lit(mrb, ");
+    mrc_str_cat_lit(init_syms_code, "mrb_intern_lit(mrb, ");
     mrc_string *escaped = mrc_str_escape(c, name_obj);
     mrc_str_free(name_obj);
     mrc_str_cat_str(init_syms_code, escaped);
@@ -477,7 +477,7 @@ cdump_irep_struct(mrc_ccontext *c, const mrc_irep *irep, uint8_t flags, FILE *fp
   /* dump pool */
   if (0 < irep->plen) {
     len=irep->plen;
-    fprintf(fp,   "static const mrb_pool_value %s_pool_%d[%d] = {\n", name, n, len);
+    fprintf(fp,   "static const mrb_irep_pool %s_pool_%d[%d] = {\n", name, n, len);
     for (i=0; i<len; i++) {
       if (cdump_pool(c, &irep->pool[i], fp) != MRC_DUMP_OK)
         return MRC_DUMP_INVALID_ARGUMENT;
