@@ -67,6 +67,7 @@ typedef struct mrc_ccontext {
 } mrc_ccontext;                 /* compiler context */
 
 mrc_ccontext *mrc_ccontext_new(mrb_state *mrb);
+void mrc_ccontext_cleanup_local_variables(mrc_ccontext *c);
 const char *mrc_ccontext_filename(mrc_ccontext *c, const char *s);
 void mrc_ccontext_free(mrc_ccontext *c);
 

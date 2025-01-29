@@ -17,6 +17,18 @@ mrc_ccontext_new(mrb_state *mrb)
   return c;
 }
 
+
+MRC_API void
+mrc_ccontext_cleanup_local_variables(mrc_ccontext *c)
+{
+  if (c->syms) {
+    mrc_free(c->syms);
+    c->syms = NULL;
+    c->slen = 0;
+  }
+  c->keep_lv = FALSE;
+}
+
 MRC_API const char *
 mrc_ccontext_filename(mrc_ccontext *c, const char *s)
 {
