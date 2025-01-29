@@ -229,7 +229,11 @@ mrc_parse_file_cxt(mrc_ccontext *c, const char **filenames, uint8_t **source)
   c->current_filename_index = 0;
   ssize_t length = read_input_files(c, filenames, source, c->filename_table);
   if (length < 0) {
-    fprintf(stderr, "cannot open files\n");
+    fprintf(stderr, "Cannot open files: ");
+    for (size_t i = 0; i < filecount; i++) {
+      fprintf(stderr, "%s ", filenames[i]);
+    }
+    fprintf(stderr, "\n");
     return NULL;
   }
   mrc_pm_parser_init(c->p, source, length, c);
