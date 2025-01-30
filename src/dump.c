@@ -124,9 +124,7 @@ get_pool_block_size(mrc_ccontext *c, const mrc_irep *irep)
   size += irep->plen * sizeof(uint8_t); /* len(n) */
 
   for (pool_no = 0; pool_no < irep->plen; pool_no++) {
-#if defined(MRC_TARGET_MRUBY)
-    int ai = mrb_gc_arena_save(c->mrb);
-#endif
+    int ai = mrc_gc_arena_save(c->mrb);
 
     switch (irep->pool[pool_no].tt) {
     case IREP_TT_INT64:
@@ -172,9 +170,7 @@ get_pool_block_size(mrc_ccontext *c, const mrc_irep *irep)
       }
       break;
     }
-#if defined(MRC_TARGET_MRUBY)
-    mrb_gc_arena_restore(c->mrb, ai);
-#endif
+    mrc_gc_arena_restore(c->mrb, ai);
   }
 
   return size;
@@ -191,9 +187,7 @@ write_pool_block(mrc_ccontext *c, const mrc_irep *irep, uint8_t *buf)
   cur += mrc_uint16_to_bin(irep->plen, cur); /* number of pool */
 
   for (pool_no = 0; pool_no < irep->plen; pool_no++) {
-#if defined(MRC_TARGET_MRUBY)
-    int ai = mrb_gc_arena_save(c->mrb);
-#endif
+    int ai = mrc_gc_arena_save(c->mrb);
 
     switch (irep->pool[pool_no].tt) {
     case IREP_TT_INT64:
@@ -247,9 +241,7 @@ write_pool_block(mrc_ccontext *c, const mrc_irep *irep, uint8_t *buf)
       *cur++ = '\0';
       break;
     }
-#if defined(MRC_TARGET_MRUBY)
-    mrb_gc_arena_restore(c->mrb, ai);
-#endif
+    mrc_gc_arena_restore(c->mrb, ai);
   }
 
   return cur - buf;

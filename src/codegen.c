@@ -234,9 +234,7 @@ typedef struct scope {
 
   uint16_t nlocals;
   uint16_t nregs;
-#if defined(MRC_TARGET_MRUBY)
   int ai;
-#endif
 
   int debug_start_pos;
   uint16_t filename_index;
@@ -577,9 +575,8 @@ scope_new(mrc_ccontext *c, mrc_codegen_scope *prev, mrc_constant_id_list *nlv)
     mrc_assert(nlv->size < UINT16_MAX);
   }
 
-#if defined(MRC_TARGET_MRUBY)
-  s->ai = gc_arena_save(c->mrb);
-#endif
+  int ai = mrc_gc_arena_save(c->mrb);
+  s->ai = ai;
   s->filename = prev->filename;
   if (s->filename) {
     s->lines = (uint16_t *)mrc_malloc(sizeof(uint16_t)*s->icapa);
@@ -1210,9 +1207,7 @@ scope_finish(mrc_codegen_scope *s)
   irep->nlocals = s->nlocals;
   irep->nregs = s->nregs;
 
-#if defined(MRC_TARGET_MRUBY)
-  mrb_gc_arena_restore(s->c->mrb, s->ai);
-#endif
+  mrc_gc_arena_restore(s->c->mrb, s->ai);
   mrc_pool_close(s->mpool);
 }
 

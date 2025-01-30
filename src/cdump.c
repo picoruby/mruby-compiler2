@@ -346,9 +346,7 @@ cdump_sym(mrc_ccontext *c, mrc_sym sym, const char *var_name, int idx, mrc_strin
 static int
 cdump_syms(mrc_ccontext *c, const char *name, const char *key, int n, int syms_len, const mrc_sym *syms, mrc_string *init_syms_code, FILE *fp)
 {
-#if defined(MRC_TARGET_MRUBY)
-  int ai = mrb_gc_arena_save(c->mrb);
-#endif
+  int ai = mrc_gc_arena_save(c->mrb);
   mrc_int code_len = MRC_STRING_LEN(init_syms_code);
   mrc_string *var_name = sym_var_name_str(c, name, key, n);
 
@@ -360,9 +358,7 @@ cdump_syms(mrc_ccontext *c, const char *name, const char *key, int n, int syms_l
   fputs("), ", fp);
   if (code_len == MRC_STRING_LEN(init_syms_code)) fputs("const", fp);
   fputs(");\n", fp);
-#if defined(MRC_TARGET_MRUBY)
-  mrb_gc_arena_restore(c->mrb, ai);
-#endif
+  mrc_gc_arena_restore(c->mrb, ai);
   return MRC_DUMP_OK;
 }
 
@@ -384,9 +380,7 @@ static int
 cdump_debug(mrc_ccontext *c, const char *name, int n, mrc_irep_debug_info *info,
             mrc_string *init_syms_code, FILE *fp)
 {
-#if defined(MRC_TARGET_MRUBY)
-  int ai = mrb_gc_arena_save(c->mrb);
-#endif
+  int ai = mrc_gc_arena_save(c->mrb);
   char buffer[256];
   const char *line_type = "mrb_debug_line_ary";
 
@@ -448,9 +442,7 @@ cdump_debug(mrc_ccontext *c, const char *name, int n, mrc_irep_debug_info *info,
   fprintf(fp, "static mrb_irep_debug_info %s_debug_%d = {\n", name, n);
   fprintf(fp, "%d, %d, &%s_debug_file_%d_};\n", info->pc_count, info->flen, name, n);
 
-#if defined(MRC_TARGET_MRUBY)
-  mrb_gc_arena_restore(c->mrb, ai);
-#endif
+  mrc_gc_arena_restore(c->mrb, ai);
   return MRC_DUMP_OK;
 }
 

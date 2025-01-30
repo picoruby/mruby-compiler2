@@ -6,6 +6,24 @@
 #define MRC_STRINGIZE0(expr) #expr
 #define MRC_STRINGIZE(expr) MRC_STRINGIZE0(expr)
 
+#ifdef MRC_TARGET_MRUBY
+# include <mruby.h>
+static inline int mrc_gc_arena_save(mrb_state *mrb)
+{
+  if (!mrb) return 0;
+  return mrb_gc_arena_save(mrb);
+}
+static inline void mrc_gc_arena_restore(mrb_state *mrb, int ai)
+{
+  if (!mrb) return;
+  mrb_gc_arena_restore(mrb, ai);
+}
+#else
+# define mrb_state void
+# define mrc_gc_arena_save(mrb)        0;(void)ai
+# define mrc_gc_arena_restore(mrb,ai)
+#endif
+
 #define MRC_RELEASE_YEAR    2024
 #define MRC_RELEASE_MONTH   9
 #define MRC_RELEASE_DAY     9
@@ -22,9 +40,6 @@
   #define mrc_calloc   calloc
   #define mrc_free     free
 #endif
-
-//typedef void mrb_state;
-#define mrb_state void
 
 #ifdef MRB_USE_CXX_ABI
 #define MRC_USE_CXX_ABI

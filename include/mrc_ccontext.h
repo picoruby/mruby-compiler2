@@ -28,9 +28,7 @@ typedef struct mrc_filename_table {
 } mrc_filename_table;
 
 typedef struct mrc_ccontext {
-#if defined(MRC_TARGET_MRUBY)
   mrb_state *mrb;
-#endif
   struct mrc_jmpbuf *jmp;
   mrc_parser_state *p;
   mrc_sym *syms;
