@@ -74,7 +74,7 @@ partial_hook(void *data, pm_parser_t *p, pm_token_t *token)
 static void
 mrc_pm_parser_init(mrc_parser_state *p, uint8_t **source, size_t size, mrc_ccontext *c)
 {
-  pm_lex_callback_t *cb = (pm_lex_callback_t *)mrc_malloc(sizeof(pm_lex_callback_t));
+  pm_lex_callback_t *cb = (pm_lex_callback_t *)mrc_malloc(c, sizeof(pm_lex_callback_t));
   cb->data = c;
   cb->callback = partial_hook;
   pm_parser_init(p, *source, size, c->options);
@@ -94,7 +94,7 @@ mrc_pm_parser_init(mrc_parser_state *p, uint8_t **source, size_t size, mrc_ccont
 static ssize_t
 append_from_stdin(mrc_ccontext *c, uint8_t **source, size_t source_length)
 {
-  uint8_t *buffer = mrc_malloc(INITIAL_BUF_SIZE);
+  uint8_t *buffer = mrc_malloc(c, INITIAL_BUF_SIZE);
   if (buffer == NULL) return -1;
 
   int capacity = INITIAL_BUF_SIZE;
@@ -105,11 +105,11 @@ append_from_stdin(mrc_ccontext *c, uint8_t **source, size_t source_length)
     if (ch == EOF) {
       buffer[length] = '\0';
       if (*source == NULL)
-        *source = (uint8_t *)mrc_malloc(source_length + length + 1);
+        *source = (uint8_t *)mrc_malloc(c, source_length + length + 1);
       else
-        *source = (uint8_t *)mrc_realloc(*source, source_length + length + 1);
+        *source = (uint8_t *)mrc_realloc(c, *source, source_length + length + 1);
       memccpy(*source + source_length, buffer, 1, length);
-      mrc_free(buffer);
+      mrc_free(c, buffer);
       return length;
     }
 
@@ -117,9 +117,9 @@ append_from_stdin(mrc_ccontext *c, uint8_t **source, size_t source_length)
 
     if (capacity <= length) {
       capacity *= 2;
-      uint8_t *new_buffer = mrc_realloc(buffer, capacity);
+      uint8_t *new_buffer = mrc_realloc(c, buffer, capacity);
       if (new_buffer == NULL) {
-        mrc_free(buffer);
+        mrc_free(c, buffer);
         return -1;
       }
       buffer = new_buffer;
@@ -159,10 +159,10 @@ read_input_files(mrc_ccontext *c, const char **filenames, uint8_t **source, mrc_
       fseek(file, 0, SEEK_SET);
       length += each_size;
       if (*source == NULL) {
-        *source = (uint8_t *)mrc_malloc(length + 1);
+        *source = (uint8_t *)mrc_malloc(c, length + 1);
       }
       else {
-        *source = (uint8_t *)mrc_realloc(*source, length + 1);
+        *source = (uint8_t *)mrc_realloc(c, *source, length + 1);
       }
       if (fread(*source + pos, sizeof(char), each_size, file) != each_size) {
         fprintf(stderr, "compile.c: cannot read program file. (%s)\n", filename);
@@ -186,7 +186,7 @@ mrc_pm_parse(mrc_ccontext *c)
   // save top-level locals for IRB
   pm_program_node_t *program = (pm_program_node_t *)node;
   uint32_t nlocals = program->locals.size;
-  pm_options_t *options = (pm_options_t *)mrc_malloc(sizeof(pm_options_t));
+  pm_options_t *options = (pm_options_t *)mrc_malloc(c->mrb, sizeof(pm_options_t));
   memset(options, 0, sizeof(pm_options_t));
   pm_string_t *encoding = &options->encoding;
   pm_string_constant_init(encoding, "UTF-8", 5);
@@ -201,15 +201,15 @@ mrc_pm_parse(mrc_ccontext *c)
     scope_local = &options_scope->locals[i];
     id = program->locals.ids[i];
     local = pm_constant_pool_id_to_constant(&c->p->constant_pool, id);
-    allocated = (char *)mrc_malloc(local->length);
+    allocated = (char *)mrc_malloc(c->mrb, local->length);
     memcpy(allocated, local->start, local->length);
     pm_string_constant_init(scope_local, (const char *)allocated, local->length);
   }
   if (c->options) {
     for (int i = 0; i < c->options->scopes[0].locals_count; i++) {
-      mrc_free((void *)c->options->scopes[0].locals[i].source);
+      mrc_free(c, (void *)c->options->scopes[0].locals[i].source);
     }
-    mrc_free(c->options);
+    mrc_free(c, c->options);
   }
   c->options = options;
 
@@ -224,7 +224,7 @@ mrc_parse_file_cxt(mrc_ccontext *c, const char **filenames, uint8_t **source)
   while (filenames[filecount]) {
     filecount++;
   }
-  c->filename_table = (mrc_filename_table *)mrc_malloc(sizeof(mrc_filename_table) * filecount);
+  c->filename_table = (mrc_filename_table *)mrc_malloc(c->mrb, sizeof(mrc_filename_table) * filecount);
   c->filename_table_length = filecount;
   c->current_filename_index = 0;
   ssize_t length = read_input_files(c, filenames, source, c->filename_table);
@@ -258,7 +258,7 @@ mrc_parse_string_cxt(mrc_ccontext *c, const uint8_t **source, size_t length)
 {
   pm_string_t string;
   pm_string_owned_init(&string, (uint8_t *)source, length);
-  c->filename_table = (mrc_filename_table *)mrc_malloc(sizeof(mrc_filename_table));
+  c->filename_table = (mrc_filename_table *)mrc_malloc(c->mrb, sizeof(mrc_filename_table));
   c->filename_table[0].filename = "-e";
   c->filename_table[0].start = 0;
   c->filename_table_length = 1;

@@ -64,6 +64,22 @@ typedef struct mrc_ccontext {
 #endif
 } mrc_ccontext;                 /* compiler context */
 
+#ifdef MRC_TARGET_MRUBY
+static inline int mrc_gc_arena_save(mrc_ccontext *c)
+{
+  if (!c->mrb) return 0;
+  return mrb_gc_arena_save(c->mrb);
+}
+static inline void mrc_gc_arena_restore(mrc_ccontext *c, int ai)
+{
+  if (!c->mrb) return;
+  mrb_gc_arena_restore(c->mrb, ai);
+}
+#else
+# define mrc_gc_arena_save(c)        0;(void)ai
+# define mrc_gc_arena_restore(c,ai)
+#endif
+
 mrc_ccontext *mrc_ccontext_new(mrb_state *mrb);
 void mrc_ccontext_cleanup_local_variables(mrc_ccontext *c);
 const char *mrc_ccontext_filename(mrc_ccontext *c, const char *s);

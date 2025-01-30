@@ -8,20 +8,8 @@
 
 #ifdef MRC_TARGET_MRUBY
 # include <mruby.h>
-static inline int mrc_gc_arena_save(mrb_state *mrb)
-{
-  if (!mrb) return 0;
-  return mrb_gc_arena_save(mrb);
-}
-static inline void mrc_gc_arena_restore(mrb_state *mrb, int ai)
-{
-  if (!mrb) return;
-  mrb_gc_arena_restore(mrb, ai);
-}
 #else
 # define mrb_state void
-# define mrc_gc_arena_save(mrb)        0;(void)ai
-# define mrc_gc_arena_restore(mrb,ai)
 #endif
 
 #define MRC_RELEASE_YEAR    2024
@@ -35,10 +23,10 @@ static inline void mrc_gc_arena_restore(mrb_state *mrb, int ai)
   #include <prism_xallocator.h>
 #else
   #include <stdlib.h>
-  #define mrc_malloc   malloc
-  #define mrc_realloc  realloc
-  #define mrc_calloc   calloc
-  #define mrc_free     free
+  #define mrc_malloc(c, size)         malloc(size)
+  #define mrc_realloc(c, ptr, size)   realloc(ptr, size)
+  #define mrc_calloc(c, nmemb, size)  calloc(nmemb, size)
+  #define mrc_free(c, ptr)            free(ptr)
 #endif
 
 #ifdef MRB_USE_CXX_ABI
