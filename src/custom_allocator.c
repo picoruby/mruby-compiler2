@@ -18,12 +18,7 @@ picorb_free(void* ptr)
 void*
 picorb_calloc(unsigned int nmemb, unsigned int size)
 {
-  unsigned int total_size = nmemb * size;
-  void* ptr = mrbc_raw_alloc(total_size);
-  if (ptr != NULL) {
-    memset(ptr, 0, total_size);
-  }
-  return ptr;
+  return mrbc_raw_calloc(nmemb, size);
 }
 
 void*
