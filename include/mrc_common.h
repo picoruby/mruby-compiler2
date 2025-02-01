@@ -19,16 +19,6 @@
                             MRC_STRINGIZE(MRC_RELEASE_MONTH) "-" \
                             MRC_STRINGIZE(MRC_RELEASE_DAY)
 
-#ifdef MRC_CUSTOM_ALLOC
-  #include <prism_xallocator.h>
-#else
-  #include <stdlib.h>
-  #define mrc_malloc(c, size)         malloc(size)
-  #define mrc_realloc(c, ptr, size)   realloc(ptr, size)
-  #define mrc_calloc(c, nmemb, size)  calloc(nmemb, size)
-  #define mrc_free(c, ptr)            free(ptr)
-#endif
-
 #ifdef MRB_USE_CXX_ABI
 #define MRC_USE_CXX_ABI
 #endif
@@ -48,13 +38,17 @@
   # define MRC_END_DECL
 #endif
 
-#ifdef MRC_DEBUG
-  #include <assert.h>
-  #define mrc_assert(p) assert(p)
-  #define mrc_assert_int_fit(t1,n,t2,max) assert((n)>=0 && ((sizeof(n)<=sizeof(t2))||(n<=(t1)(max))))
+/** Declare a public mruby API function. */
+#ifndef MRC_API
+#if defined(MRC_BUILD_AS_DLL)
+#if defined(MRC_CORE) || defined(MRC_LIB)
+# define MRC_API __declspec(dllexport)
 #else
-  #define mrc_assert(p) ((void)0)
-  #define mrc_assert_int_fit(t1,n,t2,max) ((void)0)
+# define MRC_API __declspec(dllimport)
+#endif
+#else
+# define MRC_API extern
+#endif
 #endif
 
 #if defined(__cplusplus) || (defined(__bool_true_false_are_defined) && __bool_true_false_are_defined)
@@ -128,17 +122,21 @@ typedef uint8_t mrc_code;
  */
 typedef uint32_t mrc_aspec;
 
-/** Declare a public mruby API function. */
-#ifndef MRC_API
-#if defined(MRC_BUILD_AS_DLL)
-#if defined(MRC_CORE) || defined(MRC_LIB)
-# define MRC_API __declspec(dllexport)
-#else
-# define MRC_API __declspec(dllimport)
+#ifndef MRC_CUSTOM_ALLOC
+  #include <stdlib.h>
+//  #define mrc_malloc(c, size)         malloc(size)
+//  #define mrc_realloc(c, ptr, size)   realloc(ptr, size)
+//  #define mrc_calloc(c, nmemb, size)  calloc(nmemb, size)
+//  #define mrc_free(c, ptr)            free(ptr)
 #endif
+
+#ifdef MRC_DEBUG
+  #include <assert.h>
+  #define mrc_assert(p) assert(p)
+  #define mrc_assert_int_fit(t1,n,t2,max) assert((n)>=0 && ((sizeof(n)<=sizeof(t2))||(n<=(t1)(max))))
 #else
-# define MRC_API extern
-#endif
+  #define mrc_assert(p) ((void)0)
+  #define mrc_assert_int_fit(t1,n,t2,max) ((void)0)
 #endif
 
 #endif  /* MRC_COMMON_H */

@@ -8,8 +8,8 @@ mrc_ccontext_new(mrb_state *mrb)
 {
   mrc_ccontext temp_c = {0};
   temp_c.mrb = mrb;
-  mrc_ccontext *c = (mrc_ccontext *)mrc_calloc(&temp_c, 1, sizeof(mrc_ccontext));
-  c->p = (mrc_parser_state *)mrc_malloc(c, sizeof(mrc_parser_state));
+  mrc_ccontext *c = (mrc_ccontext *)mrc_calloc((&temp_c), 1, sizeof(mrc_ccontext));
+  c->p = (mrc_parser_state *)mrc_malloc((&temp_c), sizeof(mrc_parser_state));
   c->options = NULL;
   c->mrb = temp_c.mrb;
   return c;

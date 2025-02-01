@@ -186,7 +186,7 @@ mrc_pm_parse(mrc_ccontext *c)
   // save top-level locals for IRB
   pm_program_node_t *program = (pm_program_node_t *)node;
   uint32_t nlocals = program->locals.size;
-  pm_options_t *options = (pm_options_t *)mrc_malloc(c->mrb, sizeof(pm_options_t));
+  pm_options_t *options = (pm_options_t *)mrc_malloc(c, sizeof(pm_options_t));
   memset(options, 0, sizeof(pm_options_t));
   pm_string_t *encoding = &options->encoding;
   pm_string_constant_init(encoding, "UTF-8", 5);
@@ -201,7 +201,7 @@ mrc_pm_parse(mrc_ccontext *c)
     scope_local = &options_scope->locals[i];
     id = program->locals.ids[i];
     local = pm_constant_pool_id_to_constant(&c->p->constant_pool, id);
-    allocated = (char *)mrc_malloc(c->mrb, local->length);
+    allocated = (char *)mrc_malloc(c, local->length);
     memcpy(allocated, local->start, local->length);
     pm_string_constant_init(scope_local, (const char *)allocated, local->length);
   }
@@ -224,7 +224,7 @@ mrc_parse_file_cxt(mrc_ccontext *c, const char **filenames, uint8_t **source)
   while (filenames[filecount]) {
     filecount++;
   }
-  c->filename_table = (mrc_filename_table *)mrc_malloc(c->mrb, sizeof(mrc_filename_table) * filecount);
+  c->filename_table = (mrc_filename_table *)mrc_malloc(c, sizeof(mrc_filename_table) * filecount);
   c->filename_table_length = filecount;
   c->current_filename_index = 0;
   ssize_t length = read_input_files(c, filenames, source, c->filename_table);
@@ -258,7 +258,7 @@ mrc_parse_string_cxt(mrc_ccontext *c, const uint8_t **source, size_t length)
 {
   pm_string_t string;
   pm_string_owned_init(&string, (uint8_t *)source, length);
-  c->filename_table = (mrc_filename_table *)mrc_malloc(c->mrb, sizeof(mrc_filename_table));
+  c->filename_table = (mrc_filename_table *)mrc_malloc(c, sizeof(mrc_filename_table));
   c->filename_table[0].filename = "-e";
   c->filename_table[0].start = 0;
   c->filename_table_length = 1;

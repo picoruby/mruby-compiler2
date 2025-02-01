@@ -538,6 +538,11 @@ scope_new(mrc_ccontext *c, mrc_codegen_scope *prev, mrc_constant_id_list *nlv)
     return NULL;
   }
   *s = codegen_scope_zero;
+  if (prev) {
+    s->c = prev->c;
+  } else {
+    s->c = c;
+  }
   s->mpool = pool;
   if (!prev) return s;
   s->prev = prev;

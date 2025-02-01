@@ -1,17 +1,17 @@
 #ifdef MRC_CUSTOM_ALLOC
 
+#include <prism_xallocator.h>
 #include <string.h>
-#include "../include/mrc_ccontext.h"
 
 #ifdef MRC_TARGET_MRUBY
 
 #include <mruby.h>
-#define picorb_alloc(c, size)           mrb_malloc(c->mrb, size)
-#define picorb_calloc(c, nmemb, size)   mrb_calloc(c->mrb, nmemb, size)
-#define picorb_realloc(c, ptr, size)    mrb_realloc(c->mrb, ptr, size)
-#define picorb_free(c, ptr)             mrb_free(c->mrb, ptr)
+#define picorb_alloc(c, size)           mrb_malloc(c, size)
+#define picorb_calloc(c, nmemb, size)   mrb_calloc(c, nmemb, size)
+#define picorb_realloc(c, ptr, size)    mrb_realloc(c, ptr, size)
+#define picorb_free(c, ptr)             mrb_free(c, ptr)
 
-#else /* MRC_TARGET_MRUBY */
+#else /* MRC_TARGET_MRUBYC */
 
 #include <mrubyc.h>
 #define picorb_alloc    mrbc_raw_alloc
@@ -31,6 +31,6 @@ picorb_realloc(void *ptr, unsigned int size)
   }
 }
 
-#endif /* MRC_TARGET_MRUBY */
+#endif /* MRC_TARGET_MRUBYC */
 
 #endif // MRC_CUSTOM_ALLOC
