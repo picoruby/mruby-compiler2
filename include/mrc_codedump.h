@@ -1,6 +1,8 @@
 #ifndef MRC_CODEDUMP_H
 #define MRC_CODEDUMP_H
 
+#include "mrc_ccontext.h"
+
 MRC_BEGIN_DECL
 
 #ifndef MRC_NO_STDIO

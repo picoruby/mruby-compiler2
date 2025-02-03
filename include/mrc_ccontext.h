@@ -9,7 +9,6 @@
 
 MRC_BEGIN_DECL
 
-#include "prism.h" // in lib/prism/include
 typedef pm_node_t mrc_node;
 typedef pm_parser_t mrc_parser_state;
 typedef pm_constant_id_list_t mrc_constant_id_list;

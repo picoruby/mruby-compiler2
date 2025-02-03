@@ -4,7 +4,6 @@
 ** See Copyright Notice in mruby.h
 */
 
-#include "../include/mrc_common.h"
 #include "../include/mrc_ccontext.h"
 
 /* configuration section */

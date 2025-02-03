@@ -1,6 +1,5 @@
 #include <string.h>
 #include <stdint.h>
-#include "../include/mrc_common.h"
 #include "../include/mrc_debug.h"
 
 static mrc_irep_debug_info_file*

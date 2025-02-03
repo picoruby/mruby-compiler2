@@ -1,5 +1,4 @@
 #include <stdio.h>
-#include "../include/mrc_common.h"
 #include "../include/mrc_ccontext.h"
 #include "../include/mrc_irep.h"
 #include "../include/mrc_dump.h"

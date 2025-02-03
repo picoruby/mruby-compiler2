@@ -7,7 +7,6 @@
 #ifndef MRC_IREP_H
 #define MRC_IREP_H
 
-#include "mrc_common.h"
 #include "mrc_ccontext.h"
 
 /**

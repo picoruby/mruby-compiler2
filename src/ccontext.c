@@ -1,5 +1,4 @@
 #include <string.h>
-#include "../include/mrc_common.h"
 #include "../include/mrc_ccontext.h"
 #include "../include/mrc_parser_util.h"
 

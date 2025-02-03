@@ -1,7 +1,6 @@
 #ifndef MRC_DIAGNOSTIC_H
 #define MRC_DIAGNOSTIC_H
 
-#include "mrc_common.h"
 #include "mrc_ccontext.h"
 
 MRC_BEGIN_DECL

@@ -6,11 +6,24 @@
 #define MRC_STRINGIZE0(expr) #expr
 #define MRC_STRINGIZE(expr) MRC_STRINGIZE0(expr)
 
-#ifdef MRC_TARGET_MRUBY
-# include <mruby.h>
-#else
-# define mrb_state void
+#if defined(PICORB_VM_MRUBY)
+  #if !defined(MRC_TARGET_MRUBY)
+    #define MRC_TARGET_MRUBY
+  #endif
+  #include <mruby.h>
 #endif
+#if defined(PICORB_VM_MRUBYC)
+  #if !defined(MRC_TARGET_MRUBYC)
+    #define MRC_TARGET_MRUBYC
+  #endif
+  #include <mrubyc.h>
+  #define mrb_state void
+#endif
+
+#if !defined(PRISM_XALLOCATOR)
+  #define PRISM_XALLOCATOR
+#endif
+#include "prism.h"
 
 #define MRC_RELEASE_YEAR    2024
 #define MRC_RELEASE_MONTH   9
@@ -121,14 +134,6 @@ typedef uint8_t mrc_code;
  * Example: `MRB_ARGS_REQ(2) | MRB_ARGS_OPT(1)` for a method that expects 2..3 arguments
  */
 typedef uint32_t mrc_aspec;
-
-#ifndef MRC_CUSTOM_ALLOC
-  #include <stdlib.h>
-//  #define mrc_malloc(c, size)         malloc(size)
-//  #define mrc_realloc(c, ptr, size)   realloc(ptr, size)
-//  #define mrc_calloc(c, nmemb, size)  calloc(nmemb, size)
-//  #define mrc_free(c, ptr)            free(ptr)
-#endif
 
 #ifdef MRC_DEBUG
   #include <assert.h>
