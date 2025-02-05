@@ -273,3 +273,17 @@ mrc_load_string_cxt(mrc_ccontext *c, const uint8_t **source, size_t length)
   mrc_irep *irep = mrc_load_exec(c, root);
   return irep;
 }
+
+#if defined(MRC_TARGET_MRUBY)
+
+MRC_API void
+mrb_mruby_compiler2_gem_init(mrb_state *mrb)
+{
+}
+
+MRC_API void
+mrb_mruby_compiler2_gem_final(mrb_state *mrb)
+{
+}
+
+#endif

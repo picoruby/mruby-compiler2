@@ -1,3 +1,4 @@
 [submodule "lib/prism"]
 	path = lib/prism
-	url = https://github.com/ruby/prism
+	url = https://github.com/hasumikin/prism
+	branch = fix/pm_constant_id_list_init_capacity
