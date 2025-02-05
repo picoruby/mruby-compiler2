@@ -20,6 +20,11 @@
   #define mrb_state void
 #endif
 
+#if !defined(MRC_TARGET_MRUBY) && !defined(PICORB_VM_MRUBYC)
+  /* May be building mrbc (picorbc) */
+  #define mrb_state void
+#endif
+
 #if !defined(PRISM_XALLOCATOR)
   #define PRISM_XALLOCATOR
 #endif

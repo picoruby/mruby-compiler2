@@ -30,6 +30,15 @@
     #define mrc_realloc(c,ptr,size)   mrbc_raw_realloc(ptr, size)
     #define mrc_free(c,ptr)           mrbc_raw_free(ptr)
   #endif
+#else /* May be building mrbc (picorbc) */
+  #define mrc_malloc(c,size)        malloc(size)
+  #define mrc_calloc(c,nmemb,size)  calloc(nmemb, size)
+  #define mrc_realloc(c,ptr,size)   realloc(ptr, size)
+  #define mrc_free(c,ptr)           free(ptr)
+  #define xmalloc(size)             malloc(size)
+  #define xcalloc(nmemb,size)       calloc(nmemb, size)
+  #define xrealloc(ptr,size)        realloc(ptr, size)
+  #define xfree(ptr)                free(ptr)
 #endif
 
 #endif
