@@ -11,6 +11,10 @@ MRuby::Gem::Specification.new('mruby-compiler2') do |spec|
 
   cc.defines.flatten!
 
+  if cc.defines.include? "PICORB_VM_MRUBY"
+    cc.include_paths << "#{build.gems['picoruby-mruby'].dir}/lib/mruby/include"
+  end
+
   if cc.defines.any? { _1.match? /\A(PICORUBY|MRB)_NO_FLOAT(=|\z)/ }
     cc.defines << "MRC_NO_FLOAT"
   end
@@ -22,10 +26,6 @@ MRuby::Gem::Specification.new('mruby-compiler2') do |spec|
     cc.defines << "MRC_DUMP_PRETTY"
   else
     cc.defines << "PRISM_BUILD_MINIMAL"
-  end
-
-  if cc.defines.include? "MRC_CUSTOM_ALLOC"
-    cc.defines << "PRISM_XALLOCATOR"
   end
 
   prism_templates_dir = "#{lib_dir}/prism/templates"

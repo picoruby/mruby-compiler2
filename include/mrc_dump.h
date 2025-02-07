@@ -1,7 +1,6 @@
 #ifndef MRC_DUMP_H
 #define MRC_DUMP_H
 
-#include "mrc_common.h"
 #include "mrc_irep.h"
 #include "mrc_ccontext.h"
 

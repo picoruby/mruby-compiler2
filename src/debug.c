@@ -1,6 +1,5 @@
 #include <string.h>
 #include <stdint.h>
-#include "../include/mrc_common.h"
 #include "../include/mrc_debug.h"
 
 static mrc_irep_debug_info_file*
@@ -136,7 +135,7 @@ mrc_debug_info_alloc(mrc_ccontext *c, mrc_irep *irep)
   static const mrc_irep_debug_info initial = { 0, 0, NULL };
 
   mrc_assert(!irep->debug_info);
-  mrc_irep_debug_info *ret = (mrc_irep_debug_info*)mrc_malloc(sizeof(*ret));
+  mrc_irep_debug_info *ret = (mrc_irep_debug_info*)mrc_malloc(c, sizeof(*ret));
   *ret = initial;
   irep->debug_info = ret;
   return ret;
@@ -166,8 +165,8 @@ mrc_debug_info_append_file(mrc_ccontext *c, mrc_irep_debug_info *d,
     }
   }
 
-  mrc_irep_debug_info_file *f = (mrc_irep_debug_info_file*)mrc_malloc(sizeof(*f));
-  d->files = (mrc_irep_debug_info_file**)mrc_realloc(d->files, sizeof(mrc_irep_debug_info_file*) * (d->flen + 1));
+  mrc_irep_debug_info_file *f = (mrc_irep_debug_info_file*)mrc_malloc(c, sizeof(*f));
+  d->files = (mrc_irep_debug_info_file**)mrc_realloc(c, d->files, sizeof(mrc_irep_debug_info_file*) * (d->flen + 1));
   d->files[d->flen++] = f;
 
   uint32_t file_pc_count = end_pos - start_pos;
@@ -193,7 +192,7 @@ mrc_debug_info_append_file(mrc_ccontext *c, mrc_irep_debug_info *d,
     packed_size += mrc_packed_int_len(lines[start_pos+i]-prev_line);
     prev_line = lines[start_pos + i];
   }
-  f->lines.packed_map = p = (uint8_t*)mrc_malloc(packed_size);
+  f->lines.packed_map = p = (uint8_t*)mrc_malloc(c, packed_size);
   prev_line = 0; prev_pc = 0;
   for (uint32_t i = 0; i < file_pc_count; i++) {
     if (lines[start_pos + i] == prev_line) continue;
@@ -215,11 +214,11 @@ mrc_debug_info_free(mrc_ccontext *c, mrc_irep_debug_info *d)
   if (d->files) {
     for (uint32_t i = 0; i < d->flen; i++) {
       if (d->files[i]) {
-        mrc_free(d->files[i]->lines.ptr);
-        mrc_free(d->files[i]);
+        mrc_free(c, d->files[i]->lines.ptr);
+        mrc_free(c, d->files[i]);
       }
     }
-    mrc_free(d->files);
+    mrc_free(c, d->files);
   }
-  mrc_free(d);
+  mrc_free(c, d);
 }

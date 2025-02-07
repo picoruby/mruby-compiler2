@@ -9,7 +9,6 @@
 
 MRC_BEGIN_DECL
 
-#include "prism.h" // in lib/prism/include
 typedef pm_node_t mrc_node;
 typedef pm_parser_t mrc_parser_state;
 typedef pm_constant_id_list_t mrc_constant_id_list;
@@ -28,9 +27,7 @@ typedef struct mrc_filename_table {
 } mrc_filename_table;
 
 typedef struct mrc_ccontext {
-#if defined(MRC_TARGET_MRUBY)
   mrb_state *mrb;
-#endif
   struct mrc_jmpbuf *jmp;
   mrc_parser_state *p;
   mrc_sym *syms;
@@ -66,7 +63,24 @@ typedef struct mrc_ccontext {
 #endif
 } mrc_ccontext;                 /* compiler context */
 
+#ifdef MRC_TARGET_MRUBY
+static inline int mrc_gc_arena_save(mrc_ccontext *c)
+{
+  if (!c->mrb) return 0;
+  return mrb_gc_arena_save(c->mrb);
+}
+static inline void mrc_gc_arena_restore(mrc_ccontext *c, int ai)
+{
+  if (!c->mrb) return;
+  mrb_gc_arena_restore(c->mrb, ai);
+}
+#else
+# define mrc_gc_arena_save(c)        0;(void)ai
+# define mrc_gc_arena_restore(c,ai)
+#endif
+
 mrc_ccontext *mrc_ccontext_new(mrb_state *mrb);
+void mrc_ccontext_cleanup_local_variables(mrc_ccontext *c);
 const char *mrc_ccontext_filename(mrc_ccontext *c, const char *s);
 void mrc_ccontext_free(mrc_ccontext *c);
 

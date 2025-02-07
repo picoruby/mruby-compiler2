@@ -1,5 +1,4 @@
 #include <string.h>
-#include "mrc_common.h"
 #include "mrc_ccontext.h"
 
 typedef struct {

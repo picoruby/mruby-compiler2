@@ -6,24 +6,36 @@
 #define MRC_STRINGIZE0(expr) #expr
 #define MRC_STRINGIZE(expr) MRC_STRINGIZE0(expr)
 
+#if defined(PICORB_VM_MRUBY)
+  #if !defined(MRC_TARGET_MRUBY)
+    #define MRC_TARGET_MRUBY
+  #endif
+  #include <mruby.h>
+#endif
+#if defined(PICORB_VM_MRUBYC)
+  #if !defined(MRC_TARGET_MRUBYC)
+    #define MRC_TARGET_MRUBYC
+  #endif
+  #include <mrubyc.h>
+  #define mrb_state void
+#endif
+
+#if !defined(MRC_TARGET_MRUBY) && !defined(PICORB_VM_MRUBYC)
+  /* May be building mrbc (picorbc) */
+  #define mrb_state void
+#endif
+
+#if !defined(PRISM_XALLOCATOR)
+  #define PRISM_XALLOCATOR
+#endif
+#include "prism.h"
+
 #define MRC_RELEASE_YEAR    2024
 #define MRC_RELEASE_MONTH   9
 #define MRC_RELEASE_DAY     9
 #define MRC_RELEASE_DATE    MRC_STRINGIZE(MRC_RELEASE_YEAR) "-" \
                             MRC_STRINGIZE(MRC_RELEASE_MONTH) "-" \
                             MRC_STRINGIZE(MRC_RELEASE_DAY)
-
-#ifdef MRC_CUSTOM_ALLOC
-  #include <prism_xallocator.h>
-#else
-  #include <stdlib.h>
-  #define mrc_malloc   malloc
-  #define mrc_realloc  realloc
-  #define mrc_calloc   calloc
-  #define mrc_free     free
-#endif
-
-typedef void mrb_state;
 
 #ifdef MRB_USE_CXX_ABI
 #define MRC_USE_CXX_ABI
@@ -44,13 +56,17 @@ typedef void mrb_state;
   # define MRC_END_DECL
 #endif
 
-#ifdef MRC_DEBUG
-  #include <assert.h>
-  #define mrc_assert(p) assert(p)
-  #define mrc_assert_int_fit(t1,n,t2,max) assert((n)>=0 && ((sizeof(n)<=sizeof(t2))||(n<=(t1)(max))))
+/** Declare a public mruby API function. */
+#ifndef MRC_API
+#if defined(MRC_BUILD_AS_DLL)
+#if defined(MRC_CORE) || defined(MRC_LIB)
+# define MRC_API __declspec(dllexport)
 #else
-  #define mrc_assert(p) ((void)0)
-  #define mrc_assert_int_fit(t1,n,t2,max) ((void)0)
+# define MRC_API __declspec(dllimport)
+#endif
+#else
+# define MRC_API extern
+#endif
 #endif
 
 #if defined(__cplusplus) || (defined(__bool_true_false_are_defined) && __bool_true_false_are_defined)
@@ -124,17 +140,13 @@ typedef uint8_t mrc_code;
  */
 typedef uint32_t mrc_aspec;
 
-/** Declare a public mruby API function. */
-#ifndef MRC_API
-#if defined(MRC_BUILD_AS_DLL)
-#if defined(MRC_CORE) || defined(MRC_LIB)
-# define MRC_API __declspec(dllexport)
+#ifdef MRC_DEBUG
+  #include <assert.h>
+  #define mrc_assert(p) assert(p)
+  #define mrc_assert_int_fit(t1,n,t2,max) assert((n)>=0 && ((sizeof(n)<=sizeof(t2))||(n<=(t1)(max))))
 #else
-# define MRC_API __declspec(dllimport)
-#endif
-#else
-# define MRC_API extern
-#endif
+  #define mrc_assert(p) ((void)0)
+  #define mrc_assert_int_fit(t1,n,t2,max) ((void)0)
 #endif
 
 #endif  /* MRC_COMMON_H */

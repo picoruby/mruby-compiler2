@@ -1,5 +1,4 @@
 #include <stdio.h>
-#include "../include/mrc_common.h"
 #include "../include/mrc_ccontext.h"
 #include "../include/mrc_irep.h"
 #include "../include/mrc_dump.h"
@@ -124,9 +123,7 @@ get_pool_block_size(mrc_ccontext *c, const mrc_irep *irep)
   size += irep->plen * sizeof(uint8_t); /* len(n) */
 
   for (pool_no = 0; pool_no < irep->plen; pool_no++) {
-#if defined(MRC_TARGET_MRUBY)
-    int ai = mrb_gc_arena_save(c->mrb);
-#endif
+    int ai = mrc_gc_arena_save(c);
 
     switch (irep->pool[pool_no].tt) {
     case IREP_TT_INT64:
@@ -172,9 +169,7 @@ get_pool_block_size(mrc_ccontext *c, const mrc_irep *irep)
       }
       break;
     }
-#if defined(MRC_TARGET_MRUBY)
-    mrb_gc_arena_restore(c->mrb, ai);
-#endif
+    mrc_gc_arena_restore(c, ai);
   }
 
   return size;
@@ -191,9 +186,7 @@ write_pool_block(mrc_ccontext *c, const mrc_irep *irep, uint8_t *buf)
   cur += mrc_uint16_to_bin(irep->plen, cur); /* number of pool */
 
   for (pool_no = 0; pool_no < irep->plen; pool_no++) {
-#if defined(MRC_TARGET_MRUBY)
-    int ai = mrb_gc_arena_save(c->mrb);
-#endif
+    int ai = mrc_gc_arena_save(c);
 
     switch (irep->pool[pool_no].tt) {
     case IREP_TT_INT64:
@@ -247,9 +240,7 @@ write_pool_block(mrc_ccontext *c, const mrc_irep *irep, uint8_t *buf)
       *cur++ = '\0';
       break;
     }
-#if defined(MRC_TARGET_MRUBY)
-    mrb_gc_arena_restore(c->mrb, ai);
-#endif
+    mrc_gc_arena_restore(c, ai);
   }
 
   return cur - buf;
@@ -472,7 +463,7 @@ get_filename_table_size(mrc_ccontext *c, const mrc_irep *irep, mrc_sym **fp, uin
     if (find_filename_index(filenames, *lp, file->filename_sym) == -1) {
       /* register filename */
       *lp += 1;
-      *fp = filenames = (mrc_sym*)mrc_realloc(filenames, sizeof(mrc_sym) * (*lp));
+      *fp = filenames = (mrc_sym*)mrc_realloc(c, filenames, sizeof(mrc_sym) * (*lp));
       filenames[*lp - 1] = file->filename_sym;
 
       /* filename */
@@ -608,7 +599,7 @@ create_lv_sym_table(mrc_ccontext *c, const mrc_irep *irep, mrc_sym **syms, uint3
   pm_constant_id_t null_mark = pm_constant_pool_find(&c->p->constant_pool, NULL, 0);
 
   if (*syms == NULL) {
-    *syms = (mrc_sym*)mrc_malloc(sizeof(mrc_sym) * 1);
+    *syms = (mrc_sym*)mrc_malloc(c, sizeof(mrc_sym) * 1);
   }
 
   for (int i = 0; i + 1 < irep->nlocals; i++) {
@@ -617,7 +608,7 @@ create_lv_sym_table(mrc_ccontext *c, const mrc_irep *irep, mrc_sym **syms, uint3
     if (find_filename_index(*syms, *syms_len, name) != -1) continue;
 
     ++(*syms_len);
-    *syms = (mrc_sym*)mrc_realloc(*syms, sizeof(mrc_sym) * (*syms_len));
+    *syms = (mrc_sym*)mrc_realloc(c, *syms, sizeof(mrc_sym) * (*syms_len));
     (*syms)[*syms_len - 1] = name;
   }
 
@@ -799,7 +790,7 @@ mrc_dump_irep(mrc_ccontext *c, const mrc_irep *irep, uint8_t flags, uint8_t **bi
     if (debug_info_defined) {
       section_lineno_size += sizeof(struct rite_section_debug_header);
       /* filename table */
-      filenames = (mrc_sym*)mrc_malloc(sizeof(mrc_sym) + 1);
+      filenames = (mrc_sym*)mrc_malloc(c, sizeof(mrc_sym) + 1);
 
       /* filename table size */
       section_lineno_size += sizeof(uint16_t);
@@ -818,7 +809,7 @@ mrc_dump_irep(mrc_ccontext *c, const mrc_irep *irep, uint8_t flags, uint8_t **bi
   malloc_size = sizeof(struct rite_binary_header) +
                 section_irep_size + section_lineno_size + section_lv_size +
                 sizeof(struct rite_binary_footer);
-  cur = *bin = (uint8_t*)mrc_malloc(malloc_size);
+  cur = *bin = (uint8_t*)mrc_malloc(c, malloc_size);
   cur += sizeof(struct rite_binary_header);
 
   result = write_section_irep(c, irep, cur, &section_irep_size, flags);
@@ -854,11 +845,11 @@ mrc_dump_irep(mrc_ccontext *c, const mrc_irep *irep, uint8_t flags, uint8_t **bi
 
 error_exit:
   if (result != MRC_DUMP_OK) {
-    mrc_free(*bin);
+    mrc_free(c, *bin);
     *bin = NULL;
   }
-  mrc_free(lv_syms);
-  mrc_free(filenames);
+  mrc_free(c, lv_syms);
+  mrc_free(c, filenames);
   return result;
 }
 
@@ -882,7 +873,7 @@ mrc_dump_irep_binary(mrc_ccontext *c, const mrc_irep *irep, uint8_t flags, FILE*
     }
   }
 
-  mrc_free(bin);
+  mrc_free(c, bin);
   return result;
 }
 
@@ -898,7 +889,7 @@ mrc_dump_irep_cfunc(mrc_ccontext *c, const mrc_irep *irep, uint8_t flags, FILE *
   int result = mrc_dump_irep(c, irep, flags, &bin, &bin_size);
   if (result == MRC_DUMP_OK) {
     if (fprintf(fp, "#include <stdint.h>\n") < 0) { /* for uint8_t under at least Darwin */
-      mrc_free(bin);
+      mrc_free(c, bin);
       return MRC_DUMP_WRITE_FAULT;
     }
     if (fprintf(fp,
@@ -909,28 +900,28 @@ mrc_dump_irep_cfunc(mrc_ccontext *c, const mrc_irep *irep, uint8_t flags, FILE *
                                       "extern\n"
                                       "#endif",
           initname) < 0) {
-      mrc_free(bin);
+      mrc_free(c, bin);
       return MRC_DUMP_WRITE_FAULT;
     }
     while (bin_idx < bin_size) {
       if (bin_idx % 16 == 0) {
         if (fputs("\n", fp) == EOF) {
-          mrc_free(bin);
+          mrc_free(c, bin);
           return MRC_DUMP_WRITE_FAULT;
         }
       }
       if (fprintf(fp, "0x%02x,", bin[bin_idx++]) < 0) {
-        mrc_free(bin);
+        mrc_free(c, bin);
         return MRC_DUMP_WRITE_FAULT;
       }
     }
     if (fputs("\n};\n", fp) == EOF) {
-      mrc_free(bin);
+      mrc_free(c, bin);
       return MRC_DUMP_WRITE_FAULT;
     }
   }
 
-  mrc_free(bin);
+  mrc_free(c, bin);
   return result;
 }
 

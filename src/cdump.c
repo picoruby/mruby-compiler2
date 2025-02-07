@@ -6,7 +6,6 @@
 
 #include <stdio.h>
 #include <string.h>
-#include "../include/mrc_common.h"
 #include "../include/mrc_ccontext.h"
 #include "../include/mrc_irep.h"
 #include "../include/mrc_dump.h"
@@ -32,15 +31,15 @@ typedef struct mrc_string {
 static mrc_string*
 mrc_str_new_capa(mrc_ccontext *c, size_t capa)
 {
-  mrc_string *s = (mrc_string *)mrc_malloc(sizeof(mrc_string));
+  mrc_string *s = (mrc_string *)mrc_malloc(c, sizeof(mrc_string));
   if (s) {
-    s->ptr = (char *)mrc_calloc(1, capa);
+    s->ptr = (char *)mrc_calloc(c, 1, capa);
     if (s->ptr) {
       s->len = 0;
       s->capa = capa;
       return s;
     }
-    mrc_free(s);
+    mrc_free(c, s);
   }
   return NULL;
 }
@@ -64,12 +63,12 @@ mrc_str_new_cstr(mrc_ccontext *c, const char *cstr)
 }
 
 static void
-mrc_str_cat_lit(mrc_string *s, const char *lit)
+mrc_str_cat_lit(mrc_ccontext *c, mrc_string *s, const char *lit)
 {
   size_t len = strlen(lit);
   if (s->len+len+1 > s->capa) {
     s->capa = s->len+len+1;
-    s->ptr = (char *)mrc_realloc(s->ptr, s->capa);
+    s->ptr = (char *)mrc_realloc(c, s->ptr, s->capa);
   }
   memcpy(s->ptr+s->len, lit, len);
   s->len += len;
@@ -77,18 +76,18 @@ mrc_str_cat_lit(mrc_string *s, const char *lit)
 }
 
 static void
-mrc_str_cat_cstr(mrc_string *s, const char *cstr)
+mrc_str_cat_cstr(mrc_ccontext *c, mrc_string *s, const char *cstr)
 {
   if (!cstr) return;
-  mrc_str_cat_lit(s, cstr);
+  mrc_str_cat_lit(c, s, cstr);
 }
 
 static void
-mrc_str_cat_str(mrc_string *s, mrc_string *s2)
+mrc_str_cat_str(mrc_ccontext *c, mrc_string *s, mrc_string *s2)
 {
   if (s->len+s2->len+1 > s->capa) {
     s->capa = s->len+s2->len+1;
-    s->ptr = (char *)mrc_realloc(s->ptr, s->capa);
+    s->ptr = (char *)mrc_realloc(c, s->ptr, s->capa);
   }
   memcpy(s->ptr+s->len, s2->ptr, s2->len);
   s->len += s2->len;
@@ -96,10 +95,10 @@ mrc_str_cat_str(mrc_string *s, mrc_string *s2)
 }
 
 static void
-mrc_str_free(mrc_string *s)
+mrc_str_free(mrc_ccontext *c, mrc_string *s)
 {
-  mrc_free(s->ptr);
-  mrc_free(s);
+  mrc_free(c, s->ptr);
+  mrc_free(c, s);
 }
 
 static mrc_string*
@@ -108,11 +107,11 @@ mrc_str_escape(mrc_ccontext *c, mrc_string *s)
   mrc_string *s2 = mrc_str_new_capa(c, s->len*2+1);
   if (s2) {
     for (size_t i=0; i<s->len; i++) {
-      char c = s->ptr[i];
-      if (c == '"' || c == '\\') {
-        mrc_str_cat_lit(s2, "\\");
+      char ch = s->ptr[i];
+      if (ch == '"' || ch == '\\') {
+        mrc_str_cat_lit(c, s2, "\\");
       }
-      mrc_str_cat_lit(s2, &c);
+      mrc_str_cat_lit(c, s2, &ch);
     }
   }
   return s2;
@@ -276,11 +275,11 @@ sym_var_name_str(mrc_ccontext *c, const char *initname, const char *key, int n)
 {
   char buf[32];
   mrc_string *s = mrc_str_new_cstr(c, initname);
-  mrc_str_cat_lit(s, "_");
-  mrc_str_cat_cstr(s, key);
-  mrc_str_cat_lit(s, "_");
+  mrc_str_cat_lit(c, s, "_");
+  mrc_str_cat_cstr(c, s, key);
+  mrc_str_cat_lit(c, s, "_");
   snprintf(buf, sizeof(buf), "%d", n);
-  mrc_str_cat_cstr(s, buf);
+  mrc_str_cat_cstr(c, s, buf);
   return s;
 }
 
@@ -298,8 +297,8 @@ cdump_sym(mrc_ccontext *c, mrc_sym sym, const char *var_name, int idx, mrc_strin
   const char *op_name;
   mrc_int len = constant->length;
 
-  if (!name) {
-    mrc_str_free(name_obj);
+  if (*name == '\0') {
+    mrc_str_free(c, name_obj);
     return MRC_DUMP_INVALID_ARGUMENT;
   }
   if (sym_name_word_p(name, len)) {
@@ -326,29 +325,27 @@ cdump_sym(mrc_ccontext *c, mrc_sym sym, const char *var_name, int idx, mrc_strin
   else {
     char buf[32];
     mrc_string *name_obj = mrc_str_new(c, name, len);
-    mrc_str_cat_lit(init_syms_code, "  ");
-    mrc_str_cat_cstr(init_syms_code, var_name);
+    mrc_str_cat_lit(c, init_syms_code, "  ");
+    mrc_str_cat_cstr(c, init_syms_code, var_name);
     snprintf(buf, sizeof(buf), "[%d] = ", idx);
-    mrc_str_cat_cstr(init_syms_code, buf);
-    mrc_str_cat_lit(init_syms_code, "mrc_intern_lit(mrb, ");
+    mrc_str_cat_cstr(c, init_syms_code, buf);
+    mrc_str_cat_lit(c, init_syms_code, "mrb_intern_lit(mrb, ");
     mrc_string *escaped = mrc_str_escape(c, name_obj);
-    mrc_str_free(name_obj);
-    mrc_str_cat_str(init_syms_code, escaped);
-    mrc_str_free(escaped);
-    mrc_str_cat_lit(init_syms_code, ");\n");
+    mrc_str_free(c, name_obj);
+    mrc_str_cat_str(c, init_syms_code, escaped);
+    mrc_str_free(c, escaped);
+    mrc_str_cat_lit(c, init_syms_code, ");\n");
     fputs("0", fp);
   }
   fputs(", ", fp);
-  mrc_str_free(name_obj);
+  mrc_str_free(c, name_obj);
   return MRC_DUMP_OK;
 }
 
 static int
 cdump_syms(mrc_ccontext *c, const char *name, const char *key, int n, int syms_len, const mrc_sym *syms, mrc_string *init_syms_code, FILE *fp)
 {
-#if defined(MRC_TARGET_MRUBY)
-  int ai = mrb_gc_arena_save(c->mrb);
-#endif
+  int ai = mrc_gc_arena_save(c);
   mrc_int code_len = MRC_STRING_LEN(init_syms_code);
   mrc_string *var_name = sym_var_name_str(c, name, key, n);
 
@@ -356,13 +353,11 @@ cdump_syms(mrc_ccontext *c, const char *name, const char *key, int n, int syms_l
   for (int i=0; i<syms_len; i++) {
     cdump_sym(c, syms[i], MRC_STRING_PTR(var_name), i, init_syms_code, fp);
   }
-  mrc_str_free(var_name);
+  mrc_str_free(c, var_name);
   fputs("), ", fp);
   if (code_len == MRC_STRING_LEN(init_syms_code)) fputs("const", fp);
   fputs(");\n", fp);
-#if defined(MRC_TARGET_MRUBY)
-  mrb_gc_arena_restore(c->mrb, ai);
-#endif
+  mrc_gc_arena_restore(c, ai);
   return MRC_DUMP_OK;
 }
 
@@ -384,9 +379,7 @@ static int
 cdump_debug(mrc_ccontext *c, const char *name, int n, mrc_irep_debug_info *info,
             mrc_string *init_syms_code, FILE *fp)
 {
-#if defined(MRC_TARGET_MRUBY)
-  int ai = mrb_gc_arena_save(c->mrb);
-#endif
+  int ai = mrc_gc_arena_save(c);
   char buffer[256];
   const char *line_type = "mrb_debug_line_ary";
 
@@ -398,13 +391,13 @@ cdump_debug(mrc_ccontext *c, const char *name, int n, mrc_irep_debug_info *info,
   const pm_constant_t *fn_constant = pm_constant_pool_id_to_constant(&c->p->constant_pool, info->files[0]->filename_sym);
   const char *filename = (const char *)fn_constant->start;
   snprintf(buffer, sizeof(buffer), "  %s_debug_file_%d.filename_sym = mrb_intern_lit(mrb,", name, n);
-  mrc_str_cat_cstr(init_syms_code, buffer);
+  mrc_str_cat_cstr(c, init_syms_code, buffer);
   mrc_string *filename_str = mrc_str_new_cstr(c, filename);
   mrc_string *escaped = mrc_str_escape(c, filename_str);
-  mrc_str_free(filename_str);
-  mrc_str_cat_str(init_syms_code, escaped);
-  mrc_str_free(escaped);
-  mrc_str_cat_cstr(init_syms_code, ");\n");
+  mrc_str_free(c, filename_str);
+  mrc_str_cat_str(c, init_syms_code, escaped);
+  mrc_str_free(c, escaped);
+  mrc_str_cat_cstr(c, init_syms_code, ");\n");
 
   switch (info->files[0]->line_type) {
   case mrc_debug_line_ary:
@@ -448,9 +441,7 @@ cdump_debug(mrc_ccontext *c, const char *name, int n, mrc_irep_debug_info *info,
   fprintf(fp, "static mrb_irep_debug_info %s_debug_%d = {\n", name, n);
   fprintf(fp, "%d, %d, &%s_debug_file_%d_};\n", info->pc_count, info->flen, name, n);
 
-#if defined(MRC_TARGET_MRUBY)
-  mrb_gc_arena_restore(c->mrb, ai);
-#endif
+  mrc_gc_arena_restore(c, ai);
   return MRC_DUMP_OK;
 }
 
@@ -477,7 +468,7 @@ cdump_irep_struct(mrc_ccontext *c, const mrc_irep *irep, uint8_t flags, FILE *fp
   /* dump pool */
   if (0 < irep->plen) {
     len=irep->plen;
-    fprintf(fp,   "static const mrb_pool_value %s_pool_%d[%d] = {\n", name, n, len);
+    fprintf(fp,   "static const mrb_irep_pool %s_pool_%d[%d] = {\n", name, n, len);
     for (i=0; i<len; i++) {
       if (cdump_pool(c, &irep->pool[i], fp) != MRC_DUMP_OK)
         return MRC_DUMP_INVALID_ARGUMENT;
@@ -583,7 +574,7 @@ mrc_dump_irep_cstruct(mrc_ccontext *c, const mrc_irep *irep, uint8_t flags, FILE
   fputs("{\n", fp);
   fputs(MRC_STRING_PTR(init_syms_code), fp);
   fputs("}\n", fp);
-  mrc_str_free(init_syms_code);
+  mrc_str_free(c, init_syms_code);
   return MRC_DUMP_OK;
 }
 #endif /* MRC_NO_STDIO */

@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <inttypes.h>
-#include "../include/mrc_common.h"
 #include "../include/mrc_ccontext.h"
 #include "../include/mrc_irep.h"
 #include "../include/mrc_dump.h"
@@ -180,9 +179,7 @@ codedump(mrc_ccontext *c, const mrc_irep *irep, FILE *out)
     uint16_t b;
     uint16_t cc;
 
-#if defined(MRC_TARGET_MRUBY)
-    ai = mrc_gc_arena_save(c->mrb);
-#endif
+    int ai = mrc_gc_arena_save(c);
 
     i = pc - irep->iseq;
     next_file = mrc_debug_get_filename(c, irep, (uint32_t)i);
@@ -644,9 +641,7 @@ codedump(mrc_ccontext *c, const mrc_irep *irep, FILE *out)
       fprintf(out, "unknown_op (0x%x)\n", ins);
       break;
     }
-#if defined(MRC_TARGET_MRUBY)
-    mrc_gc_arena_restore(c->mrb, ai);
-#endif
+    mrc_gc_arena_restore(c, ai);
   }
   fprintf(out, "\n");
 }

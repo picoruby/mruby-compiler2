@@ -1,6 +1,5 @@
 
 #include <string.h>
-#include "../include/mrc_common.h"
 #include "../include/mrc_irep.h"
 #include "../include/mrc_ccontext.h"
 #include "../include/mrc_parser_util.h"
@@ -234,9 +233,7 @@ typedef struct scope {
 
   uint16_t nlocals;
   uint16_t nregs;
-#if defined(MRC_TARGET_MRUBY)
   int ai;
-#endif
 
   int debug_start_pos;
   uint16_t filename_index;
@@ -268,25 +265,25 @@ codegen_error(mrc_codegen_scope *s, const char *message)
   while (s->prev) {
     mrc_codegen_scope *tmp = s->prev;
     if (s->irep) {
-      mrc_free(s->iseq);
+      mrc_free(s->c, s->iseq);
       for (int i=0; i<s->irep->plen; i++) {
         mrc_pool_value *pv = &s->pool[i];
         if ((pv->tt & 0x3) == IREP_TT_STR || pv->tt == IREP_TT_BIGINT) {
-          mrc_free((void*)pv->u.str);
+          mrc_free(s->c, (void*)pv->u.str);
         }
       }
-      mrc_free(s->pool);
-      mrc_free(s->syms);
-      mrc_free(s->catch_table);
+      mrc_free(s->c, s->pool);
+      mrc_free(s->c, s->syms);
+      mrc_free(s->c, s->catch_table);
       if (s->reps) {
         /* copied from mrc_irep_free() in state.c */
         //for (int i=0; i<s->irep->rlen; i++) {
         //  if (s->reps[i])
         //    mrc_irep_decref(s->mrb, (mrc_irep*)s->reps[i]);
         //}
-        mrc_free(s->reps);
+        mrc_free(s->c, s->reps);
       }
-      mrc_free(s->lines);
+      mrc_free(s->c, s->lines);
     }
     mrc_pool_close(s->mpool);
     s = tmp;
@@ -339,9 +336,9 @@ emit_B(mrc_codegen_scope *s, uint32_t pc, uint8_t i)
     else {
       s->icapa *= 2;
     }
-    s->iseq = (mrc_code*)mrc_realloc(s->iseq, sizeof(mrc_code)*s->icapa);
+    s->iseq = (mrc_code*)mrc_realloc(s->c, s->iseq, sizeof(mrc_code)*s->icapa);
     if (s->lines) {
-      s->lines = (uint16_t*)mrc_realloc(s->lines, sizeof(uint16_t)*s->icapa);
+      s->lines = (uint16_t*)mrc_realloc(s->c, s->lines, sizeof(uint16_t)*s->icapa);
     }
   }
   if (s->lines) {
@@ -499,7 +496,7 @@ static mrc_irep*
 mrc_add_irep(mrc_ccontext *c)
 {
   static const mrc_irep mrc_irep_zero = { 0 };
-  mrc_irep *irep = (mrc_irep *)mrc_malloc(sizeof(mrc_irep));
+  mrc_irep *irep = (mrc_irep *)mrc_malloc(c, sizeof(mrc_irep));
   *irep = mrc_irep_zero;
   irep->refcnt = 1;
   return irep;
@@ -522,7 +519,7 @@ scope_add_irep(mrc_codegen_scope *s)
     s->irep = irep = mrc_add_irep(s->c);
     if (prev->irep->rlen == prev->rcapa) {
       prev->rcapa *= 2;
-      prev->reps = (mrc_irep **)mrc_realloc(prev->reps, sizeof(mrc_irep *)*prev->rcapa);
+      prev->reps = (mrc_irep **)mrc_realloc(s->c, prev->reps, sizeof(mrc_irep *)*prev->rcapa);
     }
     prev->reps[prev->irep->rlen++] = irep;
   }
@@ -540,6 +537,11 @@ scope_new(mrc_ccontext *c, mrc_codegen_scope *prev, mrc_constant_id_list *nlv)
     return NULL;
   }
   *s = codegen_scope_zero;
+  if (prev) {
+    s->c = prev->c;
+  } else {
+    s->c = c;
+  }
   s->mpool = pool;
   if (!prev) return s;
   s->prev = prev;
@@ -549,13 +551,13 @@ scope_new(mrc_ccontext *c, mrc_codegen_scope *prev, mrc_constant_id_list *nlv)
   scope_add_irep(s);
 
   s->rcapa = 8;
-  s->reps = (mrc_irep **)mrc_malloc(sizeof(mrc_irep *)*s->rcapa);
+  s->reps = (mrc_irep **)mrc_malloc(c, sizeof(mrc_irep *)*s->rcapa);
   s->icapa = 1024;
-  s->iseq = (mrc_code *)mrc_malloc(sizeof(mrc_code)*s->icapa);
+  s->iseq = (mrc_code *)mrc_malloc(c, sizeof(mrc_code)*s->icapa);
   s->pcapa = 32;
-  s->pool = (mrc_pool_value *)mrc_malloc(sizeof(mrc_pool_value)*s->pcapa);
+  s->pool = (mrc_pool_value *)mrc_malloc(c, sizeof(mrc_pool_value)*s->pcapa);
   s->scapa = 256;
-  s->syms = (mrc_sym *)mrc_malloc(sizeof(mrc_sym)*s->scapa);
+  s->syms = (mrc_sym *)mrc_malloc(c, sizeof(mrc_sym)*s->scapa);
   s->lv = nlv;
   if (!nlv) {
     s->sp = 1;
@@ -568,7 +570,7 @@ scope_new(mrc_ccontext *c, mrc_codegen_scope *prev, mrc_constant_id_list *nlv)
     mrc_sym *lv;
     size_t size = sizeof(mrc_sym)*nlv->size;
     if (0 < size) {
-      s->irep->lv = lv = (mrc_sym *)mrc_malloc(sizeof(mrc_sym)*(s->nlocals-1));
+      s->irep->lv = lv = (mrc_sym *)mrc_malloc(c, sizeof(mrc_sym)*(s->nlocals-1));
       memcpy(lv, nlv->ids, sizeof(mrc_sym)*nlv->size);
     }
     else {
@@ -577,12 +579,11 @@ scope_new(mrc_ccontext *c, mrc_codegen_scope *prev, mrc_constant_id_list *nlv)
     mrc_assert(nlv->size < UINT16_MAX);
   }
 
-#if defined(MRC_TARGET_MRUBY)
-  s->ai = gc_arena_save(c->mrb);
-#endif
+  int ai = mrc_gc_arena_save(c);
+  s->ai = ai;
   s->filename = prev->filename;
   if (s->filename) {
-    s->lines = (uint16_t *)mrc_malloc(sizeof(uint16_t)*s->icapa);
+    s->lines = (uint16_t *)mrc_malloc(c, sizeof(uint16_t)*s->icapa);
   }
   s->lineno = prev->lineno;
 
@@ -1162,10 +1163,10 @@ gen_return(mrc_codegen_scope *s, uint8_t op, uint16_t src)
 }
 
 static void*
-simple_realloc(void *p, size_t len)
+simple_realloc(mrc_ccontext *c, void *p, size_t len)
 {
   if (len == 0) return p;
-  return mrc_realloc(p, len);
+  return mrc_realloc(c, p, len);
 }
 
 static const char*
@@ -1187,7 +1188,7 @@ scope_finish(mrc_codegen_scope *s)
   irep->flags = 0;
   if (s->iseq) {
     size_t catchsize = sizeof(struct mrc_irep_catch_handler) * irep->clen;
-    irep->iseq = (const mrc_code *)mrc_realloc(s->iseq, sizeof(mrc_code)*s->pc + catchsize);
+    irep->iseq = (const mrc_code *)mrc_realloc(s->c, s->iseq, sizeof(mrc_code)*s->pc + catchsize);
     irep->ilen = s->pc;
     if (0 < irep->clen) {
       memcpy((void *)(irep->iseq + irep->ilen), s->catch_table, catchsize);
@@ -1196,23 +1197,21 @@ scope_finish(mrc_codegen_scope *s)
   else {
     irep->clen = 0;
   }
-  mrc_free(s->catch_table);
+  mrc_free(s->c, s->catch_table);
   s->catch_table = NULL;
-  irep->pool = (const mrc_pool_value *)simple_realloc(s->pool, sizeof(mrc_pool_value)*irep->plen);
-  irep->syms = (const mrc_sym *)simple_realloc(s->syms, sizeof(mrc_sym)*irep->slen);
-  irep->reps = (const mrc_irep **)simple_realloc(s->reps, sizeof(mrc_irep *)*irep->rlen);
+  irep->pool = (const mrc_pool_value *)simple_realloc(s->c, s->pool, sizeof(mrc_pool_value)*irep->plen);
+  irep->syms = (const mrc_sym *)simple_realloc(s->c, s->syms, sizeof(mrc_sym)*irep->slen);
+  irep->reps = (const mrc_irep **)simple_realloc(s->c, s->reps, sizeof(mrc_irep *)*irep->rlen);
   if (s->filename) {
     const char *filename = mrc_parser_get_filename(s->c, s->filename_index);
     mrc_debug_info_append_file(s->c, s->irep->debug_info,
                                filename, s->lines, s->debug_start_pos, s->pc);
   }
-  mrc_free(s->lines);
+  mrc_free(s->c, s->lines);
   irep->nlocals = s->nlocals;
   irep->nregs = s->nregs;
 
-#if defined(MRC_TARGET_MRUBY)
-  mrb_gc_arena_restore(s->c->mrb, s->ai);
-#endif
+  mrc_gc_arena_restore(s->c, s->ai);
   mrc_pool_close(s->mpool);
 }
 
@@ -1221,7 +1220,7 @@ lit_pool_extend(mrc_codegen_scope *s)
 {
   if (s->irep->plen == s->pcapa) {
     s->pcapa *= 2;
-    s->pool = (mrc_pool_value*)mrc_realloc(s->pool, sizeof(mrc_pool_value)*s->pcapa);
+    s->pool = (mrc_pool_value*)mrc_realloc(s->c, s->pool, sizeof(mrc_pool_value)*s->pcapa);
   }
 
   return &s->pool[s->irep->plen++];
@@ -1267,7 +1266,7 @@ new_sym(mrc_codegen_scope *s, mrc_sym sym)
     if (s->scapa > 0xffff) {
       codegen_error(s, "too many symbols");
     }
-    s->syms = (mrc_sym*)mrc_realloc(s->syms, sizeof(mrc_sym)*s->scapa);
+    s->syms = (mrc_sym*)mrc_realloc(s->c, s->syms, sizeof(mrc_sym)*s->scapa);
   }
   s->syms[s->irep->slen] = sym;
   return s->irep->slen++;
@@ -1489,7 +1488,7 @@ new_litbint(mrc_codegen_scope *s, const char *p, int base, mrc_bool neg)
 
   char *buf;
   pv->tt = IREP_TT_BIGINT;
-  buf = (char*)mrc_realloc(NULL, plen+3);
+  buf = (char*)mrc_realloc(s->c, NULL, plen+3);
   buf[0] = (char)plen;
   if (neg) buf[1] = -base;
   else buf[1] = base;
@@ -1524,7 +1523,7 @@ new_lit_str(mrc_codegen_scope *s, const char *str, mrc_int len)
   //else {
     char *p;
     pv->tt = (uint32_t)(len<<2) | IREP_TT_STR;
-    p = (char*)mrc_realloc(NULL, len+1);
+    p = (char*)mrc_realloc(s->c, NULL, len+1);
     memcpy(p, str, len);
     p[len] = '\0';
     pv->u.str = p;
@@ -1575,7 +1574,7 @@ static int
 catch_handler_new(mrc_codegen_scope *s)
 {
   size_t newsize = sizeof(struct mrc_irep_catch_handler) * (s->irep->clen + 1);
-  s->catch_table = (struct mrc_irep_catch_handler*)mrc_realloc((void*)s->catch_table, newsize);
+  s->catch_table = (struct mrc_irep_catch_handler*)mrc_realloc(s->c, (void*)s->catch_table, newsize);
   return s->irep->clen++;
 }
 
