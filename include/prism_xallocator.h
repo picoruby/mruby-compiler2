@@ -22,13 +22,31 @@
   #else
     #define xmalloc(size)             mrbc_raw_alloc(size)
     #define xcalloc(nmemb,size)       mrbc_raw_calloc(nmemb, size)
-    #define xrealloc(ptr,size)        mrbc_raw_realloc(ptr, size)
-    #define xfree(ptr)                mrbc_raw_free(ptr)
+    #define xrealloc(nmemb,size)      mrc_raw_realloc(nmemb, size)
+    #define xfree(ptr)                mrc_raw_free(ptr)
 
     #define mrc_malloc(c,size)        mrbc_raw_alloc(size)
     #define mrc_calloc(c,nmemb,size)  mrbc_raw_calloc(nmemb, size)
-    #define mrc_realloc(c,ptr,size)   mrbc_raw_realloc(ptr, size)
-    #define mrc_free(c,ptr)           mrbc_raw_free(ptr)
+    #define mrc_realloc(c,ptr,size)   mrc_raw_realloc(ptr, size)
+    #define mrc_free(c,ptr)           mrc_raw_free(ptr)
+
+    static inline void mrc_raw_free(void *ptr)
+    {
+      /* mrbc_raw_free() warns when ptr=NULL but it should be allowed in C99 */
+      if (ptr == NULL) return;
+      mrbc_raw_free(ptr);
+    }
+
+    static inline void*
+    mrc_raw_realloc(void *ptr, unsigned int size)
+    {
+      /* mrbc_raw_realloc() fails when ptr=NULL but it should be allowed in C99 */
+      if (ptr == NULL) {
+        return mrbc_raw_alloc(size);
+      } else {
+        return mrbc_raw_realloc(ptr, size);
+      }
+    }
   #endif
 #else
 
