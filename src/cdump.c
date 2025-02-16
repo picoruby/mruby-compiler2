@@ -105,6 +105,7 @@ static mrc_string*
 mrc_str_escape(mrc_ccontext *c, mrc_string *s)
 {
   mrc_string *s2 = mrc_str_new_capa(c, s->len*2+1);
+  mrc_str_cat_lit(c, s2, "\"");
   if (s2) {
     for (size_t i=0; i<s->len; i++) {
       char ch = s->ptr[i];
@@ -114,6 +115,7 @@ mrc_str_escape(mrc_ccontext *c, mrc_string *s)
       mrc_str_cat_lit(c, s2, &ch);
     }
   }
+  mrc_str_cat_lit(c, s2, "\"");
   return s2;
 }
 
