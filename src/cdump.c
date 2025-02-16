@@ -570,7 +570,7 @@ mrc_dump_irep_cstruct(mrc_ccontext *c, const mrc_irep *irep, uint8_t flags, FILE
                                       "extern\n"
                                       "#endif",
           initname);
-  fprintf(fp, "NULL,NULL,MRB_TT_PROC,MRB_GC_RED,0,{&%s_irep_0},NULL,{NULL},\n}};\n", initname);
+  fprintf(fp, "NULL,NULL,MRB_TT_PROC,MRB_GC_RED,MRB_OBJ_IS_FROZEN,0,{&%s_irep_0},NULL,{NULL},\n}};\n", initname);
   fputs("static void\n", fp);
   fprintf(fp, "%s_init_syms(mrb_state *mrb)\n", initname);
   fputs("{\n", fp);
