@@ -39,6 +39,9 @@ int mrc_dump_irep(mrc_ccontext *c, const mrc_irep *irep, uint8_t flags, uint8_t 
 #define RITE_BINARY_MAJOR_VER          "03"
 #define RITE_BINARY_MINOR_VER          "00"
 #define RITE_BINARY_FORMAT_VER         RITE_BINARY_MAJOR_VER RITE_BINARY_MINOR_VER
+#if defined(RITE_COMPILER_NAME)
+#undef RITE_COMPILER_NAME
+#endif
 #define RITE_COMPILER_NAME             "HSMK"
 #define RITE_PARSER_NAME               "Prism"
 #define RITE_COMPILER_VERSION          "0000"
