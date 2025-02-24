@@ -2823,6 +2823,17 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       }
       break;
     }
+    case PM_SOURCE_ENCODING_NODE:
+    {
+      genop_3(s, OP_SSEND, cursp(), new_sym(s, MRC_SYM_1(__ENCODING__)), 0);
+      push();
+      { // Workaround: increase nregs in case __ENCODING__ called alone
+        // (maybe it is a useless use of a literal in void context)
+        push();
+        pop();
+      }
+      break;
+    }
     default:
     {
       char buf[256];
