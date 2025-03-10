@@ -108,11 +108,11 @@ mrc_str_escape(mrc_ccontext *c, mrc_string *s)
   mrc_str_cat_lit(c, s2, "\"");
   if (s2) {
     for (size_t i=0; i<s->len; i++) {
-      char ch = s->ptr[i];
-      if (ch == '"' || ch == '\\') {
+      char ch[2] = {s->ptr[i], '\0'};
+      if (ch[0] == '"' || ch[0] == '\\') {
         mrc_str_cat_lit(c, s2, "\\");
       }
-      mrc_str_cat_lit(c, s2, &ch);
+      mrc_str_cat_lit(c, s2, ch);
     }
   }
   mrc_str_cat_lit(c, s2, "\"");
