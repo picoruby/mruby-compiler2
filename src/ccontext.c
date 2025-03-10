@@ -45,9 +45,9 @@ mrc_ccontext_filename(mrc_ccontext *c, const char *s)
 
 MRC_API void mrc_ccontext_free(mrc_ccontext *c)
 {
-  mrc_free(c, c->filename_table);
-  mrc_free(c, c->filename);
-  mrc_free(c, c->syms);
+  if (c->filename_table) mrc_free(c, c->filename_table);
+  if (c->filename) mrc_free(c, c->filename);
+  if (c->syms) mrc_free(c, c->syms);
   pm_parser_free(c->p);
   mrc_diagnostic_list_free(c);
   if (c->p->lex_callback) {
