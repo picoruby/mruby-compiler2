@@ -480,6 +480,10 @@ gen_call(mrc_codegen_scope *s, mrc_node *tree, int val, int safe)
     noop = 1;
     blk = 1;
   }
+  if (cast->arguments && cast->arguments->base.flags &PM_ARGUMENTS_NODE_FLAGS_CONTAINS_FORWARDING) {
+    blk = 1;
+    n = 0xFF;
+  }
   push();pop();
   s->sp = sp_save;
 
@@ -661,12 +665,16 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id
   }
 
 
-  int ma, mma, oa, ra, pa, ppa, ka, kd, ba, i;
+  int ma, mma, oa, ra, pa, ppa, ka, kd, ba, i, forwarding;
+  forwarding = 0;
+  int block_reg = 0;
   pm_constant_id_list_t *lv = (pm_constant_id_list_t *)codegen_palloc(s, sizeof(pm_constant_id_list_t));
   pm_constant_id_t null_mark = pm_constant_pool_insert_constant(&s->c->p->constant_pool, NULL, 0);
 
   // Create lv regs from Prism's locals
   if (parameters == NULL) {
+    // TODO: FIXME this doesn't work with numbered parameters
+    // TODO: `it`
     mrc_constant_id_list_init_capacity(s, lv, 2);
     mrc_constant_id_list_append(s, lv, null_mark);
     for (i = 0; i < locals->size; i++) {
@@ -704,7 +712,6 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id
     // mandatory
     for (i = 0; i < ma; i++) {
       if (nint(parameters->requireds.nodes[i]) == PM_MULTI_TARGET_NODE) {
-        mrc_constant_id_list_append(s, lv, null_mark);
       } else {
         mrc_constant_id_list_append(s, lv, ((pm_required_parameter_node_t *)parameters->requireds.nodes[i])->name);
       }
@@ -725,7 +732,6 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id
     // post
     for (i = 0; i < pa; i++) {
       if (nint(parameters->posts.nodes[i]) == PM_MULTI_TARGET_NODE) {
-        mrc_constant_id_list_append(s, lv, null_mark);
       } else {
         mrc_constant_id_list_append(s, lv, ((pm_required_parameter_node_t *)parameters->posts.nodes[i])->name);
       }
@@ -734,42 +740,60 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id
     if (ka || kd || ba) {
       // keyword rest
       mrc_bool write_dastr = false;
-      if (kd) {
-        if (!((pm_keyword_rest_parameter_node_t *)parameters->keyword_rest)->name) {
-          write_dastr = true;
-        }
-        else {
-          mrc_constant_id_list_append(s, lv, ((pm_keyword_rest_parameter_node_t *)parameters->keyword_rest)->name);
-        }
-      }
-      else if (!ba) {
+      if (ka || kd) {
         write_dastr = true;
+      }
+      if (kd) {
+        switch (nint(parameters->keyword_rest)) {
+          case PM_KEYWORD_REST_PARAMETER_NODE: {
+            if (((pm_keyword_rest_parameter_node_t *)parameters->keyword_rest)->name) {
+              mrc_constant_id_list_append(s, lv, ((pm_keyword_rest_parameter_node_t *)parameters->keyword_rest)->name);
+            }
+            break;
+          }
+          case PM_FORWARDING_PARAMETER_NODE: {
+            forwarding = 1;
+            write_dastr = false;
+            pm_constant_id_t astr = MRC_OPSYM_2(mul);
+            mrc_constant_id_list_append(s, lv, astr);
+            pm_constant_id_t dastr = MRC_OPSYM_2(pow);
+            mrc_constant_id_list_append(s, lv, dastr);
+            mrc_constant_id_list_append(s, lv, null_mark);
+            pm_constant_id_t and = MRC_OPSYM_2(and);
+            mrc_constant_id_list_append(s, lv, and);
+            block_reg = lv->size;
+            break;
+          }
+          default:
+            codegen_error(s, "Unknown node");
+        }
       }
       if (write_dastr) {
         pm_constant_id_t dastr = MRC_OPSYM_2(pow);
         mrc_constant_id_list_append(s, lv, dastr);
       }
-      // block
-      if (ba) {
-        if (((pm_block_parameter_node_t *)parameters->block)->name) {
-          mrc_constant_id_list_append(s, lv, ((pm_block_parameter_node_t *)parameters->block)->name);
-        }
-        else {
-          pm_constant_id_t and = MRC_OPSYM_2(and);
-          mrc_constant_id_list_append(s, lv, and);
-        }
+    }
+    if (forwarding == 0) {
+      mrc_constant_id_list_append(s, lv, null_mark);
+    }
+    // block
+    if (ba) {
+      if (((pm_block_parameter_node_t *)parameters->block)->name) {
+        mrc_constant_id_list_append(s, lv, ((pm_block_parameter_node_t *)parameters->block)->name);
       }
       else {
-        mrc_constant_id_list_append(s, lv, null_mark);
+        pm_constant_id_t and = MRC_OPSYM_2(and);
+        mrc_constant_id_list_append(s, lv, and);
       }
-      // keywords
-      for (i = 0; i < ka; i++) {
-        if (nint(parameters->keywords.nodes[i]) == PM_REQUIRED_KEYWORD_PARAMETER_NODE) {
-          mrc_constant_id_list_append(s, lv, ((pm_required_keyword_parameter_node_t *)parameters->keywords.nodes[i])->name);
-        }
-        else {
-          mrc_constant_id_list_append(s, lv, ((pm_optional_keyword_parameter_node_t *)parameters->keywords.nodes[i])->name);
-        }
+      block_reg = lv->size;
+    }
+    // keywords
+    for (i = 0; i < ka; i++) {
+      if (nint(parameters->keywords.nodes[i]) == PM_REQUIRED_KEYWORD_PARAMETER_NODE) {
+        mrc_constant_id_list_append(s, lv, ((pm_required_keyword_parameter_node_t *)parameters->keywords.nodes[i])->name);
+      }
+      else {
+        mrc_constant_id_list_append(s, lv, ((pm_optional_keyword_parameter_node_t *)parameters->keywords.nodes[i])->name);
       }
     }
     for (i = 0; i < ma; i++) {
@@ -788,10 +812,6 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id
         }
       }
     }
-  }
-  if (ba == 0) {
-    // Insert implicit block parameter before locals
-    mrc_constant_id_list_append(s, lv, null_mark);
   }
   if (locals) {
     for (i = 0; i < locals->size; i++) {
@@ -831,6 +851,8 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id
       codegen_error(s, "too many formal arguments");
     }
     /* (23bits = 5:5:1:5:5:1:1) */
+    ra = ra|forwarding;
+    ba = ba|forwarding;
     a = MRC_ARGS_REQ(ma)
       | MRC_ARGS_OPT(oa)
       | (ra? MRC_ARGS_REST() : 0)
@@ -907,6 +929,11 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id
       if (!kd) {
         genop_0(s, OP_KEYEND);
       }
+    }
+
+    /* block argument */
+    if (block_reg) {
+      gen_move(s, block_reg, block_reg-1, 0);
     }
 
     /* argument destructuring */
@@ -2831,6 +2858,36 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
         // (maybe it is a useless use of a literal in void context)
         push();
         pop();
+      }
+      break;
+    }
+    case PM_FORWARDING_ARGUMENTS_NODE:
+    {
+      //CAST(forwarding_arguments);
+      if (val) {
+        int idx;
+        genop_1(s, OP_LOADNIL, cursp());
+        push();
+        // *
+        idx = lv_idx(s, MRC_OPSYM_2(mul));
+        assert(idx != 0);
+        gen_move(s, cursp(), idx, val);
+        pop();
+        genop_1(s, OP_ARYCAT, cursp());
+        push();
+        // **
+        genop_2(s, OP_HASH, cursp(), 0);
+        push();
+        idx = lv_idx(s, MRC_OPSYM_2(pow));
+        assert(idx != 0);
+        gen_move(s, cursp(), idx, val);
+        pop();
+        genop_1(s, OP_HASHCAT, cursp());
+        push();
+        // &
+        idx = lv_idx(s, MRC_OPSYM_2(and));
+        assert(idx != 0);
+        gen_move(s, cursp(), idx, val);
       }
       break;
     }
