@@ -712,6 +712,7 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id
     // mandatory
     for (i = 0; i < ma; i++) {
       if (nint(parameters->requireds.nodes[i]) == PM_MULTI_TARGET_NODE) {
+        mrc_constant_id_list_append(s, lv, null_mark);
       } else {
         mrc_constant_id_list_append(s, lv, ((pm_required_parameter_node_t *)parameters->requireds.nodes[i])->name);
       }
@@ -732,6 +733,7 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id
     // post
     for (i = 0; i < pa; i++) {
       if (nint(parameters->posts.nodes[i]) == PM_MULTI_TARGET_NODE) {
+        mrc_constant_id_list_append(s, lv, null_mark);
       } else {
         mrc_constant_id_list_append(s, lv, ((pm_required_parameter_node_t *)parameters->posts.nodes[i])->name);
       }
@@ -748,6 +750,7 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id
           case PM_KEYWORD_REST_PARAMETER_NODE: {
             if (((pm_keyword_rest_parameter_node_t *)parameters->keyword_rest)->name) {
               mrc_constant_id_list_append(s, lv, ((pm_keyword_rest_parameter_node_t *)parameters->keyword_rest)->name);
+              write_dastr = false;
             }
             break;
           }
@@ -945,9 +948,9 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id
           // Enabling the following three lines would generate VM code equivalent to mruby-compiler,
           // but it would not work in mruby/c.
           // It appears to work correctly even when commented out, so it is left commented out
-          //uint16_t n = ((pm_multi_target_node_t *)margs[i])->lefts.size;
-          //gen_move(s, cursp(), pos, 0);
-          //genop_3(s, OP_APOST, cursp(), n, 0);
+          uint16_t n = ((pm_multi_target_node_t *)margs[i])->lefts.size;
+          gen_move(s, cursp(), pos, 0);
+          genop_3(s, OP_APOST, cursp(), n, 0);
         }
         pos++;
       }
@@ -960,9 +963,9 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id
           // Enabling the following three lines would generate VM code equivalent to mruby-compiler,
           // but it would not work in mruby/c.
           // It appears to work correctly even when commented out, so it is left commented out
-          //uint16_t n = ((pm_multi_target_node_t *)pargs[i])->lefts.size;
-          //gen_move(s, cursp(), pos, 0);
-          //genop_3(s, OP_APOST, cursp(), n, 0);
+          uint16_t n = ((pm_multi_target_node_t *)pargs[i])->lefts.size;
+          gen_move(s, cursp(), pos, 0);
+          genop_3(s, OP_APOST, cursp(), n, 0);
         }
         pos++;
       }
