@@ -755,7 +755,7 @@ static struct mrc_insn_data
 mrc_last_insn(mrc_codegen_scope *s)
 {
   if (s->pc == 0) {
-    struct mrc_insn_data data = { OP_NOP, 0 };
+    struct mrc_insn_data data = { OP_NOP, 0, 0, 0, NULL };
     return data;
   }
   return mrc_decode_insn(&s->iseq[s->lastpc]);
@@ -1043,7 +1043,7 @@ static int
 lv_idx(mrc_codegen_scope *s, mrc_sym id)
 {
   if (!s->lv) return 0;
-  for (int n = 0; n < s->lv->size; n++) {
+  for (size_t n = 0; n < s->lv->size; n++) {
     if (s->lv->ids[n] == id) return n + 1;
   }
   return 0;

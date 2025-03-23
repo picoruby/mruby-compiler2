@@ -88,7 +88,7 @@ gen_values(mrc_codegen_scope *s, mrc_node *tree, int val, int limit)
   if (cursp() >= slimit) slimit = INT16_MAX;
 
   if (!val) {
-    for (int i = 0; i < cast->arguments.size; i++) {
+    for (size_t i = 0; i < cast->arguments.size; i++) {
       t = (mrc_node *)cast->arguments.nodes[i];
       codegen(s, t, NOVAL);
       n++;
@@ -96,7 +96,7 @@ gen_values(mrc_codegen_scope *s, mrc_node *tree, int val, int limit)
     return n;
   }
 
-  for (int i = 0; i < cast->arguments.size; i++) {
+  for (size_t i = 0; i < cast->arguments.size; i++) {
     t = (mrc_node *)cast->arguments.nodes[i];
     if (nint(t) == PM_KEYWORD_HASH_NODE) break;
     int is_splat = nint(t) == PM_SPLAT_NODE;
@@ -370,7 +370,7 @@ gen_hash(mrc_codegen_scope *s, mrc_node *tree, int val, int limit)
   mrc_bool first = TRUE;
 
   //while (tree) {
-  for (int i = 0; i < elements.size; i++) {
+  for (size_t i = 0; i < elements.size; i++) {
     if (nint(elements.nodes[i]) == PM_ASSOC_SPLAT_NODE) {
       CAST3(assoc_splat, elements.nodes[i], assocsplat);
       if (val && first) {
@@ -465,7 +465,7 @@ gen_call(mrc_codegen_scope *s, mrc_node *tree, int val, int safe)
         push();
       }
     }
-    for (int i = 0; i < arguments->arguments.size; i++) {
+    for (size_t i = 0; i < arguments->arguments.size; i++) {
       mrc_node *t = (mrc_node *)arguments->arguments.nodes[i];
       if (nint(t) == PM_KEYWORD_HASH_NODE) {       /* keyword arguments */
         noop = 1;
@@ -665,7 +665,7 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id
   }
 
 
-  int ma, mma, oa, ra, pa, ppa, ka, kd, ba, i, forwarding;
+  size_t i, ma, mma, oa, ra, pa, ppa, ka, kd, ba, forwarding;;
   forwarding = 0;
   int block_reg = 0;
   pm_constant_id_list_t *lv = (pm_constant_id_list_t *)codegen_palloc(s, sizeof(pm_constant_id_list_t));
@@ -802,7 +802,7 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id
     for (i = 0; i < ma; i++) {
       if (nint(parameters->requireds.nodes[i]) == PM_MULTI_TARGET_NODE) {
         CAST3(multi_target, parameters->requireds.nodes[i], m);
-        for (int j = 0; j < m->lefts.size; j++) {
+        for (size_t j = 0; j < m->lefts.size; j++) {
           mrc_constant_id_list_append(s, lv, ((pm_required_parameter_node_t *)m->lefts.nodes[j])->name);
         }
       }
@@ -810,7 +810,7 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id
     for (i = 0; i < pa; i++) {
       if (nint(parameters->posts.nodes[i]) == PM_MULTI_TARGET_NODE) {
         CAST3(multi_target, parameters->posts.nodes[i], m);
-        for (int j = 0; j < m->lefts.size; j++) {
+        for (size_t j = 0; j < m->lefts.size; j++) {
           mrc_constant_id_list_append(s, lv, ((pm_required_parameter_node_t *)m->lefts.nodes[j])->name);
         }
       }
@@ -1062,7 +1062,7 @@ gen_rescue(mrc_codegen_scope *s, mrc_node *tree, uint32_t *pos1, int *exc, uint3
   if (nint((mrc_node *)rescue) != PM_RESCUE_NODE) {
     codegen_error(s, "should not happen");
   }
-  int i;
+  size_t i;
   uint32_t pos2, tmp;
 
   dispatch(s, *pos1);
@@ -1249,19 +1249,19 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     case PM_MULTI_WRITE_NODE:
     {
       CAST(multi_write);
-      int len = 0, n = 0, post = 0;
+      size_t len = 0, n = 0, post = 0;
       CAST3(array, cast->value, t);
       int rhs = cursp();
 
       if (!val && nint((mrc_node *)t) == PM_ARRAY_NODE && !(t->base.flags & PM_ARRAY_NODE_FLAGS_CONTAINS_SPLAT) ) {
         /* fixed rhs */
         len = t->elements.size;
-        for (int i = 0; i < len; i++) {
+        for (size_t i = 0; i < len; i++) {
           codegen(s, t->elements.nodes[i], VAL);
         }
         if (0 < cast->lefts.size) {
           n = 0;
-          for (int i = 0; i < cast->lefts.size; i++) {
+          for (size_t i = 0; i < cast->lefts.size; i++) {
             if (i < len) {
               gen_assignment(s, cast->lefts.nodes[i], NULL, rhs+n, NOVAL);
               n++;
@@ -1291,7 +1291,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
           n += rn;
         }
         if (0 < post) {
-          for (int i = 0; i < post; i++) {
+          for (size_t i = 0; i < post; i++) {
             if (n < len) {
               gen_assignment(s, cast->rights.nodes[i], NULL, rhs+n, NOVAL);
             }
@@ -1447,7 +1447,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       push_n(2); pop_n(2); /* space for receiver, arguments and a block */
       genop_3(s, OP_SEND, cursp(), idx, 0);
 
-      if (-1 != binary_operator) {
+      if (-1 != (int32_t)binary_operator) {
         push();
         codegen(s, value, VAL);
         push(); pop();
@@ -1510,7 +1510,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       }
       int base, nargs = 0;
       int idx, callargs = -1, vsp = -1;
-      uint32_t pos = -1;
+      int32_t pos = -1;
       if (val) {
         vsp = cursp();
         push();
@@ -1534,7 +1534,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       }
       push_n(nargs + 2); pop_n(nargs + 2); /* space for receiver, arguments and a block */
       genop_3(s, OP_SEND, cursp(), idx, callargs);
-      if (-1 != binary_operator) {
+      if (-1 != (int32_t)binary_operator) {
         push();
         codegen(s, value, VAL);
         push(); pop();
@@ -1885,7 +1885,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
           push();
           str_begin = TRUE;
         }
-        for (int i = 0; i < cast->parts.size; i++) {
+        for (size_t i = 0; i < cast->parts.size; i++) {
           codegen(s, cast->parts.nodes[i], VAL);
           pop();
           if (str_begin || 0 < i) {
@@ -1915,7 +1915,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
         push();
       }
       else {
-        for (int i = 0; i < cast->parts.size; i++) {
+        for (size_t i = 0; i < cast->parts.size; i++) {
           if (nint(cast->parts.nodes[i]) != PM_STRING_NODE) {
             codegen(s, cast->parts.nodes[i], NOVAL);
           }
@@ -1954,7 +1954,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     case PM_INTERPOLATED_STRING_NODE:
     case PM_INTERPOLATED_SYMBOL_NODE:
     {
-      int i;
+      size_t i;
       mrc_node **nodes;
       uint32_t size;
       if (nt == PM_INTERPOLATED_SYMBOL_NODE) {
@@ -2013,7 +2013,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     }
     case PM_INTERPOLATED_X_STRING_NODE:
     {
-      int i;
+      size_t i;
       CAST(interpolated_x_string);
       int sym = new_sym(s, MRC_SYM_1(Kernel));
 
@@ -2296,10 +2296,10 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
         head = cursp();
         codegen(s, (mrc_node *)cast->predicate, VAL);
       }
-      for (int i = 0; i < cast->conditions.size; i++) {
+      for (size_t i = 0; i < cast->conditions.size; i++) {
         pm_when_node_t *when = (pm_when_node_t *)cast->conditions.nodes[i];
         pos1 = pos2 = JMPLINK_START;
-        for (int j = 0; j < when->conditions.size; j++) {
+        for (size_t j = 0; j < when->conditions.size; j++) {
           mrc_node *cond = when->conditions.nodes[j];
           mrc_bool splat = FALSE;
           if (nint(cond) == PM_SPLAT_NODE) {
@@ -2508,7 +2508,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     case PM_UNDEF_NODE:
     {
       CAST(undef);
-      for (int i = 0; i < cast->names.size; i++) {
+      for (size_t i = 0; i < cast->names.size; i++) {
         CAST3(symbol, cast->names.nodes[i], name);
         int symbol = new_sym(s, nsym(s->c->p, name->unescaped.source, name->unescaped.length));
         genop_1(s, OP_UNDEF, symbol);
@@ -2540,7 +2540,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
           push();
         }
         /* keyword arguments */
-        for (int i = 0; i < arguments->arguments.size; i++) {
+        for (size_t i = 0; i < arguments->arguments.size; i++) {
           mrc_node *t = (mrc_node *)arguments->arguments.nodes[i];
           if (nint(t) == PM_KEYWORD_HASH_NODE) {
             nk = gen_hash(s, t, VAL, 14);
