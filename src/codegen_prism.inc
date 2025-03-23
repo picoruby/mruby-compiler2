@@ -1587,35 +1587,35 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
   name = cast->name; \
   value = cast->value
       switch (nt) {
-        case PM_LOCAL_VARIABLE_OR_WRITE_NODE: op_jmp = OP_JMPIF;
+        case PM_LOCAL_VARIABLE_OR_WRITE_NODE: op_jmp = OP_JMPIF; /* fall through */
         case PM_LOCAL_VARIABLE_AND_WRITE_NODE:
           {
             CAST_OR_WRITE(local_variable_or_write);
             depth = cast->depth;
             break;
           }
-        case PM_INSTANCE_VARIABLE_OR_WRITE_NODE: op_jmp = OP_JMPIF;
+        case PM_INSTANCE_VARIABLE_OR_WRITE_NODE: op_jmp = OP_JMPIF; /* fall through */
         case PM_INSTANCE_VARIABLE_AND_WRITE_NODE:
           {
             CAST_OR_WRITE(instance_variable_or_write);
             op_set = OP_SETIV; op_get = OP_GETIV;
             break;
           }
-        case PM_GLOBAL_VARIABLE_OR_WRITE_NODE: op_jmp = OP_JMPIF;
+        case PM_GLOBAL_VARIABLE_OR_WRITE_NODE: op_jmp = OP_JMPIF; /* fall through */
         case PM_GLOBAL_VARIABLE_AND_WRITE_NODE:
           {
             CAST_OR_WRITE(global_variable_or_write);
             op_set = OP_SETGV; op_get = OP_GETGV;
             break;
           }
-        case PM_CLASS_VARIABLE_OR_WRITE_NODE: op_jmp = OP_JMPIF;
+        case PM_CLASS_VARIABLE_OR_WRITE_NODE: op_jmp = OP_JMPIF; /* fall through */
         case PM_CLASS_VARIABLE_AND_WRITE_NODE:
           {
             CAST_OR_WRITE(class_variable_or_write);
             op_set = OP_SETCV; op_get = OP_GETCV;
             break;
           }
-        case PM_CONSTANT_OR_WRITE_NODE: op_jmp = OP_JMPIF;
+        case PM_CONSTANT_OR_WRITE_NODE: op_jmp = OP_JMPIF; /* fall through */
         case PM_CONSTANT_AND_WRITE_NODE:
           {
             CAST_OR_WRITE(constant_or_write);
