@@ -204,7 +204,7 @@ mrc_pm_parse(mrc_ccontext *c)
     memcpy(allocated, local->start, local->length);
     pm_string_constant_init(scope_local, (const char *)allocated, local->length);
   }
-  if (c->options) {
+  if (c->options && c->options->scopes) {
     for (int i = 0; i < c->options->scopes[0].locals_count; i++) {
       mrc_free(c, (void *)c->options->scopes[0].locals[i].source);
     }
