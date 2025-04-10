@@ -2,6 +2,7 @@
 #define PRISM_CUSTOM_ALLOCATOR_H
 
 #if defined(MRC_TARGET_MRUBY)
+  #include "mruby.h"
   extern mrb_state *global_mrb;
 
   #define xmalloc(size)             mrb_malloc(global_mrb, size)
@@ -14,6 +15,7 @@
   #define mrc_realloc(c,ptr,size)   mrb_realloc(c->mrb, ptr, size)
   #define mrc_free(c,ptr)           mrb_free(c->mrb, ptr)
 #elif defined(MRC_TARGET_MRUBYC)
+  #include "mrubyc.h"
   #if defined(MRBC_ALLOC_LIBC)
     #define mrc_malloc(c,size)        malloc(size)
     #define mrc_calloc(c,nmemb,size)  calloc(nmemb, size)

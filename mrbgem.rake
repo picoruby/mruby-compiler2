@@ -11,6 +11,13 @@ MRuby::Gem::Specification.new('mruby-compiler2') do |spec|
 
   cc.defines.flatten!
 
+  cc.defines << "PRISM_XALLOCATOR"
+  if cc.defines.include?("PICORB_VM_MRUBY")
+    cc.defines << "MRC_TARGET_MRUBY"
+  elsif cc.defines.include?("PICORB_VM_MRUBYC")
+    cc.defines << "MRC_TARGET_MRUBYC"
+  end
+
   if cc.defines.any? { _1.match? /\A(PICORUBY|MRB)_NO_FLOAT(=|\z)/ }
     cc.defines << "MRC_NO_FLOAT"
   end
