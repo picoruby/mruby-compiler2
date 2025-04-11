@@ -93,6 +93,13 @@ typedef uint8_t mrc_bool;
 # endif
 #endif
 
+#if !defined(MRC_INT32)
+#define MRC_INT64 1
+#endif
+#if !defined(MRC_32BIT)
+#define MRC_64BIT 1
+#endif
+
 #if defined(MRC_INT64)
   typedef int64_t mrc_int;
   typedef uint64_t mrc_uint;
