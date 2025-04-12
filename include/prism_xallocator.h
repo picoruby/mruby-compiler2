@@ -17,6 +17,11 @@
 #elif defined(MRC_TARGET_MRUBYC)
   #include "mrubyc.h"
   #if defined(MRBC_ALLOC_LIBC)
+    #define xmalloc(size)             malloc(size)
+    #define xcalloc(nmemb,size)       calloc(nmemb, size)
+    #define xrealloc(nmemb,size)      realloc(nmemb, size)
+    #define xfree(ptr)                free(ptr)
+
     #define mrc_malloc(c,size)        malloc(size)
     #define mrc_calloc(c,nmemb,size)  calloc(nmemb, size)
     #define mrc_realloc(c,ptr,size)   realloc(ptr, size)
