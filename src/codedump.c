@@ -1,5 +1,4 @@
 #include <stdio.h>
-#include <inttypes.h>
 #include "../include/mrc_ccontext.h"
 #include "../include/mrc_irep.h"
 #include "../include/mrc_dump.h"
@@ -7,6 +6,7 @@
 #include "../include/mrc_parser_util.h"
 #include "../include/mrc_pool.h"
 #include "../include/mrc_debug.h"
+#include <inttypes.h>
 
 const char *
 mrc_sym_dump(mrc_ccontext *c, mrc_sym sym)
