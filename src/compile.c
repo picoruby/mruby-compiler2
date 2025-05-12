@@ -255,14 +255,12 @@ mrc_load_file_cxt(mrc_ccontext *c, const char **filenames, uint8_t **source)
 static mrc_node *
 mrc_parse_string_cxt(mrc_ccontext *c, const uint8_t **source, size_t length)
 {
-  pm_string_t string;
-  pm_string_owned_init(&string, (uint8_t *)source, length);
   c->filename_table = (mrc_filename_table *)mrc_malloc(c, sizeof(mrc_filename_table));
   c->filename_table[0].filename = "-e";
   c->filename_table[0].start = 0;
   c->filename_table_length = 1;
   c->current_filename_index = 0;
-  mrc_pm_parser_init(c->p, (uint8_t **)string.source, string.length, c);
+  mrc_pm_parser_init(c->p, (uint8_t **)source, length, c);
   return mrc_pm_parse(c);
 }
 
