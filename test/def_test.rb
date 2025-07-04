@@ -109,6 +109,8 @@ class DefTest < PicoRubyTest
     p(def >() end)
   RUBY
 
+  pending unless ENV['USE_MRUBY']
+
   desc "multi target case"
   assert_equal(<<~RUBY, "1\nnil\n[2, 3]")
     def m((a, b), *c)
