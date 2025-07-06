@@ -19,7 +19,7 @@ class ArrayTest < PicoRubyTest
     p ary[64]
     p ary[65]
     p ary[66]
-    puts ary.size
+    p ary.size
   RUBY
 
   desc "getter [x,y]"

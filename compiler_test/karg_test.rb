@@ -33,7 +33,7 @@ class KargTest < PicoRubyTest
   RUBY
 
   desc "block argument 2"
-  assert_equal(<<~RUBY, "{:a=>0}")
+  assert_equal(<<~RUBY, (@@vm_select == :mruby ? "{a: 0}" : "{:a=>0}"))
     def task(opt: {})
       yield(opt)
     end

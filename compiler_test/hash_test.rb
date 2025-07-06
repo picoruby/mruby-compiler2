@@ -1,7 +1,7 @@
 class HashTest < PicoRubyTest
 
   desc "Generating a hash"
-  assert_equal(<<~RUBY, '{:a=>1, "b"=>"2", :c=>true}')
+  assert_equal(<<~RUBY, (@@vm_select == :mruby ? '{a: 1, "b" => "2", c: true}' : '{:a=>1, "b"=>"2", :c=>true}'))
     hash = {a: 1, "b" => "2", c: true}
     p hash
   RUBY

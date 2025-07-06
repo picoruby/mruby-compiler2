@@ -31,7 +31,7 @@ class GvarTest < PicoRubyTest
   RUBY
 
   desc "op_assign hash 2"
-  assert_equal(<<~RUBY, '{:a=>1}')
+  assert_equal(<<~RUBY, (@@vm_select == :mruby ? '{a: 1}' : '{:a=>1}'))
     $gvar={}
     $gvar[:a] ||= 1
     p $gvar

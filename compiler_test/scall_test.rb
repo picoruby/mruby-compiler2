@@ -1,7 +1,7 @@
 class ScallTest < PicoRubyTest
 
   desc "&. oprator"
-  assert_equal(<<~RUBY, "0\nnil\nfalse\nfalse")
+  assert_equal(<<~RUBY, "0\nnil\n\"false\"\n\"false\"")
     def a(v)
       case v
       when 0
@@ -14,8 +14,8 @@ class ScallTest < PicoRubyTest
     end
     p a(0).to_i
     p a(0)&.to_i
-    puts a(2).to_s
-    puts a(2)&.to_s
+    p a(2).to_s
+    p a(2)&.to_s
   RUBY
 
   desc "&. oprator with block"

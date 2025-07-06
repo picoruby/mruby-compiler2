@@ -19,13 +19,16 @@ class FunctionTest < PicoRubyTest
     puts("String", :symbol, 1, 3.14)
   RUBY
 
+  desc "p p p 0"
+  assert_equal(<<~RUBY, "0\n0\n0")
+    p p p 0
+  RUBY
+
+  pending if @@vm_select == :mruby
+  # mruby-3.4.0 has a bug. (master already fixed)
   desc "p p p"
   assert_equal(<<~RUBY, "nil\nnil")
     p p p
   RUBY
 
-  desc "p p p 0"
-  assert_equal(<<~RUBY, "0\n0\n0")
-    p p p 0
-  RUBY
 end
