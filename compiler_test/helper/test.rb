@@ -17,13 +17,13 @@ class PicoRubyTest
     @@failure_struct = Struct.new(:filename, :description, :script, :expected, :actual)
     @@failures = []
     @@description = ""
-    @@mruby_path = ENV['MRUBY_COMMAND']
+    @@picoruby_path = ENV['PICORUBY_COMMAND']
     @@picorbc_path = ENV['PICORBC_COMMAND']
     @@vm_select = ENV['USE_MRUBY'] ? :mruby : :mrubyc
     puts
     puts <<~"PREFACE"
       Virtual machine: #{@@vm_select}
-      mruby_path:      #{@@mruby_path}
+      picoruby_path:      #{@@picoruby_path}
       picorbc_path:    #{@@picorbc_path}
     PREFACE
     puts
@@ -81,25 +81,7 @@ class PicoRubyTest
       return
     end
     GC.disable # To keep temporary files
-    if @@vm_select == :mruby
-      rbfile = String.new
-      mrbfile = String.new
-      actual = nil
-      temp_rbfile = Tempfile.open do |f|
-        f.puts script
-        f
-      end
-      rbfile = temp_rbfile.path
-      temp_mrbfile = Tempfile.open
-      mrbfile = temp_mrbfile.path
-      # For GitHub Actions
-      FileUtils.chmod 0755, rbfile
-      FileUtils.chmod 0755, mrbfile
-      `#{@@picorbc_path} -o #{mrbfile} #{rbfile}`
-      actual = `#{@@mruby_path} -b '#{mrbfile}'`.chomp.gsub(/\r/, "")
-    else
-      actual = `#{@@mruby_path} -e '#{script}'`.chomp.gsub(/\r/, "")
-    end
+    actual = `#{@@picoruby_path} -e '#{script}'`.chomp.gsub(/\r/, "")
     GC.enable
     if actual == expected
       print "#{@@green}."

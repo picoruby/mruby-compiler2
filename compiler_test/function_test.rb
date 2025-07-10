@@ -24,8 +24,6 @@ class FunctionTest < PicoRubyTest
     p p p 0
   RUBY
 
-  pending if @@vm_select == :mruby
-  # mruby-3.4.0 has a bug. (master already fixed)
   desc "p p p"
   assert_equal(<<~RUBY, "nil\nnil")
     p p p
