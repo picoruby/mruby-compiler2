@@ -30,7 +30,7 @@ typedef struct mrc_ccontext {
   mrb_state *mrb;
   struct mrc_jmpbuf *jmp;
   mrc_parser_state *p;
-  mrc_sym *syms;
+  pm_options_t *options; // instead of mrb_sym *syms
   int slen;
   char *filename;
   uint16_t lineno;
@@ -51,8 +51,6 @@ typedef struct mrc_ccontext {
 
   // For PICOIRB
   uint16_t scope_sp;
-
-  pm_options_t *options;
 
 #ifndef MRC_NO_STDIO
   mrc_pool *pool; // for codedump

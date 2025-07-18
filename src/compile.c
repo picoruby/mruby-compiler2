@@ -7,6 +7,7 @@
 #include "../include/mrc_opcode.h"
 #include "../include/mrc_presym.h"
 #include "../include/mrc_diagnostic.h"
+#include "../include/mrc_proc.h"
 
 static mrc_irep *
 mrc_load_exec(mrc_ccontext *c, mrc_node *ast)
@@ -71,18 +72,66 @@ partial_hook(void *data, pm_parser_t *p, pm_token_t *token)
 }
 
 static void
-mrc_pm_parser_init(mrc_parser_state *p, uint8_t **source, size_t size, mrc_ccontext *c)
+mrc_pm_options_init(mrc_ccontext *cc)
 {
-  pm_lex_callback_t *cb = (pm_lex_callback_t *)mrc_malloc(c, sizeof(pm_lex_callback_t));
-  cb->data = c;
+  if (cc->options) {
+    pm_options_free(cc->options);
+    mrc_free(cc, cc->options);
+    cc->options = NULL;
+  }
+  if (cc->upper == NULL) return;
+
+  struct RProc *u;
+
+  pm_options_t *options = (pm_options_t *)mrc_calloc(cc, 1, sizeof(pm_options_t));
+  pm_string_t *encoding = &options->encoding;
+  pm_string_constant_init(encoding, "UTF-8", 5);
+
+  u = (struct RProc *)cc->upper;
+  size_t scopes_count = 1;
+  while (u->upper) {
+    scopes_count++;
+    u = (struct RProc *)u->upper;
+  }
+
+  pm_options_scopes_init(options, scopes_count + 1); // Prism requires one more scope
+
+  u = (struct RProc *)cc->upper;
+  pm_options_scope_t *scope;
+  size_t nlocals;
+  for (; 0 < scopes_count; scopes_count--) {
+    scope = &options->scopes[scopes_count - 1];
+    const struct mrc_irep *ir = u->body.irep;
+    nlocals = ir->nlocals;
+    pm_options_scope_init(scope, nlocals);
+    const mrc_sym *v = ir->lv;
+    if (v) {
+      const char *name;
+      for (size_t j = 0; j < nlocals; j++, v++) {
+        name = mrb_sym_name(cc->mrb, *v);
+        pm_string_constant_init(&scope->locals[j], name, strlen(name));
+      }
+    }
+    u = (struct RProc *)u->upper;
+  }
+
+  cc->options = options;
+}
+
+static void
+mrc_pm_parser_init(mrc_parser_state *p, uint8_t **source, size_t size, mrc_ccontext *cc)
+{
+  pm_lex_callback_t *cb = (pm_lex_callback_t *)mrc_malloc(cc, sizeof(pm_lex_callback_t));
+  cb->data = cc;
   cb->callback = partial_hook;
-  pm_parser_init(p, *source, size, c->options);
+  mrc_pm_options_init(cc);
+  pm_parser_init(p, *source, size, cc->options);
   p->lex_callback = cb;
   mrc_init_presym(&p->constant_pool);
-  if (c->filename_table) {
+  if (cc->filename_table) {
     pm_string_t filename_string;
-    pm_string_constant_init(&filename_string, c->filename_table[0].filename,
-                                             strlen(c->filename_table[0].filename));
+    pm_string_constant_init(&filename_string, cc->filename_table[0].filename,
+                                             strlen(cc->filename_table[0].filename));
     p->filepath = filename_string;
   }
 }
@@ -178,40 +227,9 @@ read_input_files(mrc_ccontext *c, const char **filenames, uint8_t **source, mrc_
 }
 
 static mrc_node *
-mrc_pm_parse(mrc_ccontext *c)
+mrc_pm_parse(mrc_ccontext *cc)
 {
-  mrc_node *node = pm_parse(c->p);
-
-  // save top-level locals for IRB
-  pm_program_node_t *program = (pm_program_node_t *)node;
-  uint32_t nlocals = program->locals.size;
-  pm_options_t *options = (pm_options_t *)mrc_malloc(c, sizeof(pm_options_t));
-  memset(options, 0, sizeof(pm_options_t));
-  pm_string_t *encoding = &options->encoding;
-  pm_string_constant_init(encoding, "UTF-8", 5);
-  pm_options_scopes_init(options, 1);
-  pm_options_scope_t *options_scope = &options->scopes[0];
-  pm_options_scope_init(options_scope, nlocals);
-  pm_constant_id_t id;
-  pm_constant_t *local;
-  pm_string_t *scope_local;
-  char *allocated;
-  for (int i = 0; i < nlocals; i++) {
-    scope_local = &options_scope->locals[i];
-    id = program->locals.ids[i];
-    local = pm_constant_pool_id_to_constant(&c->p->constant_pool, id);
-    allocated = (char *)mrc_malloc(c, local->length);
-    memcpy(allocated, local->start, local->length);
-    pm_string_constant_init(scope_local, (const char *)allocated, local->length);
-  }
-  if (c->options && c->options->scopes) {
-    for (int i = 0; i < c->options->scopes[0].locals_count; i++) {
-      mrc_free(c, (void *)c->options->scopes[0].locals[i].source);
-    }
-    mrc_free(c, c->options);
-  }
-  c->options = options;
-
+  mrc_node *node = pm_parse(cc->p);
   return node;
 }
 

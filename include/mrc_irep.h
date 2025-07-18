@@ -67,7 +67,7 @@ typedef struct mrc_irep {
   const mrc_sym *syms;
   const struct mrc_irep * const *reps;
 
-  const mrc_sym *lv;
+  mrc_sym *lv;  // Remove const for mrc_resolve_intern
   /* debug info */
   struct mrc_irep_debug_info* debug_info;
 

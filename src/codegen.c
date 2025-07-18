@@ -9,6 +9,7 @@
 #include "../include/mrc_pool.h"
 #include "../include/mrc_dump.h"
 #include "../include/mrc_debug.h"
+#include "../include/mrc_proc.h"
 
 #ifdef MRBC_REQUIRE_32BIT_ALIGNMENT
 #include <mrubyc.h>
@@ -570,8 +571,8 @@ scope_new(mrc_ccontext *c, mrc_codegen_scope *prev, mrc_constant_id_list *nlv)
     mrc_sym *lv;
     size_t size = sizeof(mrc_sym)*nlv->size;
     if (0 < size) {
-      s->irep->lv = lv = (mrc_sym *)mrc_malloc(c, sizeof(mrc_sym)*(s->nlocals-1));
-      memcpy(lv, nlv->ids, sizeof(mrc_sym)*nlv->size);
+      s->irep->lv = lv = (mrc_sym *)mrc_malloc(c, sizeof(mrc_sym) * (s->nlocals - 1));
+      memcpy(lv, nlv->ids, size);
     }
     else {
       s->irep->lv = lv = NULL;
@@ -1049,6 +1050,7 @@ lv_idx(mrc_codegen_scope *s, mrc_sym id)
   return 0;
 }
 
+
 #define MRC_PROC_CFUNC_FL 128
 #define MRC_PROC_CFUNC_P(p) (((p)->flags & MRC_PROC_CFUNC_FL) != 0)
 #define MRC_PROC_SCOPE 2048
@@ -1057,7 +1059,7 @@ lv_idx(mrc_codegen_scope *s, mrc_sym id)
 static int
 search_upvar(mrc_codegen_scope *s, mrc_sym id, int *idx)
 {
-//  const struct RProc *u;
+  const struct RProc *u;
   int lv = 0;
   mrc_codegen_scope *up = s->prev;
 
@@ -1070,27 +1072,29 @@ search_upvar(mrc_codegen_scope *s, mrc_sym id, int *idx)
     up = up->prev;
   }
 
-  // TODO: mrc_ccontext has an upper Proc if MRC_TARGET_MRUBY
-//  if (lv < 1) lv = 1;
-//  u = s->parser->upper;
-//  while (u && !MRC_PROC_CFUNC_P(u)) {
-//    const struct mrc_irep *ir = u->body.irep;
-//    uint_fast16_t n = ir->nlocals;
-//    int i;
-//
-//    const mrc_sym *v = ir->lv;
-//    if (v) {
-//      for (i=1; n > 1; n--, v++, i++) {
-//        if (*v == id) {
-//          *idx = i;
-//          return lv - 1;
-//        }
-//      }
-//    }
-//    if (MRC_PROC_SCOPE_P(u)) break;
-//    u = u->upper;
-//    lv++;
-//  }
+  if (lv < 1) lv = 1;
+  u = s->c->upper;
+  pm_constant_t *constant = pm_constant_pool_id_to_constant(&s->c->p->constant_pool, id);
+  mrc_sym intern = mrb_intern(s->c->mrb, (const char *)constant->start, constant->length);
+  if (0 < intern) {
+    while (u && !MRC_PROC_CFUNC_P(u)) {
+      const struct mrc_irep *ir = u->body.irep;
+      uint_fast16_t n = ir->nlocals;
+      int i;
+      const mrc_sym *v = ir->lv;
+      if (v) {
+        for (i=1; n > 1; n--, v++, i++) {
+          if (*v == intern) {
+            *idx = i;
+            return lv - 1;
+          }
+        }
+      }
+      if (MRC_PROC_SCOPE_P(u)) break;
+      u = u->upper;
+      lv++;
+    }
+  }
 
   if (id == MRC_OPSYM_2(and)) {
     codegen_error(s, "No anonymous block parameter");
