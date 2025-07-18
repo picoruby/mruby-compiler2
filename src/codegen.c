@@ -9,7 +9,10 @@
 #include "../include/mrc_pool.h"
 #include "../include/mrc_dump.h"
 #include "../include/mrc_debug.h"
+
+#if defined(PICORB_VM_MRUBY)
 #include "../include/mrc_proc.h"
+#endif
 
 #ifdef MRBC_REQUIRE_32BIT_ALIGNMENT
 #include <mrubyc.h>
@@ -1059,7 +1062,6 @@ lv_idx(mrc_codegen_scope *s, mrc_sym id)
 static int
 search_upvar(mrc_codegen_scope *s, mrc_sym id, int *idx)
 {
-  const struct RProc *u;
   int lv = 0;
   mrc_codegen_scope *up = s->prev;
 
@@ -1071,6 +1073,9 @@ search_upvar(mrc_codegen_scope *s, mrc_sym id, int *idx)
     lv++;
     up = up->prev;
   }
+
+#if defined(PICORB_VM_MRUBY)
+  const struct RProc *u;
 
   if (lv < 1) lv = 1;
   u = s->c->upper;
@@ -1095,6 +1100,7 @@ search_upvar(mrc_codegen_scope *s, mrc_sym id, int *idx)
       lv++;
     }
   }
+#endif
 
   if (id == MRC_OPSYM_2(and)) {
     codegen_error(s, "No anonymous block parameter");

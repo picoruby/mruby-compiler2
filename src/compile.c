@@ -7,7 +7,10 @@
 #include "../include/mrc_opcode.h"
 #include "../include/mrc_presym.h"
 #include "../include/mrc_diagnostic.h"
+
+#if defined(PICORB_VM_MRUBY)
 #include "../include/mrc_proc.h"
+#endif
 
 static mrc_irep *
 mrc_load_exec(mrc_ccontext *c, mrc_node *ast)
@@ -71,14 +74,11 @@ partial_hook(void *data, pm_parser_t *p, pm_token_t *token)
   }
 }
 
+#if defined(PICORB_VM_MRUBY)
 static void
 mrc_pm_options_init(mrc_ccontext *cc)
 {
-  if (cc->options) {
-    pm_options_free(cc->options);
-    mrc_free(cc, cc->options);
-    cc->options = NULL;
-  }
+  if (cc->options) return;
   if (cc->upper == NULL) return;
 
   struct RProc *u;
@@ -117,6 +117,7 @@ mrc_pm_options_init(mrc_ccontext *cc)
 
   cc->options = options;
 }
+#endif
 
 static void
 mrc_pm_parser_init(mrc_parser_state *p, uint8_t **source, size_t size, mrc_ccontext *cc)
@@ -124,7 +125,9 @@ mrc_pm_parser_init(mrc_parser_state *p, uint8_t **source, size_t size, mrc_ccont
   pm_lex_callback_t *cb = (pm_lex_callback_t *)mrc_malloc(cc, sizeof(pm_lex_callback_t));
   cb->data = cc;
   cb->callback = partial_hook;
+#if defined(PICORB_VM_MRUBY)
   mrc_pm_options_init(cc);
+#endif
   pm_parser_init(p, *source, size, cc->options);
   p->lex_callback = cb;
   mrc_init_presym(&p->constant_pool);
