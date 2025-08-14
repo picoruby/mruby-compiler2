@@ -562,17 +562,14 @@ scope_new(mrc_ccontext *c, mrc_codegen_scope *prev, mrc_constant_id_list *nlv)
   s->pool = (mrc_pool_value *)mrc_malloc(c, sizeof(mrc_pool_value)*s->pcapa);
   s->scapa = 256;
   s->syms = (mrc_sym *)mrc_malloc(c, sizeof(mrc_sym)*s->scapa);
+  assert(nlv != NULL); // `if (!prev) return s;` prevents this from being NULL
   s->lv = nlv;
-  if (!nlv) {
-    s->sp = 1;
-  }
-  else {
-    s->sp += nlv->size + 1; // add self
-  }
-  s->nlocals = s->sp;
+
+  s->sp += nlv->size + 1; // add self
+  s->nlocals = s->nregs = s->sp;
   if (nlv) {
     mrc_sym *lv;
-    size_t size = sizeof(mrc_sym)*nlv->size;
+    size_t size = sizeof(mrc_sym) * nlv->size;
     if (0 < size) {
       s->irep->lv = lv = (mrc_sym *)mrc_malloc(c, sizeof(mrc_sym) * (s->nlocals - 1));
       memcpy(lv, nlv->ids, size);
