@@ -109,7 +109,9 @@ mrc_pm_options_init(mrc_ccontext *cc)
       const char *name;
       for (size_t j = 0; j < nlocals; j++, v++) {
         name = mrb_sym_name(cc->mrb, *v);
-        pm_string_constant_init(&scope->locals[j], name, strlen(name));
+        if (name) { // TODO: This happens in eval?
+          pm_string_constant_init(&scope->locals[j], name, strlen(name));
+        }
       }
     }
     u = (struct RProc *)u->upper;
