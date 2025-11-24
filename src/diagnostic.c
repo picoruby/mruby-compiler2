@@ -61,7 +61,7 @@ mrc_diagnostic_code_to_string(mrc_diagnostic_code code)
 void
 mrc_diagnostic_list_append(mrc_ccontext *c, const uint8_t * location_start, const char *message, mrc_diagnostic_code code)
 {
-  mrc_diagnostic_list *list = mrc_calloc(c, 1, sizeof(mrc_diagnostic_list));
+  mrc_diagnostic_list *list = (mrc_diagnostic_list *)mrc_calloc(c, 1, sizeof(mrc_diagnostic_list));
   line_and_column_by_start_and_offset(c->p->start, location_start, &list->line, &list->column);
   char buf[256];
   const char *diagnostic_code_str = mrc_diagnostic_code_to_string(code);
