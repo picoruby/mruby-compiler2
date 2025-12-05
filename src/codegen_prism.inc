@@ -13,6 +13,13 @@ nsym(mrc_parser_state *p, const uint8_t *start, size_t length)
   return sym;
 }
 
+static int32_t
+node_lineno(mrc_ccontext *c, mrc_node *node)
+{
+  pm_location_t *loc = &((pm_node_t *)node)->location;
+  return pm_newline_list_line(&c->p->newline_list, loc->start, 1);
+}
+
 static mrc_bool
 true_always(mrc_node *tree)
 {
@@ -1165,8 +1172,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
 
   int nt = nint(tree);
 
-  //TODO lineno
-  // s->lineno = tree->lineno;
+  s->lineno = node_lineno(s->c, tree);
 
   switch (nt) {
     case PM_PROGRAM_NODE: {
