@@ -2900,6 +2900,17 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       }
       break;
     }
+    case PM_DEFINED_NODE:
+    {
+      CAST(defined);
+      push();
+      codegen(s, cast->value, VAL);
+      pop();
+      pop();
+      genop_3(s, OP_SSEND, cursp(), new_sym(s, MRC_SYM_2(defined_p)), 1);
+      push();
+      break;
+    }
     default:
     {
       char buf[256];
