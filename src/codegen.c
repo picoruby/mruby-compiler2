@@ -9,6 +9,7 @@
 #include "../include/mrc_pool.h"
 #include "../include/mrc_dump.h"
 #include "../include/mrc_debug.h"
+#include "../include/mrc_irep_pool_type.h"
 
 #if defined(PICORB_VM_MRUBY)
 #include "../include/mrc_proc.h"

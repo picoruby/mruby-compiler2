@@ -1,5 +1,6 @@
 #include "../include/mrc_irep.h"
 #include "../include/mrc_debug.h"
+#include "../include/mrc_irep_pool_type.h"
 
 void
 mrc_irep_remove_lv(mrc_ccontext *c, mrc_irep *irep)

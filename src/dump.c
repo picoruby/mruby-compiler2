@@ -4,6 +4,7 @@
 #include "../include/mrc_dump.h"
 #include "../include/mrc_parser_util.h"
 #include "../include/mrc_debug.h"
+#include "../include/mrc_irep_pool_type.h"
 
 #if !defined(BYTE_ORDER) && defined(__BYTE_ORDER__)
 # define BYTE_ORDER __BYTE_ORDER__

@@ -6,6 +6,7 @@
 #include "../include/mrc_parser_util.h"
 #include "../include/mrc_pool.h"
 #include "../include/mrc_debug.h"
+#include "../include/mrc_irep_pool_type.h"
 #include <inttypes.h>
 
 const char *

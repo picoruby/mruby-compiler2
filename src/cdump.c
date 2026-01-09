@@ -10,6 +10,7 @@
 #include "../include/mrc_irep.h"
 #include "../include/mrc_dump.h"
 #include "../include/mrc_debug.h"
+#include "../include/mrc_irep_pool_type.h"
 
 #ifndef MRC_NO_STDIO
 
