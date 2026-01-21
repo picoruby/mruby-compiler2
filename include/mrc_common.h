@@ -30,9 +30,9 @@
 #endif
 #include "prism.h"
 
-#define MRC_RELEASE_YEAR    2024
-#define MRC_RELEASE_MONTH   9
-#define MRC_RELEASE_DAY     9
+#define MRC_RELEASE_YEAR    2026
+#define MRC_RELEASE_MONTH   1
+#define MRC_RELEASE_DAY     21
 #define MRC_RELEASE_DATE    MRC_STRINGIZE(MRC_RELEASE_YEAR) "-" \
                             MRC_STRINGIZE(MRC_RELEASE_MONTH) "-" \
                             MRC_STRINGIZE(MRC_RELEASE_DAY)
