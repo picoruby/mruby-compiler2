@@ -30,12 +30,11 @@
 #endif
 #include "prism.h"
 
-#define MRC_VERSION_MAJOR   3
-#define MRC_VERSION_MINOR   4
-#define MRC_VERSION_TEENY   1
-#define MRC_VERSION         MRC_STRINGIZE(MRC_VERSION_MAJOR) "." \
-                            MRC_STRINGIZE(MRC_VERSION_MINOR) "." \
-                            MRC_STRINGIZE(MRC_VERSION_TEENY)
+#ifndef PICORUBY_VERSION
+  #define MRC_VERSION "unknown (standalone)"
+#else
+  #define MRC_VERSION PICORUBY_VERSION
+#endif
 
 #define MRC_RELEASE_YEAR    2026
 #define MRC_RELEASE_MONTH   1
