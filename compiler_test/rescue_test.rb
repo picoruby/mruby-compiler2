@@ -93,6 +93,66 @@ class RescueTest < PicoRubyTest
       end
     RUBY
 
+    desc "rescue modifier"
+    assert_equal(<<~RUBY, "rescued")
+      def my_method
+        raise rescue puts "rescued"
+      end
+      my_method
+    RUBY
+
+    desc "rescue modifier with return value (no error)"
+    assert_equal(<<~RUBY, "42")
+      def my_method
+        42 rescue 0
+      end
+      p my_method
+    RUBY
+
+    desc "rescue modifier with return value (with error)"
+    assert_equal(<<~RUBY, "100")
+      def my_method
+        raise rescue 100
+      end
+      p my_method
+    RUBY
+
+    desc "rescue modifier with assignment"
+    assert_equal(<<~RUBY, "99")
+      x = raise rescue 99
+      p x
+    RUBY
+
+    desc "rescue modifier nested"
+    assert_equal(<<~RUBY, "\"nested\"")
+      def my_method
+        raise rescue (raise rescue "nested")
+      end
+      p my_method
+    RUBY
+
+    desc "rescue modifier with expression"
+    assert_equal(<<~RUBY, "3")
+      result = (1 + 2) rescue 0
+      p result
+    RUBY
+
+    desc "rescue modifier returning nil"
+    assert_equal(<<~RUBY, "nil")
+      def my_method
+        raise rescue nil
+      end
+      p my_method
+    RUBY
+
+    desc "rescue modifier returning false"
+    assert_equal(<<~RUBY, "false")
+      def my_method
+        raise rescue false
+      end
+      p my_method
+    RUBY
+
   end
 
 end

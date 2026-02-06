@@ -2792,6 +2792,39 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       }
       break;
     }
+    case PM_RESCUE_MODIFIER_NODE:
+    {
+      CAST(rescue_modifier);
+      int catch_entry, begin_pos, end_pos;
+      struct loopinfo *lp;
+
+      lp = loop_push(s, LOOP_BEGIN);
+      lp->pc0 = new_label(s);
+      catch_entry = catch_handler_new(s);
+      begin_pos = s->pc;
+
+      /* evaluate main expression */
+      codegen(s, cast->expression, val);
+      if (val) pop();
+
+      lp->type = LOOP_RESCUE;
+      end_pos = s->pc;
+      int noexc = genjmp_0(s, OP_JMP);
+      catch_handler_set(s, catch_entry, MRC_CATCH_RESCUE, begin_pos, end_pos, s->pc);
+
+      /* rescue expression */
+      int exc = cursp();
+      genop_1(s, OP_EXCEPT, exc);
+      push();
+      pop();
+      codegen(s, cast->rescue_expression, val);
+      if (val) pop();
+
+      dispatch(s, noexc);
+      if (val) push();
+      loop_pop(s, NOVAL);
+      break;
+    }
     case PM_BLOCK_ARGUMENT_NODE:
     {
       CAST(block_argument);
