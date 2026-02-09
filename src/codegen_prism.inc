@@ -564,7 +564,7 @@ gen_massignment(mrc_codegen_scope *s, mrc_node *tree, int rhs, int val)
     push_n(post+1);
     pop_n(post+1);
     genop_3(s, OP_APOST, cursp(), n, post);
-    if (cast->rest) { /* rest */
+    if (cast->rest && nint(cast->rest) != PM_IMPLICIT_REST_NODE) { /* rest */
       gen_assignment(s, ((pm_splat_node_t *)cast->rest)->expression, NULL, cursp(), NOVAL);
     }
     for (int i = 0; i < post; i++) {
@@ -1279,7 +1279,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
           }
         }
         post = cast->rights.size;
-        if (cast->rest) {
+        if (cast->rest && nint(cast->rest) != PM_IMPLICIT_REST_NODE) {
           int rn;
           if (len < post + n) {
             rn = 0;
@@ -1294,6 +1294,17 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
             genop_3(s, OP_ARRAY2, cursp(), rhs+n, rn);
           }
           gen_assignment(s, ((pm_splat_node_t *)cast->rest)->expression, NULL, cursp(), NOVAL);
+          n += rn;
+        }
+        else if (cast->rest && nint(cast->rest) == PM_IMPLICIT_REST_NODE) {
+          /* trailing comma: just consume the rest without assignment */
+          int rn;
+          if (len < post + n) {
+            rn = 0;
+          }
+          else {
+            rn = len - post - n;
+          }
           n += rn;
         }
         if (0 < post) {

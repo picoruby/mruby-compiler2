@@ -78,6 +78,24 @@ class MasgnTest < PicoRubyTest
     p obj.foo, obj.bar
   RUBY
 
+  desc "trailing comma in LHS (basic)"
+  assert_equal(<<~RUBY, "nil\nnil")
+    a, b, = []
+    p a, b
+  RUBY
+
+  desc "trailing comma in LHS (with values)"
+  assert_equal(<<~RUBY, "1\n2")
+    a, b, = [1, 2]
+    p a, b
+  RUBY
+
+  desc "trailing comma in LHS (excess values)"
+  assert_equal(<<~RUBY, "1\n2")
+    a, b, = [1, 2, 3]
+    p a, b
+  RUBY
+
   if @@vm_select == :mruby
     desc "RHS has only one item, LHS has a rest and a post"
     assert_equal(<<~RUBY, "1\nnil\n[]\nnil")
