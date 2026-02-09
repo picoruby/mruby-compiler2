@@ -12,8 +12,6 @@ class SingletonTest < PicoRubyTest
       String.a(3)
     RUBY
 
-    pending #"TODO: mruby-3.4.0 has bug"
-
     desc "singleton self"
     assert_equal(<<~RUBY, ":hello")
       def self.a(v)
