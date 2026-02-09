@@ -1036,6 +1036,141 @@ codegen_pattern(mrc_codegen_scope *s, mrc_node *pattern, int target, uint32_t *f
     }
     break;
 
+  case PM_FIND_PATTERN_NODE:
+    {
+      /* Find pattern: [*pre, elem1, elem2, ..., *post]
+       * Searches for elems anywhere in the array. */
+      CAST3(find_pattern, pattern, pat_find);
+      int elems_len = pat_find->requireds.size;
+      int arr_reg = cursp();
+      int idx_reg;
+      uint32_t loop_start, match_fail, loop_end;
+
+      /* Call deconstruct on target */
+      gen_move(s, cursp(), target, 0);
+      push(); pop();
+      genop_3(s, OP_SEND, arr_reg, new_sym(s, MRC_SYM_1(deconstruct)), 0);
+      push(); /* protect arr_reg */
+
+      /* Check minimum length: arr.size >= elems_len */
+      gen_move(s, cursp(), arr_reg, 0);
+      push(); pop();
+      genop_3(s, OP_SEND, cursp(), new_sym(s, MRC_SYM_1(size)), 0);
+      gen_int(s, cursp() + 1, elems_len);
+      genop_1(s, OP_GE, cursp());
+      tmp = genjmp2(s, OP_JMPNOT, cursp(), *fail_pos, 1);
+      *fail_pos = tmp;
+
+      /* Initialize index to 0 */
+      idx_reg = cursp();
+      gen_int(s, idx_reg, 0);
+      push();
+
+      /* Loop: try matching at each position */
+      loop_start = new_label(s);
+      match_fail = JMPLINK_START;
+
+      /* Check if idx <= arr.size - elems_len */
+      gen_move(s, cursp(), arr_reg, 0);
+      push(); pop();
+      genop_3(s, OP_SEND, cursp(), new_sym(s, MRC_SYM_1(size)), 0);
+      gen_int(s, cursp() + 1, elems_len);
+      genop_1(s, OP_SUB, cursp());
+      gen_move(s, cursp() + 1, idx_reg, 0);
+      genop_1(s, OP_GE, cursp());
+      tmp = genjmp2(s, OP_JMPNOT, cursp(), *fail_pos, 1);
+      *fail_pos = tmp;
+
+      /* Try to match each middle element at idx+offset */
+      for (size_t i = 0; i < pat_find->requireds.size; i++) {
+        /* Get arr[idx + offset] */
+        gen_move(s, cursp(), arr_reg, 0);
+        push();
+        if (i == 0) {
+          gen_move(s, cursp(), idx_reg, 0);
+        }
+        else {
+          gen_move(s, cursp(), idx_reg, 0);
+          gen_int(s, cursp() + 1, (int)i);
+          genop_1(s, OP_ADD, cursp());
+        }
+        genop_1(s, OP_GETIDX, cursp() - 1);
+        int elem_reg = cursp() - 1;
+        codegen_pattern(s, pat_find->requireds.nodes[i], elem_reg, &match_fail, -1);
+        pop();
+      }
+
+      /* All elements matched - bind pre and post if named */
+      if (pat_find->left && nint((mrc_node *)pat_find->left) == PM_SPLAT_NODE) {
+        pm_splat_node_t *pre_splat = (pm_splat_node_t *)pat_find->left;
+        if (pre_splat->expression &&
+            nint(pre_splat->expression) == PM_LOCAL_VARIABLE_TARGET_NODE) {
+          pm_local_variable_target_node_t *pre_var =
+              (pm_local_variable_target_node_t *)pre_splat->expression;
+          int var_idx = lv_idx(s, pre_var->name);
+          if (var_idx > 0) {
+            /* pre = arr[0...idx] */
+            gen_move(s, cursp(), arr_reg, 0);
+            push();
+            gen_int(s, cursp(), 0);
+            push();
+            gen_move(s, cursp(), idx_reg, 0);
+            genop_1(s, OP_RANGE_EXC, cursp() - 1);
+            pop(); pop();
+            genop_3(s, OP_SEND, cursp(), new_sym(s, MRC_OPSYM_2(aref)), 1);
+            gen_move(s, var_idx, cursp(), 1);
+          }
+        }
+      }
+
+      if (pat_find->right && nint((mrc_node *)pat_find->right) == PM_SPLAT_NODE) {
+        pm_splat_node_t *post_splat = (pm_splat_node_t *)pat_find->right;
+        if (post_splat->expression &&
+            nint(post_splat->expression) == PM_LOCAL_VARIABLE_TARGET_NODE) {
+          pm_local_variable_target_node_t *post_var =
+              (pm_local_variable_target_node_t *)post_splat->expression;
+          int var_idx = lv_idx(s, post_var->name);
+          if (var_idx > 0) {
+            /* post = arr[(idx+elems_len)..-1] */
+            gen_move(s, cursp(), arr_reg, 0);
+            push();
+            gen_move(s, cursp(), idx_reg, 0);
+            gen_int(s, cursp() + 1, elems_len);
+            genop_1(s, OP_ADD, cursp());
+            push();
+            gen_int(s, cursp(), -1);
+            genop_1(s, OP_RANGE_INC, cursp() - 1);
+            pop(); pop();
+            genop_3(s, OP_SEND, cursp(), new_sym(s, MRC_OPSYM_2(aref)), 1);
+            gen_move(s, var_idx, cursp(), 1);
+          }
+        }
+      }
+
+      /* Match succeeded - jump to end */
+      tmp = genjmp(s, OP_JMP, JMPLINK_START);
+      loop_end = tmp;
+
+      /* Match failed at this position - try next index */
+      if (match_fail != JMPLINK_START) {
+        dispatch_linked(s, match_fail);
+      }
+
+      /* idx++ */
+      genop_2(s, OP_ADDI, idx_reg, 1);
+
+      /* Jump back to loop start */
+      genjmp(s, OP_JMP, loop_start);
+
+      /* Dispatch loop_end jump */
+      dispatch(s, loop_end);
+
+      /* Clean up stack */
+      pop(); /* idx_reg */
+      pop(); /* arr_reg */
+    }
+    break;
+
   default:
     /* Unimplemented pattern type - for now, always fail */
     tmp = genjmp(s, OP_JMP, *fail_pos);
