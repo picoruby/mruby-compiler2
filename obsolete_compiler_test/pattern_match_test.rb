@@ -226,4 +226,31 @@ class PatternMatchTest < PicoRubyTest
     end
     p result
   RUBY
+
+  desc "find pattern basic"
+  assert_equal(<<~RUBY, ":match")
+    result = case [1, 2, 3, 4, 5]
+    in [*, 2, 3, *]
+      :match
+    end
+    p result
+  RUBY
+
+  desc "find pattern with capture"
+  assert_equal(<<~RUBY, "[[1], [4, 5]]")
+    result = case [1, 2, 3, 4, 5]
+    in [*pre, 2, 3, *post]
+      [pre, post]
+    end
+    p result
+  RUBY
+
+  desc "find pattern no match"
+  assert_equal(<<~RUBY, "nil")
+    result = case [1, 2, 3]
+    in [*, 5, 6, *]
+      :match
+    end
+    p result
+  RUBY
 end
