@@ -5,6 +5,7 @@
 #define CAST(name) CAST3(name,tree,cast)
 
 static void gen_massignment(mrc_codegen_scope *s, mrc_node *tree, int rhs, int val);
+static void gen_lvar(mrc_codegen_scope *s, mrc_sym name, int depth);
 
 static mrc_sym
 nsym(mrc_parser_state *p, const uint8_t *start, size_t length)
@@ -52,7 +53,14 @@ gen_retval(mrc_codegen_scope *s, mrc_node *tree)
   CAST(arguments);
   if (cast->arguments.size == 1 ) {
     if (nint(cast->arguments.nodes[0]) == PM_SPLAT_NODE) {
-      codegen(s, ((pm_splat_node_t *)cast->arguments.nodes[0])->expression, VAL);
+      pm_splat_node_t *splat = (pm_splat_node_t *)cast->arguments.nodes[0];
+      if (splat->expression) {
+        codegen(s, (mrc_node *)splat->expression, VAL);
+      } else {
+        /* anonymous splat: load local variable '*' */
+        pm_constant_id_t astr = MRC_OPSYM_2(mul);
+        gen_lvar(s, astr, 0);
+      }
       pop();
       genop_1(s, OP_ARYSPLAT, cursp());
     }
@@ -129,8 +137,15 @@ gen_values(mrc_codegen_scope *s, mrc_node *tree, int val, int limit)
       n = 0;
     }
     if (is_splat) {
-      CAST3(array, ((pm_splat_node_t *)t)->expression, a);
-      codegen(s, (mrc_node *)a, val);
+      pm_splat_node_t *splat = (pm_splat_node_t *)t;
+      if (splat->expression) {
+        CAST3(array, splat->expression, a);
+        codegen(s, (mrc_node *)a, val);
+      } else {
+        /* anonymous splat: load local variable '*' */
+        pm_constant_id_t astr = MRC_OPSYM_2(mul);
+        gen_lvar(s, astr, 0);
+      }
       pop(); pop();
       genop_1(s, OP_ARYCAT, cursp());
       push();
@@ -396,7 +411,13 @@ gen_hash(mrc_codegen_scope *s, mrc_node *tree, int val, int limit)
         }
         push();
       }
-      codegen(s, assocsplat->value, val);
+      if (assocsplat->value) {
+        codegen(s, assocsplat->value, val);
+      } else if (val) {
+        /* anonymous keyword splat: load local variable '**' */
+        pm_constant_id_t dastr = MRC_OPSYM_2(pow);
+        gen_lvar(s, dastr, 0);
+      }
       if (val && (len > 0 || update)) {
         pop(); pop();
         genop_1(s, OP_HASHCAT, cursp());
@@ -757,6 +778,10 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id
           case PM_KEYWORD_REST_PARAMETER_NODE: {
             if (((pm_keyword_rest_parameter_node_t *)parameters->keyword_rest)->name) {
               mrc_constant_id_list_append(s, lv, ((pm_keyword_rest_parameter_node_t *)parameters->keyword_rest)->name);
+              write_dastr = false;
+            } else {
+              pm_constant_id_t dastr = MRC_OPSYM_2(pow);
+              mrc_constant_id_list_append(s, lv, dastr);
               write_dastr = false;
             }
             break;
@@ -1810,7 +1835,13 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     case PM_SPLAT_NODE:
     {
       CAST(splat);
-      codegen(s, (mrc_node *)cast->expression, val);
+      if (cast->expression) {
+        codegen(s, (mrc_node *)cast->expression, val);
+      } else if (val) {
+        /* anonymous splat: load local variable '*' */
+        pm_constant_id_t astr = MRC_OPSYM_2(mul);
+        gen_lvar(s, astr, 0);
+      }
       break;
     }
     case PM_STRING_NODE:

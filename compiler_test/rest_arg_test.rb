@@ -21,6 +21,15 @@ class RestArgTest < PicoRubyTest
       end
       a(1,2,3,4)
     RUBY
+
+    desc "anonymous splat arguments"
+    assert_equal(<<~RUBY, "1\n2\n3\n{key: :value}")
+      def my_method(*,**)
+        p(*)
+        p(**)
+      end
+      my_method(1, 2, 3, key: :value)
+    RUBY
   end
 
 end
