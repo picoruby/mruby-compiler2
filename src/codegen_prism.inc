@@ -928,6 +928,10 @@ codegen_pattern(mrc_codegen_scope *s, mrc_node *pattern, int target, uint32_t *f
         arr_reg = cursp();
         push();  /* protect arr_reg on stack */
 
+        /* Check if deconstruct returned nil */
+        tmp = genjmp2(s, OP_JMPNIL, arr_reg, *fail_pos, 0);
+        *fail_pos = tmp;
+
         /* Runtime size check: arr.size() == or >= expected */
         {
           int chk = cursp();
