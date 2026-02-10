@@ -1150,6 +1150,10 @@ codegen_pattern(mrc_codegen_scope *s, mrc_node *pattern, int target, uint32_t *f
       genop_3(s, OP_SEND, arr_reg, new_sym(s, MRC_SYM_1(deconstruct)), 0);
       push(); /* protect arr_reg */
 
+      /* Check if deconstruct returned nil */
+      tmp = genjmp2(s, OP_JMPNIL, arr_reg, *fail_pos, 0);
+      *fail_pos = tmp;
+
       /* Check minimum length: arr.size >= elems_len */
       gen_move(s, cursp(), arr_reg, 0);
       push(); pop();

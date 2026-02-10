@@ -385,6 +385,22 @@ class PatternMatchTest < PicoRubyTest
     p result
   RUBY
 
+  desc "deconstruct returns nil for find pattern"
+  assert_equal(<<~RUBY, ":no_match")
+    class Foo
+      def deconstruct
+        nil
+      end
+    end
+    result = case Foo.new
+    in [*, 1, 2, *]
+      :match
+    else
+      :no_match
+    end
+    p result
+  RUBY
+
   # TODO
   # The rest of the pattern matching features needs merging PR:
   #   https://github.com/mrubyc/mrubyc/pull/257
