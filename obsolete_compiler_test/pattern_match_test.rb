@@ -325,6 +325,28 @@ class PatternMatchTest < PicoRubyTest
     p result
   RUBY
 
+  desc "hash pattern with nil value matches"
+  assert_equal(<<~RUBY, ":match")
+    result = case {a: nil}
+    in {a: nil}
+      :match
+    else
+      :no_match
+    end
+    p result
+  RUBY
+
+  desc "hash pattern with missing key does not match"
+  assert_equal(<<~RUBY, ":no_match")
+    result = case {b: 1}
+    in {a: nil}
+      :match
+    else
+      :no_match
+    end
+    p result
+  RUBY
+
   # TODO
   # The rest of the pattern matching features needs merging PR:
   #   https://github.com/mrubyc/mrubyc/pull/257
