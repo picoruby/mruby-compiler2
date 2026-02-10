@@ -369,6 +369,22 @@ class PatternMatchTest < PicoRubyTest
     p result
   RUBY
 
+  desc "deconstruct_keys returns nil"
+  assert_equal(<<~RUBY, ":no_match")
+    class Foo
+      def deconstruct_keys(keys)
+        nil
+      end
+    end
+    result = case Foo.new
+    in {a: 1}
+      :match
+    else
+      :no_match
+    end
+    p result
+  RUBY
+
   # TODO
   # The rest of the pattern matching features needs merging PR:
   #   https://github.com/mrubyc/mrubyc/pull/257
