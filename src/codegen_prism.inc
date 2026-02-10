@@ -1054,6 +1054,10 @@ codegen_pattern(mrc_codegen_scope *s, mrc_node *pattern, int target, uint32_t *f
       hash_reg = recv;
       push();  /* protect hash_reg */
 
+      /* Check if deconstruct_keys returned nil */
+      tmp = genjmp2(s, OP_JMPNIL, hash_reg, *fail_pos, 0);
+      *fail_pos = tmp;
+
       /* Match each key-value pair */
       int loop_sp = cursp(); /* save sp after hash_reg push */
       for (size_t i = 0; i < pat_hash->elements.size; i++) {
