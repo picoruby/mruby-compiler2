@@ -3168,7 +3168,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
           codegen_pattern(s, (mrc_node *)in_n->pattern, head, &fail_pos, known_array_len);
         }
 
-        /* Guard clause handling will be added in Phase 1 after pattern implementation */
+        /* Guard clauses on patterns are handled inside codegen_pattern (via PM_IF_NODE/PM_UNLESS_NODE wrappers) */
 
         /* Generate in-clause body */
         codegen(s, (mrc_node *)in_n->statements, val);
