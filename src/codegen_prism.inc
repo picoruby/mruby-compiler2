@@ -1039,8 +1039,20 @@ codegen_pattern(mrc_codegen_scope *s, mrc_node *pattern, int target, uint32_t *f
         mrc_node *elem = pat_hash->elements.nodes[i];
         if (nint(elem) == PM_ASSOC_NODE) {
           pm_assoc_node_t *assoc = (pm_assoc_node_t *)elem;
-          /* Get hash[key]: put hash at cursp(), key at cursp()+1 */
+          /* Check if hash has key returned by deconstruct_keys */
           int val_reg = cursp();
+          gen_move(s, val_reg, hash_reg, 0);
+          push();
+          codegen(s, (mrc_node *)assoc->key, VAL);
+          /* Key check: if key not in deconstructed hash, fail */
+          push(); pop();  /* touch block slot */
+          s->sp = val_reg;
+          genop_3(s, OP_SEND, val_reg, new_sym(s, MRC_SYM_2(has_key_p)), 1);
+          tmp = genjmp2(s, OP_JMPNOT, val_reg, *fail_pos, 0);
+          *fail_pos = tmp;
+          s->sp = loop_sp; /* reset sp */
+
+          /* Get hash[key]: put hash at cursp(), key at cursp()+1 */
           gen_move(s, val_reg, hash_reg, 0);
           push();
           codegen(s, (mrc_node *)assoc->key, VAL);
