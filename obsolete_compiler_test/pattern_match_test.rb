@@ -253,4 +253,218 @@ class PatternMatchTest < PicoRubyTest
     end
     p result
   RUBY
+
+  desc "find pattern at beginning"
+  assert_equal(<<~RUBY, "[[], [2, 3]]")
+    result = case [1, 2, 3]
+    in [*pre, 1, *post]
+      [pre, post]
+    end
+    p result
+  RUBY
+
+  desc "find pattern at end"
+  assert_equal(<<~RUBY, "[[1, 2], []]")
+    result = case [1, 2, 3]
+    in [*pre, 3, *post]
+      [pre, post]
+    end
+    p result
+  RUBY
+
+  desc "find pattern multiple elements"
+  assert_equal(<<~RUBY, "[1, 3, [4, 5]]")
+    result = case [1, 2, 3, 4, 5]
+    in [*pre, 2, x, *post]
+      [pre[0], x, post]
+    end
+    p result
+  RUBY
+
+  desc "guard clause if"
+  assert_equal(<<~RUBY, ":big")
+    result = case 10
+    in x if x > 5
+      :big
+    in x
+      :small
+    end
+    p result
+  RUBY
+
+  desc "guard clause unless"
+  assert_equal(<<~RUBY, ":small")
+    result = case 3
+    in x unless x > 5
+      :small
+    in x
+      :big
+    end
+    p result
+  RUBY
+
+  desc "guard clause with array pattern"
+  assert_equal(<<~RUBY, ":sum_big")
+    result = case [1, 2, 3]
+    in [a, b, c] if a + b + c > 5
+      :sum_big
+    in [a, b, c]
+      :sum_small
+    end
+    p result
+  RUBY
+
+  desc "guard clause failing"
+  assert_equal(<<~RUBY, ":second")
+    result = case 10
+    in x if x > 20
+      :first
+    in x
+      :second
+    end
+    p result
+  RUBY
+
+  desc "pin operator basic"
+  assert_equal(<<~RUBY, ":matched")
+    x = 1
+    result = case 1
+    in ^x
+      :matched
+    else
+      :not_matched
+    end
+    p result
+  RUBY
+
+  desc "pin operator no match"
+  assert_equal(<<~RUBY, ":different")
+    a = 1
+    result = case 2
+    in ^a
+      :same
+    else
+      :different
+    end
+    p result
+  RUBY
+
+  desc "pin operator in array"
+  assert_equal(<<~RUBY, "100")
+    expected = 42
+    result = case [42, 100]
+    in [^expected, y]
+      y
+    end
+    p result
+  RUBY
+
+  desc "as pattern with array"
+  assert_equal(<<~RUBY, "[1, [2, 3], [1, 2, 3]]")
+    result = case [1, 2, 3]
+    in [x, *rest] => whole
+      [x, rest, whole]
+    end
+    p result
+  RUBY
+
+  desc "as pattern with hash"
+  assert_equal(<<~RUBY, "[1, {a: 1, b: 2}]")
+    result = case {a: 1, b: 2}
+    in {a:} => h
+      [a, h]
+    end
+    p result
+  RUBY
+
+  desc "alternative in array pattern"
+  assert_equal(<<~RUBY, ":match")
+    result = case [3, 4]
+    in [1, 2] | [3, 4]
+      :match
+    else
+      :no_match
+    end
+    p result
+  RUBY
+
+  desc "array pattern with first element"
+  assert_equal(<<~RUBY, "[1, [2, 3, 4, 5]]")
+    result = case [1, 2, 3, 4, 5]
+    in [first, *rest]
+      [first, rest]
+    end
+    p result
+  RUBY
+
+  desc "array pattern with literal and variable"
+  assert_equal(<<~RUBY, "3")
+    result = case [1, 2, 3]
+    in [1, 2, x]
+      x
+    end
+    p result
+  RUBY
+
+  desc "deeply nested array and hash"
+  assert_equal(<<~RUBY, "[1, 2, 3]")
+    result = case {outer: [{inner: [1, 2]}, 3]}
+    in {outer: [{inner: [a, b]}, c]}
+      [a, b, c]
+    end
+    p result
+  RUBY
+
+  desc "empty array pattern"
+  assert_equal(<<~RUBY, ":empty")
+    result = case []
+    in []
+      :empty
+    else
+      :not_empty
+    end
+    p result
+  RUBY
+
+  desc "alternative pattern first branch"
+  assert_equal(<<~RUBY, ":found")
+    result = case 1
+    in 1 | 2 | 3
+      :found
+    else
+      :not_found
+    end
+    p result
+  RUBY
+
+  desc "alternative pattern third branch"
+  assert_equal(<<~RUBY, ":found")
+    result = case 3
+    in 1 | 2 | 3
+      :found
+    else
+      :not_found
+    end
+    p result
+  RUBY
+
+  desc "alternative pattern no match"
+  assert_equal(<<~RUBY, ":not_found")
+    result = case 5
+    in 1 | 2 | 3
+      :found
+    else
+      :not_found
+    end
+    p result
+  RUBY
+
+  desc "complex pattern with all features"
+  assert_equal(<<~RUBY, "[2, [3], [4, 5]]")
+    result = case [1, 2, 3, 4, 5]
+    in [1, *rest] => arr if arr.size > 2
+      [rest[0], rest[1..1], rest[2..-1]]
+    end
+    p result
+  RUBY
 end
