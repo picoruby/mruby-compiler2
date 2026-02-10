@@ -3095,7 +3095,16 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       int known_array_len = -1;
       if (cast->predicate && nint(cast->predicate) == PM_ARRAY_NODE) {
         pm_array_node_t *arr = (pm_array_node_t *)cast->predicate;
-        known_array_len = arr->elements.size;
+        int has_splat = 0;
+        for (size_t i = 0; i < arr->elements.size; i++) {
+          if (nint(arr->elements.nodes[i]) == PM_SPLAT_NODE) {
+            has_splat = 1;
+            break;
+          }
+        }
+        if (!has_splat) {
+          known_array_len = arr->elements.size;
+        }
       }
 
       /* Generate code for the case value */

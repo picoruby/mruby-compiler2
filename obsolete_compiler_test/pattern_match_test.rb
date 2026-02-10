@@ -297,6 +297,18 @@ class PatternMatchTest < PicoRubyTest
     p result
   RUBY
 
+  desc "case with splat in array literal predicate"
+  assert_equal(<<~RUBY, ":match")
+    arr = [2, 3]
+    result = case [1, *arr, 4]
+    in [1, 2, 3, 4]
+      :match
+    else
+      :no_match
+    end
+    p result
+  RUBY
+
   # TODO
   # The rest of the pattern matching features needs merging PR:
   #   https://github.com/mrubyc/mrubyc/pull/257
