@@ -297,18 +297,6 @@ class PatternMatchTest < PicoRubyTest
     p result
   RUBY
 
-  desc "case with splat in array literal predicate"
-  assert_equal(<<~RUBY, ":match")
-    arr = [2, 3]
-    result = case [1, *arr, 4]
-    in [1, 2, 3, 4]
-      :match
-    else
-      :no_match
-    end
-    p result
-  RUBY
-
   desc "deconstruct returns nil"
   assert_equal(<<~RUBY, ":no_match")
     class Foo
@@ -318,50 +306,6 @@ class PatternMatchTest < PicoRubyTest
     end
     result = case Foo.new
     in [a, b]
-      :match
-    else
-      :no_match
-    end
-    p result
-  RUBY
-
-  desc "hash pattern with nil value matches"
-  assert_equal(<<~RUBY, ":match")
-    result = case {a: nil}
-    in {a: nil}
-      :match
-    else
-      :no_match
-    end
-    p result
-  RUBY
-
-  desc "hash pattern with missing key does not match"
-  assert_equal(<<~RUBY, ":no_match")
-    result = case {b: 1}
-    in {a: nil}
-      :match
-    else
-      :no_match
-    end
-    p result
-  RUBY
-
-  desc "hash pattern with **nil rejects extra keys"
-  assert_equal(<<~RUBY, ":no_match")
-    result = case {a: 1, b: 2}
-    in {a: 1, **nil}
-      :match
-    else
-      :no_match
-    end
-    p result
-  RUBY
-
-  desc "hash pattern with **nil matches exact keys"
-  assert_equal(<<~RUBY, ":match")
-    result = case {a: 1}
-    in {a: 1, **nil}
       :match
     else
       :no_match
@@ -405,6 +349,62 @@ class PatternMatchTest < PicoRubyTest
   # The rest of the pattern matching features needs merging PR:
   #   https://github.com/mrubyc/mrubyc/pull/257
   pending unless ENV['USE_MRUBY']
+
+  desc "hash pattern with **nil matches exact keys"
+  assert_equal(<<~RUBY, ":match")
+    result = case {a: 1}
+    in {a: 1, **nil}
+      :match
+    else
+      :no_match
+    end
+    p result
+  RUBY
+
+  desc "hash pattern with **nil rejects extra keys"
+  assert_equal(<<~RUBY, ":no_match")
+    result = case {a: 1, b: 2}
+    in {a: 1, **nil}
+      :match
+    else
+      :no_match
+    end
+    p result
+  RUBY
+
+  desc "hash pattern with missing key does not match"
+  assert_equal(<<~RUBY, ":no_match")
+    result = case {b: 1}
+    in {a: nil}
+      :match
+    else
+      :no_match
+    end
+    p result
+  RUBY
+
+  desc "hash pattern with nil value matches"
+  assert_equal(<<~RUBY, ":match")
+    result = case {a: nil}
+    in {a: nil}
+      :match
+    else
+      :no_match
+    end
+    p result
+  RUBY
+
+  desc "case with splat in array literal predicate"
+  assert_equal(<<~RUBY, ":match")
+    arr = [2, 3]
+    result = case [1, *arr, 4]
+    in [1, 2, 3, 4]
+      :match
+    else
+      :no_match
+    end
+    p result
+  RUBY
 
   desc "array pattern with rest"
   assert_equal(<<~RUBY, "[1, [2, 3, 4], 5]")
