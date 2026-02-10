@@ -747,7 +747,7 @@ codegen_pattern(mrc_codegen_scope *s, mrc_node *pattern, int target, uint32_t *f
 
       /* Optimize JMPNOT+JMP to JMPIF when possible */
       if (nint(pat_alt->left) != PM_ALTERNATION_PATTERN_NODE &&
-          left_fail != JMPLINK_START && left_fail + 2 == s->pc) {
+          left_fail != JMPLINK_START && left_fail >= 2 && left_fail + 2 == s->pc) {
         /* Extract the previous link from the JMPNOT chain */
         int16_t prev_offset = (int16_t)PEEK_S(s->iseq + left_fail);
         int32_t next_addr = (int32_t)(left_fail + 2) + prev_offset;
