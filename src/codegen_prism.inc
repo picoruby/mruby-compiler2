@@ -1010,10 +1010,18 @@ codegen_pattern(mrc_codegen_scope *s, mrc_node *pattern, int target, uint32_t *f
       /* Check if **nil is present */
       int has_double_nil = pat_hash->rest && nint(pat_hash->rest) == PM_NO_KEYWORDS_PARAMETER_NODE;
 
+      /* Save original target for has_key? checks (mruby's deconstruct_keys
+         returns nil for missing keys, so we check against the original).
+         Use genop_2 directly to bypass peephole optimization that would
+         eliminate this copy when chained with the next gen_move. */
+      int orig_target = cursp();
+      genop_2(s, OP_MOVE, orig_target, target);
+      push(); /* protect orig_target */
+
       /* Call target.deconstruct_keys(keys_array or nil) */
       /* Layout: R[recv] = target, R[recv+1] = keys_array, R[recv+2] = block */
       int recv = cursp();
-      gen_move(s, recv, target, 0);
+      gen_move(s, recv, orig_target, 1);
       push(); /* protect receiver */
 
       if (has_double_nil) {
@@ -1064,12 +1072,12 @@ codegen_pattern(mrc_codegen_scope *s, mrc_node *pattern, int target, uint32_t *f
         mrc_node *elem = pat_hash->elements.nodes[i];
         if (nint(elem) == PM_ASSOC_NODE) {
           pm_assoc_node_t *assoc = (pm_assoc_node_t *)elem;
-          /* Check if hash has key returned by deconstruct_keys */
+          /* Check if original target has key (not deconstructed hash,
+             because mruby's deconstruct_keys returns nil for missing keys) */
           int val_reg = cursp();
-          gen_move(s, val_reg, hash_reg, 0);
+          gen_move(s, val_reg, orig_target, 0);
           push();
           codegen(s, (mrc_node *)assoc->key, VAL);
-          /* Key check: if key not in deconstructed hash, fail */
           push(); pop();  /* touch block slot */
           s->sp = val_reg;
           genop_3(s, OP_SEND, val_reg, new_sym(s, MRC_SYM_2(has_key_p)), 1);
@@ -1077,8 +1085,8 @@ codegen_pattern(mrc_codegen_scope *s, mrc_node *pattern, int target, uint32_t *f
           *fail_pos = tmp;
           s->sp = loop_sp; /* reset sp */
 
-          /* Get hash[key]: put hash at cursp(), key at cursp()+1 */
-          gen_move(s, val_reg, hash_reg, 0);
+          /* Get orig_target[key] */
+          gen_move(s, val_reg, orig_target, 0);
           push();
           codegen(s, (mrc_node *)assoc->key, VAL);
           pop();  /* codegen pushed, pop so key is at val_reg+1 */
@@ -1112,7 +1120,7 @@ codegen_pattern(mrc_codegen_scope *s, mrc_node *pattern, int target, uint32_t *f
               pm_local_variable_target_node_t *rest_var = (pm_local_variable_target_node_t *)splat->value;
               int var_idx = lv_idx(s, rest_var->name);
               if (var_idx > 0) {
-                gen_move(s, var_idx, hash_reg, 1);
+                gen_move(s, var_idx, orig_target, 1);
               }
             }
           }
@@ -1120,7 +1128,7 @@ codegen_pattern(mrc_codegen_scope *s, mrc_node *pattern, int target, uint32_t *f
         else if (nint(pat_hash->rest) == PM_NO_KEYWORDS_PARAMETER_NODE) {
           /* **nil - no extra keys allowed */
           int chk = cursp();
-          gen_move(s, chk, hash_reg, 0);
+          gen_move(s, chk, orig_target, 0);
           push(); pop();
           genop_3(s, OP_SEND, chk, new_sym(s, MRC_SYM_1(size)), 0);
           gen_int(s, chk + 1, num_keys);
@@ -1131,6 +1139,7 @@ codegen_pattern(mrc_codegen_scope *s, mrc_node *pattern, int target, uint32_t *f
       }
 
       pop();  /* release hash_reg */
+      pop();  /* release orig_target */
     }
     break;
 
