@@ -1007,28 +1007,49 @@ codegen_pattern(mrc_codegen_scope *s, mrc_node *pattern, int target, uint32_t *f
       int hash_reg;
       int num_keys = 0;
 
-      /* Call target.deconstruct_keys(keys_array) */
+      /* Check if **nil is present */
+      int has_double_nil = pat_hash->rest && nint(pat_hash->rest) == PM_NO_KEYWORDS_PARAMETER_NODE;
+
+      /* Call target.deconstruct_keys(keys_array or nil) */
       /* Layout: R[recv] = target, R[recv+1] = keys_array, R[recv+2] = block */
       int recv = cursp();
       gen_move(s, recv, target, 0);
       push(); /* protect receiver */
 
-      /* Build keys array at recv+1 */
-      int keys_base = cursp();
-      for (size_t i = 0; i < pat_hash->elements.size; i++) {
-        mrc_node *elem = pat_hash->elements.nodes[i];
-        if (nint(elem) == PM_ASSOC_NODE) {
-          pm_assoc_node_t *assoc = (pm_assoc_node_t *)elem;
-          codegen(s, (mrc_node *)assoc->key, VAL);
-          num_keys++;
+      if (has_double_nil) {
+        /* For **nil, call deconstruct_keys(nil) to get all keys */
+        int keys_base = cursp();
+        genop_1(s, OP_LOADNIL, keys_base);
+        push(); /* protect nil arg */
+        push(); pop(); /* touch block slot */
+        s->sp = recv;
+        genop_3(s, OP_SEND, recv, new_sym(s, MRC_SYM_1(deconstruct_keys)), 1);
+        /* Count keys for **nil check later */
+        for (size_t i = 0; i < pat_hash->elements.size; i++) {
+          mrc_node *elem = pat_hash->elements.nodes[i];
+          if (nint(elem) == PM_ASSOC_NODE) {
+            num_keys++;
+          }
         }
       }
-      if (num_keys > 0) pop_n(num_keys);
-      genop_2(s, OP_ARRAY, keys_base, num_keys);
-      push(); /* protect keys arg */
-      push(); pop(); /* touch block slot */
-      s->sp = recv;
-      genop_3(s, OP_SEND, recv, new_sym(s, MRC_SYM_1(deconstruct_keys)), 1);
+      else {
+        /* Build keys array at recv+1 */
+        int keys_base = cursp();
+        for (size_t i = 0; i < pat_hash->elements.size; i++) {
+          mrc_node *elem = pat_hash->elements.nodes[i];
+          if (nint(elem) == PM_ASSOC_NODE) {
+            pm_assoc_node_t *assoc = (pm_assoc_node_t *)elem;
+            codegen(s, (mrc_node *)assoc->key, VAL);
+            num_keys++;
+          }
+        }
+        if (num_keys > 0) pop_n(num_keys);
+        genop_2(s, OP_ARRAY, keys_base, num_keys);
+        push(); /* protect keys arg */
+        push(); pop(); /* touch block slot */
+        s->sp = recv;
+        genop_3(s, OP_SEND, recv, new_sym(s, MRC_SYM_1(deconstruct_keys)), 1);
+      }
       /* Result (hash) is at recv */
       hash_reg = recv;
       push();  /* protect hash_reg */
