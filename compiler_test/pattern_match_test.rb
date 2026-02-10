@@ -146,6 +146,18 @@ class PatternMatchTest < PicoRubyTest
     p result
   RUBY
 
+  desc "variable binding in failed pattern persists"
+  assert_equal(<<~RUBY, "[1, 1]")
+    a = 99
+    result = case [1, 2]
+    in [a, 3]
+      :first
+    in [b, 2]
+      [a, b]
+    end
+    p result
+  RUBY
+
   desc "array pattern with wildcard"
   assert_equal(<<~RUBY, "2")
     result = case [1, 2, 3]
