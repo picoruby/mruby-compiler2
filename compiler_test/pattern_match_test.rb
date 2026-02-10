@@ -126,15 +126,6 @@ class PatternMatchTest < PicoRubyTest
     p result
   RUBY
 
-  desc "array pattern with rest"
-  assert_equal(<<~RUBY, "[1, [2, 3, 4], 5]")
-    result = case [1, 2, 3, 4, 5]
-    in [first, *rest, last]
-      [first, rest, last]
-    end
-    p result
-  RUBY
-
   desc "array pattern exact length"
   assert_equal(<<~RUBY, ":match")
     result = case [1, 2]
@@ -155,6 +146,171 @@ class PatternMatchTest < PicoRubyTest
     p result
   RUBY
 
+  desc "array pattern with wildcard"
+  assert_equal(<<~RUBY, "2")
+    result = case [1, 2, 3]
+    in [_, x, _]
+      x
+    end
+    p result
+  RUBY
+
+  desc "guard clause if"
+  assert_equal(<<~RUBY, ":big")
+    result = case 10
+    in x if x > 5
+      :big
+    in x
+      :small
+    end
+    p result
+  RUBY
+
+  desc "guard clause unless"
+  assert_equal(<<~RUBY, ":small")
+    result = case 3
+    in x unless x > 5
+      :small
+    in x
+      :big
+    end
+    p result
+  RUBY
+
+  desc "guard clause with array pattern"
+  assert_equal(<<~RUBY, ":sum_big")
+    result = case [1, 2, 3]
+    in [a, b, c] if a + b + c > 5
+      :sum_big
+    in [a, b, c]
+      :sum_small
+    end
+    p result
+  RUBY
+
+  desc "guard clause failing"
+  assert_equal(<<~RUBY, ":second")
+    result = case 10
+    in x if x > 20
+      :first
+    in x
+      :second
+    end
+    p result
+  RUBY
+
+  desc "pin operator basic"
+  assert_equal(<<~RUBY, ":matched")
+    x = 1
+    result = case 1
+    in ^x
+      :matched
+    else
+      :not_matched
+    end
+    p result
+  RUBY
+
+  desc "pin operator no match"
+  assert_equal(<<~RUBY, ":different")
+    a = 1
+    result = case 2
+    in ^a
+      :same
+    else
+      :different
+    end
+    p result
+  RUBY
+
+  desc "pin operator in array"
+  assert_equal(<<~RUBY, "100")
+    expected = 42
+    result = case [42, 100]
+    in [^expected, y]
+      y
+    end
+    p result
+  RUBY
+
+  desc "alternative in array pattern"
+  assert_equal(<<~RUBY, ":match")
+    result = case [3, 4]
+    in [1, 2] | [3, 4]
+      :match
+    else
+      :no_match
+    end
+    p result
+  RUBY
+
+  desc "array pattern with literal and variable"
+  assert_equal(<<~RUBY, "3")
+    result = case [1, 2, 3]
+    in [1, 2, x]
+      x
+    end
+    p result
+  RUBY
+
+  desc "empty array pattern"
+  assert_equal(<<~RUBY, ":empty")
+    result = case []
+    in []
+      :empty
+    else
+      :not_empty
+    end
+    p result
+  RUBY
+
+  desc "alternative pattern first branch"
+  assert_equal(<<~RUBY, ":found")
+    result = case 1
+    in 1 | 2 | 3
+      :found
+    else
+      :not_found
+    end
+    p result
+  RUBY
+
+  desc "alternative pattern third branch"
+  assert_equal(<<~RUBY, ":found")
+    result = case 3
+    in 1 | 2 | 3
+      :found
+    else
+      :not_found
+    end
+    p result
+  RUBY
+
+  desc "alternative pattern no match"
+  assert_equal(<<~RUBY, ":not_found")
+    result = case 5
+    in 1 | 2 | 3
+      :found
+    else
+      :not_found
+    end
+    p result
+  RUBY
+
+  # TODO
+  # The rest of the pattern matching features needs merging PR:
+  #   https://github.com/mrubyc/mrubyc/pull/257
+  pending unless ENV['USE_MRUBY']
+
+  desc "array pattern with rest"
+  assert_equal(<<~RUBY, "[1, [2, 3, 4], 5]")
+    result = case [1, 2, 3, 4, 5]
+    in [first, *rest, last]
+      [first, rest, last]
+    end
+    p result
+  RUBY
+
   desc "array pattern nested simple"
   assert_equal(<<~RUBY, "[1, 2]")
     result = case [[1, 2]]
@@ -169,15 +325,6 @@ class PatternMatchTest < PicoRubyTest
     result = case [[1, 2], [3, 4]]
     in [[a, b], [c, d]]
       [a, b, c, d]
-    end
-    p result
-  RUBY
-
-  desc "array pattern with wildcard"
-  assert_equal(<<~RUBY, "2")
-    result = case [1, 2, 3]
-    in [_, x, _]
-      x
     end
     p result
   RUBY
@@ -280,85 +427,6 @@ class PatternMatchTest < PicoRubyTest
     end
     p result
   RUBY
-
-  desc "guard clause if"
-  assert_equal(<<~RUBY, ":big")
-    result = case 10
-    in x if x > 5
-      :big
-    in x
-      :small
-    end
-    p result
-  RUBY
-
-  desc "guard clause unless"
-  assert_equal(<<~RUBY, ":small")
-    result = case 3
-    in x unless x > 5
-      :small
-    in x
-      :big
-    end
-    p result
-  RUBY
-
-  desc "guard clause with array pattern"
-  assert_equal(<<~RUBY, ":sum_big")
-    result = case [1, 2, 3]
-    in [a, b, c] if a + b + c > 5
-      :sum_big
-    in [a, b, c]
-      :sum_small
-    end
-    p result
-  RUBY
-
-  desc "guard clause failing"
-  assert_equal(<<~RUBY, ":second")
-    result = case 10
-    in x if x > 20
-      :first
-    in x
-      :second
-    end
-    p result
-  RUBY
-
-  desc "pin operator basic"
-  assert_equal(<<~RUBY, ":matched")
-    x = 1
-    result = case 1
-    in ^x
-      :matched
-    else
-      :not_matched
-    end
-    p result
-  RUBY
-
-  desc "pin operator no match"
-  assert_equal(<<~RUBY, ":different")
-    a = 1
-    result = case 2
-    in ^a
-      :same
-    else
-      :different
-    end
-    p result
-  RUBY
-
-  desc "pin operator in array"
-  assert_equal(<<~RUBY, "100")
-    expected = 42
-    result = case [42, 100]
-    in [^expected, y]
-      y
-    end
-    p result
-  RUBY
-
   desc "as pattern with array"
   assert_equal(<<~RUBY, "[1, [2, 3], [1, 2, 3]]")
     result = case [1, 2, 3]
@@ -377,17 +445,6 @@ class PatternMatchTest < PicoRubyTest
     p result
   RUBY
 
-  desc "alternative in array pattern"
-  assert_equal(<<~RUBY, ":match")
-    result = case [3, 4]
-    in [1, 2] | [3, 4]
-      :match
-    else
-      :no_match
-    end
-    p result
-  RUBY
-
   desc "array pattern with first element"
   assert_equal(<<~RUBY, "[1, [2, 3, 4, 5]]")
     result = case [1, 2, 3, 4, 5]
@@ -397,64 +454,11 @@ class PatternMatchTest < PicoRubyTest
     p result
   RUBY
 
-  desc "array pattern with literal and variable"
-  assert_equal(<<~RUBY, "3")
-    result = case [1, 2, 3]
-    in [1, 2, x]
-      x
-    end
-    p result
-  RUBY
-
   desc "deeply nested array and hash"
   assert_equal(<<~RUBY, "[1, 2, 3]")
     result = case {outer: [{inner: [1, 2]}, 3]}
     in {outer: [{inner: [a, b]}, c]}
       [a, b, c]
-    end
-    p result
-  RUBY
-
-  desc "empty array pattern"
-  assert_equal(<<~RUBY, ":empty")
-    result = case []
-    in []
-      :empty
-    else
-      :not_empty
-    end
-    p result
-  RUBY
-
-  desc "alternative pattern first branch"
-  assert_equal(<<~RUBY, ":found")
-    result = case 1
-    in 1 | 2 | 3
-      :found
-    else
-      :not_found
-    end
-    p result
-  RUBY
-
-  desc "alternative pattern third branch"
-  assert_equal(<<~RUBY, ":found")
-    result = case 3
-    in 1 | 2 | 3
-      :found
-    else
-      :not_found
-    end
-    p result
-  RUBY
-
-  desc "alternative pattern no match"
-  assert_equal(<<~RUBY, ":not_found")
-    result = case 5
-    in 1 | 2 | 3
-      :found
-    else
-      :not_found
     end
     p result
   RUBY
