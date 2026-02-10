@@ -634,6 +634,31 @@ codegen_pattern(mrc_codegen_scope *s, mrc_node *pattern, int target, uint32_t *f
     return;
   }
 
+  /* Handle unless guard clause (PM_UNLESS_NODE wrapping the actual pattern) */
+  if (nint(pattern) == PM_UNLESS_NODE) {
+    pm_unless_node_t *unless_n = (pm_unless_node_t *)pattern;
+    /* In Prism: in pattern unless condition
+     * The UnlessNode.statements contains the actual pattern
+     * The UnlessNode.predicate contains the guard condition */
+    if (unless_n->statements) {
+      pm_statements_node_t *stmts = unless_n->statements;
+      if (stmts->body.size > 0) {
+        /* Extract and match the inner pattern first */
+        mrc_node *inner_pattern = stmts->body.nodes[0];
+        codegen_pattern(s, inner_pattern, target, fail_pos, known_array_len);
+      }
+    }
+    /* Generate the guard condition */
+    if (unless_n->predicate) {
+      codegen(s, (mrc_node *)unless_n->predicate, VAL);
+      pop();
+      /* unless guard: fail if guard is true (inverted from if) */
+      tmp = genjmp2(s, OP_JMPIF, cursp(), *fail_pos, 0);
+      *fail_pos = tmp;
+    }
+    return;
+  }
+
   switch (nint(pattern)) {
   /* Value patterns: literals */
   case PM_INTEGER_NODE:
