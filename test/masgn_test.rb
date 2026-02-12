@@ -138,35 +138,36 @@ class MasgnTest < Picotest::Test
     assert_equal("1\n2", actual)
   end
 
-  if mruby?
-    def test_rhs_has_only_one_item_lhs_has_a_rest_and_a_post
-      script = <<~RUBY
-        a, b, *c, d = 1
-        p a, b, c, d
-      RUBY
-      actual = run_script(script)
-      assert_equal("1\nnil\n[]\nnil", actual)
-    end
+  def test_rhs_has_only_one_item_lhs_has_a_rest_and_a_post
+    skip "Not supported on mruby/c" unless mruby?
+    script = <<~RUBY
+      a, b, *c, d = 1
+      p a, b, c, d
+    RUBY
+    actual = run_script(script)
+    assert_equal("1\nnil\n[]\nnil", actual)
+  end
 
-    def test_rhs_has_only_one_item_which_is_an_array_lhs_has_a_rest_and_a_post
-      script = <<~RUBY
-        ary = [0, 1]
-        a, *b, c = ary
-        p a, b, c
-      RUBY
-      actual = run_script(script)
-      assert_equal("0\n[]\n1", actual)
-    end
+  def test_rhs_has_only_one_item_which_is_an_array_lhs_has_a_rest_and_a_post
+    skip "Not supported on mruby/c" unless mruby?
+    script = <<~RUBY
+      ary = [0, 1]
+      a, *b, c = ary
+      p a, b, c
+    RUBY
+    actual = run_script(script)
+    assert_equal("0\n[]\n1", actual)
+  end
 
-    def test_splat_in_rhs
-      script = <<~RUBY
-        ary = [9, 8]
-        a,*b,c,d=1,*ary,3,4
-        p a,b,c,d
-      RUBY
-      actual = run_script(script)
-      assert_equal("1\n[9, 8]\n3\n4", actual)
-    end
+  def test_splat_in_rhs
+    skip "Not supported on mruby/c" unless mruby?
+    script = <<~RUBY
+      ary = [9, 8]
+      a,*b,c,d=1,*ary,3,4
+      p a,b,c,d
+    RUBY
+    actual = run_script(script)
+    assert_equal("1\n[9, 8]\n3\n4", actual)
   end
 
 end
