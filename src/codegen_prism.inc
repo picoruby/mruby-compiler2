@@ -2067,11 +2067,25 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
 
       genop_1(s, OP_LOADSELF, cursp());
       push();
-      codegen(s, (mrc_node *)cast->parts.nodes[0], VAL);
-      for (i = 1; i < cast->parts.size; i++) {
+      /*
+       * Use the same pattern as PM_INTERPOLATED_STRING_NODE to avoid
+       * mutating shared string references via OP_STRCAT.
+       * When the first part is not a string literal (e.g. a variable),
+       * prepend an empty string as a safe base for concatenation.
+       */
+      mrc_bool str_begin = FALSE;
+      if (nint(cast->parts.nodes[0]) != PM_STRING_NODE) {
+        genop_2(s, OP_STRING, cursp(), new_lit_cstr(s, ""));
+        push();
+        str_begin = TRUE;
+      }
+      for (i = 0; i < cast->parts.size; i++) {
         codegen(s, (mrc_node *)cast->parts.nodes[i], VAL);
-        pop(); pop();
-        genop_1(s, OP_STRCAT, cursp());
+        pop();
+        if (str_begin || 0 < i) {
+          pop();
+          genop_1(s, OP_STRCAT, cursp());
+        }
         push();
       }
       push();
