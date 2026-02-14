@@ -160,16 +160,15 @@ class DefTest < Picotest::Test
     assert_equal(":>", actual)
   end
 
-  if mruby?
-    def test_multi_target_case
-      script = <<~RUBY
-        def m((a, b), *c)
-          p a, b, c
-        end
-        m(1,2,3)
-      RUBY
-      actual = run_script(script)
-      assert_equal("1\nnil\n[2, 3]", actual)
-    end
+  def test_multi_target_case
+    skip "Not supported on mruby/c" unless mruby?
+    script = <<~RUBY
+      def m((a, b), *c)
+        p a, b, c
+      end
+      m(1,2,3)
+    RUBY
+    actual = run_script(script)
+    assert_equal("1\nnil\n[2, 3]", actual)
   end
 end
