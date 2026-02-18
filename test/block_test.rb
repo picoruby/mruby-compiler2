@@ -156,4 +156,28 @@ class BlockTest < Picotest::Test
     actual = run_script(script)
     assert_equal("1\n[2, 3, 4]", actual)
   end
+
+  def test_numbered_parameter_1
+    script = <<~RUBY
+      p [10, 20, 30].map { _1 * 2 }
+    RUBY
+    actual = run_script(script)
+    assert_equal("[20, 40, 60]", actual)
+  end
+
+  def test_numbered_parameter_2
+    script = <<~RUBY
+      p [[1, 2], [3, 4]].map { _1 + _2 }
+    RUBY
+    actual = run_script(script)
+    assert_equal("[3, 7]", actual)
+  end
+
+  def test_it_parameter
+    script = <<~RUBY
+      p [10, 20, 30].map { it * 2 }
+    RUBY
+    actual = run_script(script)
+    assert_equal("[20, 40, 60]", actual)
+  end
 end

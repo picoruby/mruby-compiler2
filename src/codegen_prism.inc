@@ -686,6 +686,10 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id
         parameters = NULL;
         na = ((pm_numbered_parameters_node_t *)tree)->maximum;
         break;
+      case PM_IT_PARAMETERS_NODE:
+        parameters = NULL;
+        na = 1;
+        break;
       default:
         codegen_error(s, "should not happen");
     }
@@ -703,12 +707,12 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id
 
   // Create lv regs from Prism's locals
   if (parameters == NULL) {
-    // TODO: FIXME this doesn't work with numbered parameters
-    // TODO: `it`
-    mrc_constant_id_list_init_capacity(s, lv, 2);
-    mrc_constant_id_list_append(s, lv, null_mark);
+    mrc_constant_id_list_init_capacity(s, lv, locals->size + 1);
+    if (!tree || nint(tree) != PM_NUMBERED_PARAMETERS_NODE) {
+      /* empty block or `it`: insert null_mark as a placeholder for slot 1 */
+      mrc_constant_id_list_append(s, lv, null_mark);
+    }
     for (i = 0; i < locals->size; i++) {
-      /* numbered parameters */
       mrc_constant_id_list_append(s, lv, locals->ids[i]);
     }
     ma = mma = oa = ra = pa = ppa = ka = kd = ba = 0;
@@ -1230,6 +1234,14 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       if (val) {
         CAST(local_variable_read);
         gen_lvar(s, cast->name, cast->depth + s->for_depth);
+      }
+      break;
+    }
+    case PM_IT_LOCAL_VARIABLE_READ_NODE:
+    {
+      if (val) {
+        gen_move(s, cursp(), 1, 1); /* `it` is always at slot 1 */
+        push();
       }
       break;
     }
