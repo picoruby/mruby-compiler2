@@ -605,7 +605,7 @@ create_lv_sym_table(mrc_ccontext *c, const mrc_irep *irep, mrc_sym **syms, uint3
 
   for (int i = 0; i + 1 < irep->nlocals; i++) {
     mrc_sym const name = irep->lv[i];
-    if (name == null_mark) continue;
+    if (name == 0 || name == null_mark) continue;
     if (find_filename_index(*syms, *syms_len, name) != -1) continue;
 
     ++(*syms_len);
@@ -647,7 +647,7 @@ write_lv_record(mrc_ccontext *c, const mrc_irep *irep, uint8_t **start, mrc_sym 
   pm_constant_id_t null_mark = pm_constant_pool_find(&c->p->constant_pool, NULL, 0);
 
   for (int i = 0; i + 1 < irep->nlocals; i++) {
-    if (irep->lv[i] == null_mark) {
+    if (irep->lv[i] == 0 || irep->lv[i] == null_mark) {
       cur += mrc_uint16_to_bin(RITE_LV_NULL_MARK, cur);
     }
     else {

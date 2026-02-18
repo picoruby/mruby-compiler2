@@ -214,7 +214,7 @@ gen_assignment(mrc_codegen_scope *s, mrc_node *tree, mrc_node *rhs, int sp, int 
     case PM_REQUIRED_PARAMETER_NODE:
     {
       CAST(local_variable_write);
-      gen_assignment_lvar(s, sp, cast->name, cast->depth, val);
+      gen_assignment_lvar(s, sp, cast->name, cast->depth + s->for_depth, val);
       break;
     }
     case PM_INSTANCE_VARIABLE_WRITE_NODE:
@@ -586,7 +586,10 @@ gen_massignment(mrc_codegen_scope *s, mrc_node *tree, int rhs, int val)
     pop_n(post+1);
     genop_3(s, OP_APOST, cursp(), n, post);
     if (cast->rest && nint(cast->rest) != PM_IMPLICIT_REST_NODE) { /* rest */
-      gen_assignment(s, ((pm_splat_node_t *)cast->rest)->expression, NULL, cursp(), NOVAL);
+      pm_node_t *rest_expr = ((pm_splat_node_t *)cast->rest)->expression;
+      if (rest_expr) {
+        gen_assignment(s, rest_expr, NULL, cursp(), NOVAL);
+      }
     }
     for (int i = 0; i < post; i++) {
       gen_assignment(s, cast->rights.nodes[i], NULL, cursp()+i+1, NOVAL);
@@ -610,9 +613,8 @@ for_body(mrc_codegen_scope *s, mrc_node *tree)
   /* generate receiver */
   codegen(s, (mrc_node *)cast->collection, VAL);
   /* generate loop-block */
-  s = scope_new(s->c, s, s->lv);
-  //                     ^^^^^ Different from original mruby
-  //                           drawing the upper scope's lvars
+  s = scope_new(s->c, s, NULL);
+  s->for_depth = prev->for_depth + 1;
 
   push();                       /* push for a block parameter */
 
@@ -863,8 +865,8 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id
   s = scope_new(s->c, s, lv);
 
   s->mscope = !blk;
-
   if (blk) {
+    s->for_depth = s->prev->for_depth; /* inherit for-depth from enclosing scope */
     struct loopinfo *lp = loop_push(s, LOOP_BLOCK);
     lp->pc0 = new_label(s);
   }
@@ -922,9 +924,7 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id
         gen_move(s, idx, cursp(), 0);
       }
       else {
-        // TODO
-        //gen_getupvar(s, cursp(), id, );
-        codegen_error(s, "getupvar happens in optional argument");
+        mrc_assert(0 && "should not happen: keyword parameter must be local variable");
       }
     }
     if (oa > 0) {
@@ -949,9 +949,7 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id
             gen_move(s, idx, cursp(), 0);
           }
           else {
-            // TODO
-            // gen_getupvar(s, cursp(), kwd_sym);
-            codegen_error(s, "getupvar happens in keyword argument");
+            mrc_assert(0 && "should not happen: keyword parameter must be local variable");
           }
           jmp_def_set = genjmp_0(s, OP_JMP);
           dispatch(s, jmpif_key_p);
@@ -1231,7 +1229,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     {
       if (val) {
         CAST(local_variable_read);
-        gen_lvar(s, cast->name, cast->depth);
+        gen_lvar(s, cast->name, cast->depth + s->for_depth);
       }
       break;
     }
@@ -1379,7 +1377,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
         case PM_LOCAL_VARIABLE_OPERATOR_WRITE_NODE:
           {
             CAST_OP_WRITE(local_variable_operator_write);
-            depth = cast->depth;
+            depth = cast->depth + s->for_depth;
             break;
           }
         case PM_GLOBAL_VARIABLE_OPERATOR_WRITE_NODE:
@@ -1633,7 +1631,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
         case PM_LOCAL_VARIABLE_AND_WRITE_NODE:
           {
             CAST_OR_WRITE(local_variable_or_write);
-            depth = cast->depth;
+            depth = cast->depth + s->for_depth;
             break;
           }
         case PM_INSTANCE_VARIABLE_OR_WRITE_NODE: op_jmp = OP_JMPIF; /* fall through */
@@ -1797,7 +1795,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       break;
     }
     case PM_ARRAY_NODE:
-    case PM_ARGUMENTS_NODE: /* TODO: Confirm when multi args in return */
+    case PM_ARGUMENTS_NODE:
     {
       int n;
       n = gen_values(s, tree, val, 0);
@@ -2521,26 +2519,14 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     {
       int idx;
       CAST(module);
-      switch nint(cast->constant_path) {
+      switch (nint(cast->constant_path)) {
         case PM_CONSTANT_PATH_NODE:
           {
             CAST3(constant_path, cast->constant_path, cpath);
-            // TODO: they should be wrong
-            if (cpath->parent == (mrc_node *)1) {
-              genop_1(s, OP_LOADNIL, cursp());
-              push();
-            }
-            else if (cpath->parent == (mrc_node *)0) {
-              genop_1(s, OP_OCLASS, cursp());
-              push();
-            }
-            else {
-              codegen(s, cpath->parent, VAL);
-            }
+            codegen(s, cpath->parent, VAL);
             break;
           }
         case PM_CONSTANT_READ_NODE:
-          // CAST3(constant_read, cast->constant_path, read);
           genop_1(s, OP_LOADNIL, cursp());
           push();
           break;
@@ -2898,7 +2884,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
         int idx = lv_idx(s, and);
         if (idx == 0) {
           int depth = search_upvar(s, and, &idx);
-          gen_getupvar(s, cursp(), and, depth);
+          gen_getupvar(s, cursp(), and, depth + 1);
         }
         else {
           gen_move(s, cursp(), idx, val);
