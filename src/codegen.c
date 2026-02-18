@@ -245,6 +245,7 @@ typedef struct scope {
   mrc_ccontext* c;
 
   int rlev;                     /* recursion levels */
+  uint16_t for_depth;           /* number of for-loop scopes above */
 } mrc_codegen_scope;
 
 static void codegen(mrc_codegen_scope *s, mrc_node *tree, int val);
@@ -563,12 +564,25 @@ scope_new(mrc_ccontext *c, mrc_codegen_scope *prev, mrc_constant_id_list *nlv)
   s->pool = (mrc_pool_value *)mrc_malloc(c, sizeof(mrc_pool_value)*s->pcapa);
   s->scapa = 256;
   s->syms = (mrc_sym *)mrc_malloc(c, sizeof(mrc_sym)*s->scapa);
-  assert(nlv != NULL); // `if (!prev) return s;` prevents this from being NULL
-  s->lv = nlv;
-
-  s->sp += nlv->size + 1; // add self
-  s->nlocals = s->nregs = s->sp;
-  if (nlv) {
+  if (nlv == NULL) {
+    /* for-loop scope: empty lv so search_upvar skips this scope,
+       but mirror parent's register layout */
+    s->lv = NULL;
+    s->sp = prev->nlocals;
+    s->nlocals = s->nregs = s->sp;
+    if (prev->irep->lv) {
+      size_t lv_size = sizeof(mrc_sym) * (s->nlocals - 1);
+      s->irep->lv = (mrc_sym *)mrc_malloc(c, lv_size);
+      memcpy(s->irep->lv, prev->irep->lv, lv_size);
+    }
+    else {
+      s->irep->lv = NULL;
+    }
+  }
+  else {
+    s->lv = nlv;
+    s->sp += nlv->size + 1; /* add self */
+    s->nlocals = s->nregs = s->sp;
     mrc_sym *lv;
     size_t size = sizeof(mrc_sym) * nlv->size;
     if (0 < size) {

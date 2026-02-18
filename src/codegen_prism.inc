@@ -214,7 +214,7 @@ gen_assignment(mrc_codegen_scope *s, mrc_node *tree, mrc_node *rhs, int sp, int 
     case PM_REQUIRED_PARAMETER_NODE:
     {
       CAST(local_variable_write);
-      gen_assignment_lvar(s, sp, cast->name, cast->depth, val);
+      gen_assignment_lvar(s, sp, cast->name, cast->depth + s->for_depth, val);
       break;
     }
     case PM_INSTANCE_VARIABLE_WRITE_NODE:
@@ -613,9 +613,8 @@ for_body(mrc_codegen_scope *s, mrc_node *tree)
   /* generate receiver */
   codegen(s, (mrc_node *)cast->collection, VAL);
   /* generate loop-block */
-  s = scope_new(s->c, s, s->lv);
-  //                     ^^^^^ Different from original mruby
-  //                           drawing the upper scope's lvars
+  s = scope_new(s->c, s, NULL);
+  s->for_depth = prev->for_depth + 1;
 
   push();                       /* push for a block parameter */
 
@@ -1234,7 +1233,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     {
       if (val) {
         CAST(local_variable_read);
-        gen_lvar(s, cast->name, cast->depth);
+        gen_lvar(s, cast->name, cast->depth + s->for_depth);
       }
       break;
     }
@@ -1382,7 +1381,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
         case PM_LOCAL_VARIABLE_OPERATOR_WRITE_NODE:
           {
             CAST_OP_WRITE(local_variable_operator_write);
-            depth = cast->depth;
+            depth = cast->depth + s->for_depth;
             break;
           }
         case PM_GLOBAL_VARIABLE_OPERATOR_WRITE_NODE:
@@ -1636,7 +1635,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
         case PM_LOCAL_VARIABLE_AND_WRITE_NODE:
           {
             CAST_OR_WRITE(local_variable_or_write);
-            depth = cast->depth;
+            depth = cast->depth + s->for_depth;
             break;
           }
         case PM_INSTANCE_VARIABLE_OR_WRITE_NODE: op_jmp = OP_JMPIF; /* fall through */
