@@ -116,4 +116,44 @@ class BlockTest < Picotest::Test
     actual = run_script(script)
     assert_equal("2", actual)
   end
+
+  def test_block_param_nested_anonymous_splat
+    skip "Not supported on mruby/c" unless mruby?
+    script = <<~RUBY
+      def m
+        yield
+      end
+      p m {|((*))| }
+    RUBY
+    actual = run_script(script)
+    assert_equal("nil", actual)
+  end
+
+  def test_block_param_destructuring_with_anonymous_splat
+    skip "Not supported on mruby/c" unless mruby?
+    script = <<~RUBY
+      def m
+        yield [1, [2, 3]]
+      end
+      m {|(v,(*))|
+        p v
+      }
+    RUBY
+    actual = run_script(script)
+    assert_equal("1", actual)
+  end
+
+  def test_block_param_destructuring_with_named_splat
+    skip "Not supported on mruby/c" unless mruby?
+    script = <<~RUBY
+      def m
+        yield [1, [2, 3, 4]]
+      end
+      m {|(v,(*w))|
+        p v, w
+      }
+    RUBY
+    actual = run_script(script)
+    assert_equal("1\n[2, 3, 4]", actual)
+  end
 end

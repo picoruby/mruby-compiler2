@@ -586,7 +586,10 @@ gen_massignment(mrc_codegen_scope *s, mrc_node *tree, int rhs, int val)
     pop_n(post+1);
     genop_3(s, OP_APOST, cursp(), n, post);
     if (cast->rest && nint(cast->rest) != PM_IMPLICIT_REST_NODE) { /* rest */
-      gen_assignment(s, ((pm_splat_node_t *)cast->rest)->expression, NULL, cursp(), NOVAL);
+      pm_node_t *rest_expr = ((pm_splat_node_t *)cast->rest)->expression;
+      if (rest_expr) {
+        gen_assignment(s, rest_expr, NULL, cursp(), NOVAL);
+      }
     }
     for (int i = 0; i < post; i++) {
       gen_assignment(s, cast->rights.nodes[i], NULL, cursp()+i+1, NOVAL);
