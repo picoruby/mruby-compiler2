@@ -2053,6 +2053,15 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       if (nt == PM_INTERPOLATED_SYMBOL_NODE) {
         if (val) {
           pop();
+          if (!no_peephole(s)) {
+            struct mrc_insn_data data = mrc_last_insn(s);
+            if (data.insn == OP_STRING && data.a == cursp()) {
+              rewind_pc(s);
+              genop_2(s, OP_SYMBOL, data.a, data.b);
+              push();
+              break;
+            }
+          }
           genop_1(s, OP_INTERN, cursp());
           push();
         }
