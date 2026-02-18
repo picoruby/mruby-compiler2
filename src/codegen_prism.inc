@@ -2510,26 +2510,14 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     {
       int idx;
       CAST(module);
-      switch nint(cast->constant_path) {
+      switch (nint(cast->constant_path)) {
         case PM_CONSTANT_PATH_NODE:
           {
             CAST3(constant_path, cast->constant_path, cpath);
-            // TODO: they should be wrong
-            if (cpath->parent == (mrc_node *)1) {
-              genop_1(s, OP_LOADNIL, cursp());
-              push();
-            }
-            else if (cpath->parent == (mrc_node *)0) {
-              genop_1(s, OP_OCLASS, cursp());
-              push();
-            }
-            else {
-              codegen(s, cpath->parent, VAL);
-            }
+            codegen(s, cpath->parent, VAL);
             break;
           }
         case PM_CONSTANT_READ_NODE:
-          // CAST3(constant_read, cast->constant_path, read);
           genop_1(s, OP_LOADNIL, cursp());
           push();
           break;
