@@ -865,8 +865,8 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id
   s = scope_new(s->c, s, lv);
 
   s->mscope = !blk;
-
   if (blk) {
+    s->for_depth = s->prev->for_depth; /* inherit for-depth from enclosing scope */
     struct loopinfo *lp = loop_push(s, LOOP_BLOCK);
     lp->pc0 = new_label(s);
   }
@@ -924,9 +924,7 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id
         gen_move(s, idx, cursp(), 0);
       }
       else {
-        // TODO
-        //gen_getupvar(s, cursp(), id, );
-        codegen_error(s, "getupvar happens in optional argument");
+        mrc_assert(0 && "should not happen: keyword parameter must be local variable");
       }
     }
     if (oa > 0) {
@@ -951,9 +949,7 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id
             gen_move(s, idx, cursp(), 0);
           }
           else {
-            // TODO
-            // gen_getupvar(s, cursp(), kwd_sym);
-            codegen_error(s, "getupvar happens in keyword argument");
+            mrc_assert(0 && "should not happen: keyword parameter must be local variable");
           }
           jmp_def_set = genjmp_0(s, OP_JMP);
           dispatch(s, jmpif_key_p);
