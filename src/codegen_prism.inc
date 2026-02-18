@@ -2891,7 +2891,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
         int idx = lv_idx(s, and);
         if (idx == 0) {
           int depth = search_upvar(s, and, &idx);
-          gen_getupvar(s, cursp(), and, depth);
+          gen_getupvar(s, cursp(), and, depth + 1);
         }
         else {
           gen_move(s, cursp(), idx, val);
