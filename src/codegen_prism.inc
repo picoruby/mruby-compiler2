@@ -1795,7 +1795,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       break;
     }
     case PM_ARRAY_NODE:
-    case PM_ARGUMENTS_NODE: /* TODO: Confirm when multi args in return */
+    case PM_ARGUMENTS_NODE:
     {
       int n;
       n = gen_values(s, tree, val, 0);
