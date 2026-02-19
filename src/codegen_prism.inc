@@ -475,6 +475,10 @@ gen_call(mrc_codegen_scope *s, mrc_node *tree, int val, int safe)
     noself = noop = 1;
     push();
   }
+  else if (nint(cast->receiver) == PM_SELF_NODE) {
+    noself = noop = 1;
+    push();
+  }
   else {
     codegen(s, cast->receiver, VAL); /* receiver */
   }
