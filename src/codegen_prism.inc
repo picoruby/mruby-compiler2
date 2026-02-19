@@ -2904,10 +2904,20 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       int noexc = genjmp_0(s, OP_JMP);
       catch_handler_set(s, catch_entry, MRC_CATCH_RESCUE, begin_pos, end_pos, s->pc);
 
-      /* rescue expression */
+      /* rescue expression - only catches StandardError */
       int exc = cursp();
       genop_1(s, OP_EXCEPT, exc);
       push();
+      /* check if exception is StandardError */
+      genop_2(s, OP_GETCONST, cursp(), new_sym(s, MRC_SYM_1(StandardError)));
+      push();
+      pop();
+      genop_2(s, OP_RESCUE, exc, cursp());
+      int rescue_jmp = genjmp2_0(s, OP_JMPIF, cursp(), val);
+      /* not StandardError - re-raise */
+      genop_1(s, OP_RAISEIF, exc);
+      /* StandardError - execute rescue expression */
+      dispatch(s, rescue_jmp);
       pop();
       codegen(s, cast->rescue_expression, val);
       if (val) pop();

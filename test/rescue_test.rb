@@ -209,6 +209,19 @@ class RescueTest < Picotest::Test
     assert_equal("false", actual)
   end
 
+  def test_rescue_modifier_only_catches_standard_error
+    script = <<~RUBY
+      a = :ok
+      begin
+        raise Exception rescue a = :ng
+      rescue Exception
+      end
+      p a
+    RUBY
+    actual = run_script(script)
+    assert_equal(":ok", actual)
+  end
+
   def test_redo_inside_rescue_in_loop
     script = <<~RUBY
       loops = 0
