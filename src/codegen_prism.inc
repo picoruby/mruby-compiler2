@@ -1842,6 +1842,12 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       }
       break;
     }
+    case PM_IMPLICIT_NODE:
+    {
+      CAST(implicit);
+      codegen(s, (mrc_node *)cast->value, val);
+      break;
+    }
     case PM_SPLAT_NODE:
     {
       CAST(splat);

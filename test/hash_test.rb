@@ -37,4 +37,15 @@ class HashTest < Picotest::Test
     actual = run_script(script)
     assert_equal("0\n10\n25\n39\n79", actual)
   end
+
+  def test_hash_shorthand_value
+    script = <<~RUBY
+      foo = 1
+      bar = "hello"
+      h = {foo:, bar:}
+      p h
+    RUBY
+    actual = run_script(script)
+    assert_equal('{foo: 1, bar: "hello"}', actual)
+  end
 end
