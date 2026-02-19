@@ -2504,7 +2504,13 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
         case PM_CONSTANT_PATH_NODE:
           {
             mrc_node *parent = ((pm_constant_path_node_t *)cpath)->parent;
-            codegen(s, parent, VAL);
+            if (parent) {
+              codegen(s, parent, VAL);
+            }
+            else { /* ::ClassName - root namespace */
+              genop_1(s, OP_OCLASS, cursp());
+              push();
+            }
             break;
           }
         default:
@@ -2541,7 +2547,13 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
         case PM_CONSTANT_PATH_NODE:
           {
             CAST3(constant_path, cast->constant_path, cpath);
-            codegen(s, cpath->parent, VAL);
+            if (cpath->parent) {
+              codegen(s, cpath->parent, VAL);
+            }
+            else { /* ::ModuleName - root namespace */
+              genop_1(s, OP_OCLASS, cursp());
+              push();
+            }
             break;
           }
         case PM_CONSTANT_READ_NODE:

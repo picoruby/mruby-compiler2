@@ -60,4 +60,30 @@ class NamespaceTest < Picotest::Test
     assert_equal("NameError", actual)
   end
 
+  def test_root_class_inside_nested_class
+    skip "Not supported on mruby/c" unless mruby?
+    script = <<~RUBY
+      class A
+        class ::C
+        end
+      end
+      p C
+    RUBY
+    actual = run_script(script)
+    assert_equal("C", actual)
+  end
+
+  def test_root_module_inside_nested_module
+    skip "Not supported on mruby/c" unless mruby?
+    script = <<~RUBY
+      module A
+        module ::M
+        end
+      end
+      p M
+    RUBY
+    actual = run_script(script)
+    assert_equal("M", actual)
+  end
+
 end
