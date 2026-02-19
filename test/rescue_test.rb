@@ -209,4 +209,25 @@ class RescueTest < Picotest::Test
     assert_equal("false", actual)
   end
 
+  def test_redo_inside_rescue_in_loop
+    script = <<~RUBY
+      loops = 0
+      limit = 2
+      loop do
+        begin
+          limit -= 1
+          break unless limit > 0
+          raise "!"
+        rescue
+          redo
+        ensure
+          loops += 1
+        end
+      end
+      p loops
+    RUBY
+    actual = run_script(script)
+    assert_equal("2", actual)
+  end
+
 end

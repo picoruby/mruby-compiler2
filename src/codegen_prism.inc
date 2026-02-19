@@ -2777,11 +2777,15 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     }
     case PM_REDO_NODE:
     {
-      if (!s->loop || s->loop->type == LOOP_BEGIN || s->loop->type == LOOP_RESCUE) {
+      struct loopinfo *lp = s->loop;
+      while (lp && (lp->type == LOOP_BEGIN || lp->type == LOOP_RESCUE)) {
+        lp = lp->prev;
+      }
+      if (!lp) {
         raise_error(s, "unexpected redo");
       }
       else {
-        genjmp(s, OP_JMPUW, s->loop->pc1);
+        genjmp(s, OP_JMPUW, lp->pc1);
       }
       if (val) push();
       break;
