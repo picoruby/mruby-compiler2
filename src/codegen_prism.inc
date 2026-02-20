@@ -115,8 +115,9 @@ gen_values(mrc_codegen_scope *s, mrc_node *tree, int val, int limit)
     t = (mrc_node *)cast->arguments.nodes[i];
     if (nint(t) == PM_KEYWORD_HASH_NODE) break;
     int is_splat = nint(t) == PM_SPLAT_NODE;
+    int is_forwarding = nint(t) == PM_FORWARDING_ARGUMENTS_NODE;
 
-    if (is_splat || cursp() >= slimit) { /* flush stack */
+    if (is_splat || is_forwarding || cursp() >= slimit) { /* flush stack */
       pop_n(n);
       if (first) {
         if (n == 0) {
@@ -149,6 +150,30 @@ gen_values(mrc_codegen_scope *s, mrc_node *tree, int val, int limit)
       pop(); pop();
       genop_1(s, OP_ARYCAT, cursp());
       push();
+    }
+    else if (is_forwarding) {
+      int idx;
+      /* ARYCAT rest args (*) into the flushed array */
+      idx = lv_idx(s, MRC_OPSYM_2(mul));
+      assert(idx != 0);
+      gen_move(s, cursp(), idx, val);
+      pop();
+      genop_1(s, OP_ARYCAT, cursp());
+      push();
+      /* ** keyword hash */
+      genop_2(s, OP_HASH, cursp(), 0);
+      push();
+      idx = lv_idx(s, MRC_OPSYM_2(pow));
+      assert(idx != 0);
+      gen_move(s, cursp(), idx, val);
+      pop();
+      genop_1(s, OP_HASHCAT, cursp());
+      push();
+      /* & block */
+      idx = lv_idx(s, MRC_OPSYM_2(and));
+      assert(idx != 0);
+      gen_move(s, cursp(), idx, val);
+      break;
     }
     else {
       codegen(s, t, val);
