@@ -1332,7 +1332,9 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
           else {
             genop_3(s, OP_ARRAY2, cursp(), rhs+n, rn);
           }
-          gen_assignment(s, ((pm_splat_node_t *)cast->rest)->expression, NULL, cursp(), NOVAL);
+          if (((pm_splat_node_t *)cast->rest)->expression) {
+            gen_assignment(s, ((pm_splat_node_t *)cast->rest)->expression, NULL, cursp(), NOVAL);
+          }
           n += rn;
         }
         else if (cast->rest && nint(cast->rest) == PM_IMPLICIT_REST_NODE) {

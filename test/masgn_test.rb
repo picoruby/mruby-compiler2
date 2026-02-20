@@ -170,4 +170,14 @@ class MasgnTest < Picotest::Test
     assert_equal("1\n[9, 8]\n3\n4", actual)
   end
 
+  def test_bare_splat_assignment
+    script = <<~RUBY
+      * = [0]
+      a, * = [1, 2]
+      p a
+    RUBY
+    actual = run_script(script)
+    assert_equal("1", actual)
+  end
+
 end
