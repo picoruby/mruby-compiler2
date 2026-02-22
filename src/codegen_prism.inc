@@ -1792,7 +1792,9 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
             mrc_uint value = ((mrc_uint)cast->value.values[0])|((mrc_uint)cast->value.values[1] << 32);
             if (!cast->value.negative && MRC_INT_MAX < value) goto overflow;
             if (cast->value.negative) {
-              if (value < MRC_INT_MIN) goto overflow;
+              // `value` is the unsigned absolute value of the negative literal.
+              //  (mrc_uint)MRC_INT_MIN wraps -2^63 to 2^63, which is the max absolute value a negative mrc_int can represent.
+              if (value > (mrc_uint)MRC_INT_MIN) goto overflow;
               value *= -1;
             }
             gen_int(s, cursp(), value);
