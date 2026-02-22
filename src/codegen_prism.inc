@@ -6,6 +6,8 @@
 
 static void gen_massignment(mrc_codegen_scope *s, mrc_node *tree, int rhs, int val);
 static void gen_lvar(mrc_codegen_scope *s, mrc_sym name, int depth);
+static void codegen_pattern(mrc_codegen_scope *s, mrc_node *pattern, int target,
+                            uint32_t *fail_pos, int known_array_len);
 
 static mrc_sym
 nsym(mrc_parser_state *p, const uint8_t *start, size_t length)
@@ -626,6 +628,665 @@ gen_massignment(mrc_codegen_scope *s, mrc_node *tree, int rhs, int val)
     if (val) {
       gen_move(s, cursp(), rhs, 0);
     }
+  }
+}
+
+/* Generate pattern matching code for a single pattern.
+ * target: stack position of the value being matched
+ * fail_pos: linked list of jump positions for pattern match failure
+ * known_array_len: -1 if unknown, >= 0 if target is known to be an array of that length
+ */
+static void
+codegen_pattern(mrc_codegen_scope *s, mrc_node *pattern, int target, uint32_t *fail_pos, int known_array_len)
+{
+  uint32_t tmp;
+
+  /* Handle guard clause wrapper (PM_IF_NODE wrapping the actual pattern) */
+  if (nint(pattern) == PM_IF_NODE) {
+    pm_if_node_t *if_n = (pm_if_node_t *)pattern;
+    /* In Prism: in pattern if condition
+     * The IfNode.statements contains the actual pattern
+     * The IfNode.predicate contains the guard condition */
+    if (if_n->statements) {
+      pm_statements_node_t *stmts = if_n->statements;
+      if (stmts->body.size > 0) {
+        /* Extract and match the inner pattern first */
+        mrc_node *inner_pattern = stmts->body.nodes[0];
+        codegen_pattern(s, inner_pattern, target, fail_pos, known_array_len);
+      }
+    }
+    /* Generate the guard condition */
+    if (if_n->predicate) {
+      codegen(s, (mrc_node *)if_n->predicate, VAL);
+      pop();
+      /* if guard: fail if guard is false */
+      tmp = genjmp2(s, OP_JMPNOT, cursp(), *fail_pos, 0);
+      *fail_pos = tmp;
+    }
+    return;
+  }
+
+  /* Handle unless guard clause (PM_UNLESS_NODE wrapping the actual pattern) */
+  if (nint(pattern) == PM_UNLESS_NODE) {
+    pm_unless_node_t *unless_n = (pm_unless_node_t *)pattern;
+    /* In Prism: in pattern unless condition
+     * The UnlessNode.statements contains the actual pattern
+     * The UnlessNode.predicate contains the guard condition */
+    if (unless_n->statements) {
+      pm_statements_node_t *stmts = unless_n->statements;
+      if (stmts->body.size > 0) {
+        /* Extract and match the inner pattern first */
+        mrc_node *inner_pattern = stmts->body.nodes[0];
+        codegen_pattern(s, inner_pattern, target, fail_pos, known_array_len);
+      }
+    }
+    /* Generate the guard condition */
+    if (unless_n->predicate) {
+      codegen(s, (mrc_node *)unless_n->predicate, VAL);
+      pop();
+      /* unless guard: fail if guard is true (inverted from if) */
+      tmp = genjmp2(s, OP_JMPIF, cursp(), *fail_pos, 0);
+      *fail_pos = tmp;
+    }
+    return;
+  }
+
+  switch (nint(pattern)) {
+  /* Value patterns: literals */
+  case PM_INTEGER_NODE:
+  case PM_FLOAT_NODE:
+  case PM_RATIONAL_NODE:
+  case PM_IMAGINARY_NODE:
+  case PM_STRING_NODE:
+  case PM_SYMBOL_NODE:
+  case PM_TRUE_NODE:
+  case PM_FALSE_NODE:
+  case PM_NIL_NODE:
+  case PM_CONSTANT_READ_NODE:
+  case PM_CONSTANT_PATH_NODE:
+    {
+      /* Generate: pattern_value === target */
+      codegen(s, pattern, VAL);
+      gen_move(s, cursp(), target, 0);
+      push(); push(); pop(); pop(); pop();
+      genop_3(s, OP_SEND, cursp(), new_sym(s, MRC_OPSYM_2(eqq)), 1);
+      /* Jump to fail if not matched */
+      tmp = genjmp2(s, OP_JMPNOT, cursp(), *fail_pos, 1);
+      *fail_pos = tmp;
+    }
+    break;
+
+  case PM_LOCAL_VARIABLE_TARGET_NODE:
+    {
+      CAST3(local_variable_target, pattern, var_target);
+      /* Bind the matched value to the variable */
+      int idx = lv_idx(s, var_target->name);
+      if (idx > 0) {
+        gen_move(s, idx, target, 1);  /* nopeep=1 to prevent optimization */
+      }
+      /* Variable pattern always matches */
+    }
+    break;
+
+  case PM_IMPLICIT_NODE:
+    {
+      /* Unwrap implicit node and process inner value */
+      pm_implicit_node_t *implicit = (pm_implicit_node_t *)pattern;
+      codegen_pattern(s, (mrc_node *)implicit->value, target, fail_pos, known_array_len);
+    }
+    break;
+
+  case PM_ALTERNATION_PATTERN_NODE:
+    {
+      CAST3(alternation_pattern, pattern, pat_alt);
+      uint32_t left_fail = JMPLINK_START;
+      uint32_t success_pos = JMPLINK_START;
+
+      /* Try left pattern */
+      codegen_pattern(s, (mrc_node *)pat_alt->left, target, &left_fail, known_array_len);
+
+      /* Optimize JMPNOT+JMP to JMPIF when possible */
+      if (nint(pat_alt->left) != PM_ALTERNATION_PATTERN_NODE &&
+          left_fail != JMPLINK_START && left_fail >= 2 && left_fail + 2 == s->pc) {
+        /* Extract the previous link from the JMPNOT chain */
+        int16_t prev_offset = (int16_t)PEEK_S(s->iseq + left_fail);
+        int32_t next_addr = (int32_t)(left_fail + 2) + prev_offset;
+        uint32_t prev_link = (next_addr == 0) ? JMPLINK_START : (uint32_t)next_addr;
+        /* Convert JMPNOT to JMPIF */
+        s->iseq[left_fail - 2] = OP_JMPIF;
+        /* Clear offset to mark end of success chain */
+        emit_S(s, left_fail, 0);
+        success_pos = left_fail;
+        /* Continue with remaining fail chain */
+        left_fail = prev_link;
+      }
+      else {
+        /* Left succeeded - jump to success */
+        tmp = genjmp(s, OP_JMP, success_pos);
+        success_pos = tmp;
+      }
+
+      /* Left failed - try right pattern */
+      if (left_fail != JMPLINK_START) {
+        dispatch_linked(s, left_fail);
+      }
+      codegen_pattern(s, (mrc_node *)pat_alt->right, target, fail_pos, known_array_len);
+
+      /* Dispatch success jumps */
+      if (success_pos != JMPLINK_START) {
+        dispatch_linked(s, success_pos);
+      }
+    }
+    break;
+
+  case PM_CAPTURE_PATTERN_NODE:
+    {
+      CAST3(capture_pattern, pattern, pat_as);
+      /* First match the inner pattern */
+      codegen_pattern(s, (mrc_node *)pat_as->value, target, fail_pos, known_array_len);
+      /* Then bind the value to the variable */
+      CAST3(local_variable_target, pat_as->target, var_target);
+      int idx = lv_idx(s, var_target->name);
+      if (idx > 0) {
+        gen_move(s, idx, target, 0);
+      }
+    }
+    break;
+
+  case PM_PINNED_VARIABLE_NODE:
+    {
+      CAST3(pinned_variable, pattern, pat_pin);
+      /* Get the variable based on its type */
+      mrc_node *var_node = (mrc_node *)pat_pin->variable;
+      mrc_sym var_name = 0;
+
+      if (nint(var_node) == PM_LOCAL_VARIABLE_READ_NODE) {
+        pm_local_variable_read_node_t *lvar = (pm_local_variable_read_node_t *)var_node;
+        var_name = lvar->name;
+      }
+
+      if (var_name) {
+        int idx = lv_idx(s, var_name);
+        if (idx > 0) {
+          /* Compare: pinned_value === target */
+          gen_move(s, cursp(), idx, 0);  /* Load pinned variable */
+          push();
+          gen_move(s, cursp(), target, 0);  /* Load target */
+          push(); push(); pop(); pop(); pop();
+          genop_3(s, OP_SEND, cursp(), new_sym(s, MRC_OPSYM_2(eqq)), 1);
+          /* Jump to fail if not matched */
+          tmp = genjmp2(s, OP_JMPNOT, cursp(), *fail_pos, 1);
+          *fail_pos = tmp;
+        }
+        else {
+          /* Variable not found - fail the match */
+          tmp = genjmp(s, OP_JMP, *fail_pos);
+          *fail_pos = tmp;
+        }
+      }
+      else {
+        /* Unable to extract variable name - fail the match */
+        tmp = genjmp(s, OP_JMP, *fail_pos);
+        *fail_pos = tmp;
+      }
+    }
+    break;
+
+  case PM_ARRAY_PATTERN_NODE:
+    {
+      CAST3(array_pattern, pattern, pat_arr);
+      int pre_len = pat_arr->requireds.size;
+      int post_len = pat_arr->posts.size;
+      int arr_reg;
+      int i;
+
+      /* Optimization: if we know the target is an array, skip deconstruct */
+      if (known_array_len >= 0) {
+        /* Use target directly as array register */
+        arr_reg = target;
+
+        /* Compile-time size check */
+        if (pat_arr->rest == NULL) {
+          /* No rest: exact length match required */
+          if (known_array_len != pre_len + post_len) {
+            /* Size mismatch - always fail */
+            tmp = genjmp(s, OP_JMP, *fail_pos);
+            *fail_pos = tmp;
+            break;
+          }
+          /* Size matches, no runtime check needed */
+        }
+        else {
+          /* Has rest: minimum length check */
+          int min_len = pre_len + post_len;
+          if (known_array_len < min_len) {
+            /* Size too small - always fail */
+            tmp = genjmp(s, OP_JMP, *fail_pos);
+            *fail_pos = tmp;
+            break;
+          }
+          /* Size sufficient, no runtime check needed */
+        }
+
+        /* Match pre-rest elements using AREF */
+        for (i = 0; i < pre_len; i++) {
+          /* Get arr[i] using AREF */
+          int sp = cursp();
+          genop_3(s, OP_AREF, sp, arr_reg, i);
+          push();
+          /* Element is now at sp */
+          /* Match element pattern (elements are not known arrays) */
+          codegen_pattern(s, pat_arr->requireds.nodes[i], sp, fail_pos, -1);
+          pop();
+        }
+
+        /* Bind rest elements if rest is a variable */
+        if (pat_arr->rest && nint(pat_arr->rest) == PM_SPLAT_NODE) {
+          pm_splat_node_t *splat = (pm_splat_node_t *)pat_arr->rest;
+          if (splat->expression && nint(splat->expression) == PM_LOCAL_VARIABLE_TARGET_NODE) {
+            pm_local_variable_target_node_t *rest_var = (pm_local_variable_target_node_t *)splat->expression;
+            int var_idx = lv_idx(s, rest_var->name);
+            /* Generate: arr[pre_len..-(post_len+1)] or arr[pre_len..-1] if no post */
+            int sp_save = cursp();
+            gen_move(s, cursp(), arr_reg, 0);
+            push();
+            gen_int(s, cursp(), pre_len);
+            push();
+            if (post_len > 0) {
+              gen_int(s, cursp(), -(post_len + 1));
+            }
+            else {
+              gen_int(s, cursp(), -1);
+            }
+            /* Create inclusive range */
+            genop_1(s, OP_RANGE_INC, cursp() - 1);
+            push(); pop();  /* touch block slot */
+            s->sp = sp_save;
+            genop_3(s, OP_SEND, cursp(), new_sym(s, MRC_OPSYM_2(aref)), 1);
+            if (var_idx > 0) {
+              gen_move(s, var_idx, cursp(), 1);
+            }
+          }
+        }
+
+        /* Match post-rest elements using negative indices (GETIDX) */
+        for (i = 0; i < post_len; i++) {
+          gen_move(s, cursp(), arr_reg, 0);
+          push();
+          gen_int(s, cursp(), -(post_len - i));
+          genop_1(s, OP_GETIDX, cursp() - 1);
+          /* Element is now at cursp-1 */
+          codegen_pattern(s, pat_arr->posts.nodes[i], cursp() - 1, fail_pos, -1);
+          pop();
+        }
+      }
+      else {
+        /* Call target.deconstruct() */
+        gen_move(s, cursp(), target, 0);
+        push(); pop();  /* touch block slot for max stack */
+        genop_3(s, OP_SEND, cursp(), new_sym(s, MRC_SYM_1(deconstruct)), 0);
+        arr_reg = cursp();
+        push();  /* protect arr_reg on stack */
+
+        /* Check if deconstruct returned nil */
+        tmp = genjmp2(s, OP_JMPNIL, arr_reg, *fail_pos, 0);
+        *fail_pos = tmp;
+
+        /* Runtime size check: arr.size() == or >= expected */
+        {
+          int chk = cursp();
+          gen_move(s, chk, arr_reg, 0);
+          push(); pop();  /* touch block slot */
+          genop_3(s, OP_SEND, chk, new_sym(s, MRC_SYM_1(size)), 0);
+          /* R[chk] = size */
+          gen_int(s, chk + 1, pre_len + post_len);
+          if (pat_arr->rest == NULL) {
+            genop_1(s, OP_EQ, chk);
+          }
+          else {
+            genop_1(s, OP_GE, chk);
+          }
+          tmp = genjmp2(s, OP_JMPNOT, chk, *fail_pos, 1);
+          *fail_pos = tmp;
+        }
+
+        /* Match pre-rest elements */
+        for (i = 0; i < pre_len; i++) {
+          int sp = cursp();
+          genop_3(s, OP_AREF, sp, arr_reg, i);
+          push();
+          codegen_pattern(s, pat_arr->requireds.nodes[i], sp, fail_pos, -1);
+          pop();
+        }
+
+        /* Bind rest elements if rest is a variable */
+        if (pat_arr->rest && nint(pat_arr->rest) == PM_SPLAT_NODE) {
+          pm_splat_node_t *splat = (pm_splat_node_t *)pat_arr->rest;
+          if (splat->expression && nint(splat->expression) == PM_LOCAL_VARIABLE_TARGET_NODE) {
+            pm_local_variable_target_node_t *rest_var = (pm_local_variable_target_node_t *)splat->expression;
+            int var_idx = lv_idx(s, rest_var->name);
+            int sp_save = cursp();
+            gen_move(s, cursp(), arr_reg, 0);
+            push();
+            gen_int(s, cursp(), pre_len);
+            push();
+            if (post_len > 0) {
+              gen_int(s, cursp(), -(post_len + 1));
+            }
+            else {
+              gen_int(s, cursp(), -1);
+            }
+            genop_1(s, OP_RANGE_INC, cursp() - 1);
+            push(); pop();  /* touch block slot */
+            s->sp = sp_save;
+            genop_3(s, OP_SEND, cursp(), new_sym(s, MRC_OPSYM_2(aref)), 1);
+            /* Result at R[sp_save] */
+            if (var_idx > 0) {
+              gen_move(s, var_idx, cursp(), 1);
+            }
+          }
+        }
+
+        /* Match post-rest elements using negative indices (GETIDX) */
+        for (i = 0; i < post_len; i++) {
+          gen_move(s, cursp(), arr_reg, 0);
+          push();
+          gen_int(s, cursp(), -(post_len - i));
+          genop_1(s, OP_GETIDX, cursp() - 1);
+          codegen_pattern(s, pat_arr->posts.nodes[i], cursp() - 1, fail_pos, -1);
+          pop();
+        }
+        pop();  /* release arr_reg */
+      }
+    }
+    break;
+
+  case PM_HASH_PATTERN_NODE:
+    {
+      CAST3(hash_pattern, pattern, pat_hash);
+      int hash_reg;
+      int num_keys = 0;
+
+      /* Check if **nil is present */
+      int has_double_nil = pat_hash->rest && nint(pat_hash->rest) == PM_NO_KEYWORDS_PARAMETER_NODE;
+
+      /* Save original target for has_key? checks (mruby's deconstruct_keys
+         returns nil for missing keys, so we check against the original).
+         Use genop_2 directly to bypass peephole optimization that would
+         eliminate this copy when chained with the next gen_move. */
+      int orig_target = cursp();
+      genop_2(s, OP_MOVE, orig_target, target);
+      push(); /* protect orig_target */
+
+      /* Call target.deconstruct_keys(keys_array or nil) */
+      /* Layout: R[recv] = target, R[recv+1] = keys_array, R[recv+2] = block */
+      int recv = cursp();
+      gen_move(s, recv, orig_target, 1);
+      push(); /* protect receiver */
+
+      if (has_double_nil) {
+        /* For **nil, call deconstruct_keys(nil) to get all keys */
+        int keys_base = cursp();
+        genop_1(s, OP_LOADNIL, keys_base);
+        push(); /* protect nil arg */
+        push(); pop(); /* touch block slot */
+        s->sp = recv;
+        genop_3(s, OP_SEND, recv, new_sym(s, MRC_SYM_1(deconstruct_keys)), 1);
+        /* Count keys for **nil check later */
+        for (size_t i = 0; i < pat_hash->elements.size; i++) {
+          mrc_node *elem = pat_hash->elements.nodes[i];
+          if (nint(elem) == PM_ASSOC_NODE) {
+            num_keys++;
+          }
+        }
+      }
+      else {
+        /* Build keys array at recv+1 */
+        int keys_base = cursp();
+        for (size_t i = 0; i < pat_hash->elements.size; i++) {
+          mrc_node *elem = pat_hash->elements.nodes[i];
+          if (nint(elem) == PM_ASSOC_NODE) {
+            pm_assoc_node_t *assoc = (pm_assoc_node_t *)elem;
+            codegen(s, (mrc_node *)assoc->key, VAL);
+            num_keys++;
+          }
+        }
+        if (num_keys > 0) pop_n(num_keys);
+        genop_2(s, OP_ARRAY, keys_base, num_keys);
+        push(); /* protect keys arg */
+        push(); pop(); /* touch block slot */
+        s->sp = recv;
+        genop_3(s, OP_SEND, recv, new_sym(s, MRC_SYM_1(deconstruct_keys)), 1);
+      }
+      /* Result (hash) is at recv */
+      hash_reg = recv;
+      push();  /* protect hash_reg */
+
+      /* Check if deconstruct_keys returned nil */
+      tmp = genjmp2(s, OP_JMPNIL, hash_reg, *fail_pos, 0);
+      *fail_pos = tmp;
+
+      /* Match each key-value pair */
+      int loop_sp = cursp(); /* save sp after hash_reg push */
+      for (size_t i = 0; i < pat_hash->elements.size; i++) {
+        mrc_node *elem = pat_hash->elements.nodes[i];
+        if (nint(elem) == PM_ASSOC_NODE) {
+          pm_assoc_node_t *assoc = (pm_assoc_node_t *)elem;
+          /* Check if original target has key (not deconstructed hash,
+             because mruby's deconstruct_keys returns nil for missing keys) */
+          int val_reg = cursp();
+          gen_move(s, val_reg, orig_target, 0);
+          push();
+          codegen(s, (mrc_node *)assoc->key, VAL);
+          push(); pop();  /* touch block slot */
+          s->sp = val_reg;
+          genop_3(s, OP_SEND, val_reg, new_sym(s, MRC_SYM_2(has_key_p)), 1);
+          tmp = genjmp2(s, OP_JMPNOT, val_reg, *fail_pos, 0);
+          *fail_pos = tmp;
+          s->sp = loop_sp; /* reset sp */
+
+          /* Get orig_target[key] */
+          gen_move(s, val_reg, orig_target, 0);
+          push();
+          codegen(s, (mrc_node *)assoc->key, VAL);
+          pop();  /* codegen pushed, pop so key is at val_reg+1 */
+          genop_1(s, OP_GETIDX, val_reg);
+          /* Value is now at val_reg */
+
+          if (assoc->value) {
+            codegen_pattern(s, (mrc_node *)assoc->value, val_reg, fail_pos, -1);
+          }
+          else {
+            /* Shorthand form {a:} - bind to variable with same name as key */
+            if (nint(assoc->key) == PM_SYMBOL_NODE) {
+              pm_symbol_node_t *sym = (pm_symbol_node_t *)assoc->key;
+              mrc_sym var_name = nsym(s->c->p, sym->unescaped.source, sym->unescaped.length);
+              int idx = lv_idx(s, var_name);
+              if (idx > 0) {
+                gen_move(s, idx, val_reg, 1);
+              }
+            }
+          }
+          s->sp = loop_sp; /* reset sp for next iteration */
+        }
+      }
+
+      /* Handle rest pattern (**rest or **nil) */
+      if (pat_hash->rest) {
+        if (nint(pat_hash->rest) == PM_ASSOC_SPLAT_NODE) {
+          pm_assoc_splat_node_t *splat = (pm_assoc_splat_node_t *)pat_hash->rest;
+          if (splat->value) {
+            if (nint(splat->value) == PM_LOCAL_VARIABLE_TARGET_NODE) {
+              pm_local_variable_target_node_t *rest_var = (pm_local_variable_target_node_t *)splat->value;
+              int var_idx = lv_idx(s, rest_var->name);
+              if (var_idx > 0) {
+                gen_move(s, var_idx, orig_target, 1);
+              }
+            }
+          }
+        }
+        else if (nint(pat_hash->rest) == PM_NO_KEYWORDS_PARAMETER_NODE) {
+          /* **nil - no extra keys allowed */
+          int chk = cursp();
+          gen_move(s, chk, orig_target, 0);
+          push(); pop();
+          genop_3(s, OP_SEND, chk, new_sym(s, MRC_SYM_1(size)), 0);
+          gen_int(s, chk + 1, num_keys);
+          genop_1(s, OP_EQ, chk);
+          tmp = genjmp2(s, OP_JMPNOT, chk, *fail_pos, 1);
+          *fail_pos = tmp;
+        }
+      }
+
+      pop();  /* release hash_reg */
+      pop();  /* release orig_target */
+    }
+    break;
+
+  case PM_FIND_PATTERN_NODE:
+    {
+      /* Find pattern: [*pre, elem1, elem2, ..., *post]
+       * Searches for elems anywhere in the array. */
+      CAST3(find_pattern, pattern, pat_find);
+      int elems_len = pat_find->requireds.size;
+      int arr_reg = cursp();
+      int idx_reg;
+      uint32_t loop_start, match_fail, loop_end;
+
+      /* Call deconstruct on target */
+      gen_move(s, cursp(), target, 0);
+      push(); pop();
+      genop_3(s, OP_SEND, arr_reg, new_sym(s, MRC_SYM_1(deconstruct)), 0);
+      push(); /* protect arr_reg */
+
+      /* Check if deconstruct returned nil */
+      tmp = genjmp2(s, OP_JMPNIL, arr_reg, *fail_pos, 0);
+      *fail_pos = tmp;
+
+      /* Check minimum length: arr.size >= elems_len */
+      gen_move(s, cursp(), arr_reg, 0);
+      push(); pop();
+      genop_3(s, OP_SEND, cursp(), new_sym(s, MRC_SYM_1(size)), 0);
+      gen_int(s, cursp() + 1, elems_len);
+      genop_1(s, OP_GE, cursp());
+      tmp = genjmp2(s, OP_JMPNOT, cursp(), *fail_pos, 1);
+      *fail_pos = tmp;
+
+      /* Initialize index to 0 */
+      idx_reg = cursp();
+      gen_int(s, idx_reg, 0);
+      push();
+
+      /* Loop: try matching at each position */
+      loop_start = new_label(s);
+      match_fail = JMPLINK_START;
+
+      /* Check if idx <= arr.size - elems_len */
+      gen_move(s, cursp(), arr_reg, 0);
+      push(); pop();
+      genop_3(s, OP_SEND, cursp(), new_sym(s, MRC_SYM_1(size)), 0);
+      gen_int(s, cursp() + 1, elems_len);
+      genop_1(s, OP_SUB, cursp());
+      gen_move(s, cursp() + 1, idx_reg, 0);
+      genop_1(s, OP_GE, cursp());
+      tmp = genjmp2(s, OP_JMPNOT, cursp(), *fail_pos, 1);
+      *fail_pos = tmp;
+
+      /* Try to match each middle element at idx+offset */
+      for (size_t i = 0; i < pat_find->requireds.size; i++) {
+        /* Get arr[idx + offset] */
+        gen_move(s, cursp(), arr_reg, 0);
+        push();
+        if (i == 0) {
+          gen_move(s, cursp(), idx_reg, 0);
+        }
+        else {
+          gen_move(s, cursp(), idx_reg, 0);
+          gen_int(s, cursp() + 1, (int)i);
+          genop_1(s, OP_ADD, cursp());
+        }
+        genop_1(s, OP_GETIDX, cursp() - 1);
+        int elem_reg = cursp() - 1;
+        codegen_pattern(s, pat_find->requireds.nodes[i], elem_reg, &match_fail, -1);
+        pop();
+      }
+
+      /* All elements matched - bind pre and post if named */
+      if (pat_find->left && nint((mrc_node *)pat_find->left) == PM_SPLAT_NODE) {
+        pm_splat_node_t *pre_splat = (pm_splat_node_t *)pat_find->left;
+        if (pre_splat->expression &&
+            nint(pre_splat->expression) == PM_LOCAL_VARIABLE_TARGET_NODE) {
+          pm_local_variable_target_node_t *pre_var =
+              (pm_local_variable_target_node_t *)pre_splat->expression;
+          int var_idx = lv_idx(s, pre_var->name);
+          if (var_idx > 0) {
+            /* pre = arr[0...idx] */
+            gen_move(s, cursp(), arr_reg, 0);
+            push();
+            gen_int(s, cursp(), 0);
+            push();
+            gen_move(s, cursp(), idx_reg, 0);
+            genop_1(s, OP_RANGE_EXC, cursp() - 1);
+            pop(); pop();
+            genop_3(s, OP_SEND, cursp(), new_sym(s, MRC_OPSYM_2(aref)), 1);
+            gen_move(s, var_idx, cursp(), 1);
+          }
+        }
+      }
+
+      if (pat_find->right && nint((mrc_node *)pat_find->right) == PM_SPLAT_NODE) {
+        pm_splat_node_t *post_splat = (pm_splat_node_t *)pat_find->right;
+        if (post_splat->expression &&
+            nint(post_splat->expression) == PM_LOCAL_VARIABLE_TARGET_NODE) {
+          pm_local_variable_target_node_t *post_var =
+              (pm_local_variable_target_node_t *)post_splat->expression;
+          int var_idx = lv_idx(s, post_var->name);
+          if (var_idx > 0) {
+            /* post = arr[(idx+elems_len)..-1] */
+            gen_move(s, cursp(), arr_reg, 0);
+            push();
+            gen_move(s, cursp(), idx_reg, 0);
+            gen_int(s, cursp() + 1, elems_len);
+            genop_1(s, OP_ADD, cursp());
+            push();
+            gen_int(s, cursp(), -1);
+            genop_1(s, OP_RANGE_INC, cursp() - 1);
+            pop(); pop();
+            genop_3(s, OP_SEND, cursp(), new_sym(s, MRC_OPSYM_2(aref)), 1);
+            gen_move(s, var_idx, cursp(), 1);
+          }
+        }
+      }
+
+      /* Match succeeded - jump to end */
+      tmp = genjmp(s, OP_JMP, JMPLINK_START);
+      loop_end = tmp;
+
+      /* Match failed at this position - try next index */
+      if (match_fail != JMPLINK_START) {
+        dispatch_linked(s, match_fail);
+      }
+
+      /* idx++ */
+      genop_2(s, OP_ADDI, idx_reg, 1);
+
+      /* Jump back to loop start */
+      genjmp(s, OP_JMP, loop_start);
+
+      /* Dispatch loop_end jump */
+      dispatch(s, loop_end);
+
+      /* Clean up stack */
+      pop(); /* idx_reg */
+      pop(); /* arr_reg */
+    }
+    break;
+
+  default:
+    /* Unimplemented pattern type - for now, always fail */
+    tmp = genjmp(s, OP_JMP, *fail_pos);
+    *fail_pos = tmp;
+    break;
   }
 }
 
@@ -2473,6 +3134,91 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       }
       else {
         if (pos3 != JMPLINK_START) dispatch_linked(s, pos3);
+        if (head) pop();
+      }
+      break;
+    }
+    case PM_CASE_MATCH_NODE:
+    {
+      CAST(case_match);
+      int head = 0;
+      uint32_t case_end_jumps = JMPLINK_START;
+      uint32_t tmp;
+
+      /* Optimization: detect if predicate is array literal */
+      int known_array_len = -1;
+      if (cast->predicate && nint(cast->predicate) == PM_ARRAY_NODE) {
+        pm_array_node_t *arr = (pm_array_node_t *)cast->predicate;
+        int has_splat = 0;
+        for (size_t i = 0; i < arr->elements.size; i++) {
+          if (nint(arr->elements.nodes[i]) == PM_SPLAT_NODE) {
+            has_splat = 1;
+            break;
+          }
+        }
+        if (!has_splat) {
+          known_array_len = arr->elements.size;
+        }
+      }
+
+      /* Generate code for the case value */
+      if (cast->predicate) {
+        head = cursp();
+        codegen(s, (mrc_node *)cast->predicate, VAL);
+      }
+
+      /* Iterate through in clauses */
+      for (size_t i = 0; i < cast->conditions.size; i++) {
+        pm_in_node_t *in_n = (pm_in_node_t *)cast->conditions.nodes[i];
+        uint32_t fail_pos = JMPLINK_START;
+
+        /* Generate pattern matching code */
+        if (in_n->pattern) {
+          codegen_pattern(s, (mrc_node *)in_n->pattern, head, &fail_pos, known_array_len);
+        }
+
+        /* Guard clauses on patterns are handled inside codegen_pattern (via PM_IF_NODE/PM_UNLESS_NODE wrappers) */
+
+        /* Generate in-clause body */
+        codegen(s, (mrc_node *)in_n->statements, val);
+        if (val) pop();
+
+        /* Jump to end of case/in */
+        tmp = genjmp(s, OP_JMP, case_end_jumps);
+        case_end_jumps = tmp;
+
+        /* Dispatch fail jumps to next in-clause */
+        if (fail_pos != JMPLINK_START) {
+          dispatch_linked(s, fail_pos);
+        }
+      }
+
+      /* Handle else clause */
+      if (cast->else_clause) {
+        codegen(s, (mrc_node *)cast->else_clause, val);
+        if (val) pop();
+      }
+      else {
+        /* No pattern matched - generate nil */
+        if (val) {
+          genop_1(s, OP_LOADNIL, cursp());
+        }
+      }
+
+      /* Dispatch all end jumps */
+      if (case_end_jumps != JMPLINK_START) {
+        dispatch_linked(s, case_end_jumps);
+      }
+
+      if (val) {
+        /* Move result to original case value position */
+        if (head) {
+          gen_move(s, head, cursp(), 0);
+          pop();
+        }
+        push();
+      }
+      else {
         if (head) pop();
       }
       break;
