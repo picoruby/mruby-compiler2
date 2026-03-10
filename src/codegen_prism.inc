@@ -18,7 +18,19 @@ static int32_t
 node_lineno(mrc_ccontext *c, mrc_node *node)
 {
   pm_location_t *loc = &((pm_node_t *)node)->location;
-  return pm_newline_list_line(&c->p->newline_list, loc->start, 1);
+  int32_t abs_line = pm_newline_list_line(&c->p->newline_list, loc->start, 1);
+  uint32_t node_pos = (uint32_t)(loc->start - c->p->start);
+  uint32_t file_start = 0;
+  for (uint16_t i = 1; i < c->filename_table_length; i++) {
+    if (c->filename_table[i].start <= node_pos) {
+      file_start = c->filename_table[i].start;
+    } else {
+      break;
+    }
+  }
+  if (file_start == 0) return abs_line;
+  int32_t file_start_line = pm_newline_list_line(&c->p->newline_list, c->p->start + file_start, 1);
+  return abs_line - file_start_line + 1;
 }
 
 static mrc_bool
@@ -1219,11 +1231,11 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
 
   if (s->filename_index+1 < s->c->filename_table_length) {
     if (s->c->filename_table[s->filename_index+1].start <= token_pos) {
-      s->filename = (const char *)s->c->filename_table[s->filename_index++].filename;
-
       mrc_debug_info_append_file(s->c, s->irep->debug_info,
                                 s->filename, s->lines, s->debug_start_pos, s->pc);
       s->debug_start_pos = s->pc;
+      s->filename_index++;
+      s->filename = (const char *)s->c->filename_table[s->filename_index].filename;
     }
   }
 
