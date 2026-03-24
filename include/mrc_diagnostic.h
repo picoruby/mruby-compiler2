@@ -15,6 +15,7 @@ typedef enum {
 typedef struct mrc_diagnostic_list {
   mrc_diagnostic_code code;
   char *message;
+  const char *filename;
   uint32_t line;
   uint32_t column;
   struct mrc_diagnostic_list *next;
