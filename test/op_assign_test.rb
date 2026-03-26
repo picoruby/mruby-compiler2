@@ -36,4 +36,41 @@ class OpAssignTest < Picotest::Test
     actual = run_script(script)
     assert_equal("1", actual)
   end
+
+  def test_local_var_add_assign
+    script = <<~RUBY
+      i = 0
+      i += 1
+      i += 1
+      i += 1
+      p i
+    RUBY
+    actual = run_script(script)
+    assert_equal("3", actual)
+  end
+
+  def test_local_var_sub_assign
+    script = <<~RUBY
+      i = 10
+      i -= 3
+      i -= 2
+      p i
+    RUBY
+    actual = run_script(script)
+    assert_equal("5", actual)
+  end
+
+  def test_local_var_add_assign_in_loop
+    script = <<~RUBY
+      sum = 0
+      i = 0
+      while i < 5
+        sum += i
+        i += 1
+      end
+      p sum
+    RUBY
+    actual = run_script(script)
+    assert_equal("10", actual)
+  end
 end

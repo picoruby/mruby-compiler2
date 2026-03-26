@@ -46,4 +46,26 @@ class ArrayTest < Picotest::Test
     actual = run_script(script)
     assert_equal("[0, 1, 2, 3, 44]", actual)
   end
+
+  def test_index_zero
+    script = <<~RUBY
+      ary = [10, 20, 30]
+      p ary[0]
+    RUBY
+    actual = run_script(script)
+    assert_equal("10", actual)
+  end
+
+  def test_index_zero_in_loop
+    script = <<~RUBY
+      pairs = [[1, 2], [3, 4], [5, 6]]
+      i = 0
+      while i < pairs.size
+        p pairs[i][0]
+        i += 1
+      end
+    RUBY
+    actual = run_script(script)
+    assert_equal("1\n3\n5", actual)
+  end
 end

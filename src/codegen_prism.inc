@@ -593,8 +593,16 @@ gen_call(mrc_codegen_scope *s, mrc_node *tree, int val, int safe)
     /* constant folding succeeded */
   }
   else if (noself) {
-    genop_3(s, blk ? OP_SSENDB : OP_SSEND, cursp(), new_sym(s, sym), n|(nk<<4));
+    if (!blk && n == 0 && nk == 0) {
+      genop_2(s, OP_SSEND0, cursp(), new_sym(s, sym));
     }
+    else {
+      genop_3(s, blk ? OP_SSENDB : OP_SSEND, cursp(), new_sym(s, sym), n|(nk<<4));
+    }
+  }
+  else if (!blk && n == 0 && nk == 0) {
+    genop_2(s, OP_SEND0, cursp(), new_sym(s, sym));
+  }
   else {
     genop_3(s, blk ? OP_SENDB : OP_SEND, cursp(), new_sym(s, sym), n|(nk<<4));
   }
@@ -2192,19 +2200,35 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       int idx = lambda_body(s, (mrc_node *)cast, cast->body, &cast->locals, 0);
 
       if (cast->receiver == NULL) {
-        genop_1(s, OP_TCLASS, cursp());
-        push();
+        if (idx <= 0xff) {
+          /* TDEF fusion: TCLASS + METHOD + DEF -> TDEF */
+          genop_3(s, OP_TDEF, cursp(), sym, idx);
+        }
+        else {
+          genop_1(s, OP_TCLASS, cursp());
+          push();
+          genop_2(s, OP_METHOD, cursp(), idx);
+          push(); pop();
+          pop();
+          genop_2(s, OP_DEF, cursp(), sym);
+        }
       }
       else {
         codegen(s, cast->receiver, VAL);
         pop();
-        genop_1(s, OP_SCLASS, cursp());
-        push();
+        if (idx <= 0xff) {
+          /* SDEF fusion: SCLASS + METHOD + DEF -> SDEF */
+          genop_3(s, OP_SDEF, cursp(), sym, idx);
+        }
+        else {
+          genop_1(s, OP_SCLASS, cursp());
+          push();
+          genop_2(s, OP_METHOD, cursp(), idx);
+          push(); pop();
+          pop();
+          genop_2(s, OP_DEF, cursp(), sym);
+        }
       }
-      genop_2(s, OP_METHOD, cursp(), idx);
-      push(); pop();
-      pop();
-      genop_2(s, OP_DEF, cursp(), sym);
       if (val) push();
       break;
     }
@@ -2800,7 +2824,14 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       pop_n(n+1);
       genop_2S(s, OP_BLKPUSH, cursp(), (ainfo<<4)|(lv & 0xf));
       if (sendv) n = CALL_MAXARGS;
-      genop_3(s, OP_SEND, cursp(), new_sym(s, MRC_SYM_1(call)), n);
+      if (n < 15) {
+        /* fast path: direct block call without method dispatch */
+        genop_2(s, OP_BLKCALL, cursp(), n);
+      }
+      else {
+        /* fallback: use SEND for splat */
+        genop_3(s, OP_SEND, cursp(), new_sym(s, MRC_SYM_1(call)), n);
+      }
       if (val) push();
       break;
     }

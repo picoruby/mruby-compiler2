@@ -54,4 +54,27 @@ class YieldTest < Picotest::Test
     actual = run_script(script)
     assert_equal("Hello Ruby", actual)
   end
+
+  def test_yield_no_args
+    script = <<~'RUBY'
+      def m
+        yield
+      end
+      m { puts "called" }
+    RUBY
+    actual = run_script(script)
+    assert_equal("called", actual)
+  end
+
+  def test_yield_no_args_with_return_value
+    script = <<~'RUBY'
+      def m
+        result = yield
+        puts result
+      end
+      m { 42 }
+    RUBY
+    actual = run_script(script)
+    assert_equal("42", actual)
+  end
 end
