@@ -1753,7 +1753,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
             lp->type = LOOP_RESCUE;
             catch_handler_set(s, catch_entry, MRC_CATCH_RESCUE, begin, end, s->pc);
             genop_1(s, OP_EXCEPT, exc);
-            genop_1(s, OP_LOADF, exc);
+            genop_1(s, OP_LOADFALSE, exc);
             dispatch(s, noexc);
             loop_pop(s, NOVAL);
             break;
@@ -2500,7 +2500,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     case PM_TRUE_NODE:
     {
       if (val) {
-        genop_1(s, OP_LOADT, cursp());
+        genop_1(s, OP_LOADTRUE, cursp());
         push();
       }
       break;
@@ -2508,7 +2508,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     case PM_FALSE_NODE:
     {
       if (val) {
-        genop_1(s, OP_LOADF, cursp());
+        genop_1(s, OP_LOADFALSE, cursp());
         push();
       }
       break;

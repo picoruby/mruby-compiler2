@@ -5,7 +5,6 @@ MRC_BEGIN_DECL
 
 #define MRC_OBJECT_HEADER \
   struct RClass *c;       \
-  struct RBasic *gcnext;  \
   enum mrb_vtype tt:8;    \
   unsigned int gc_color:3; \
   unsigned int frozen:1;  \
