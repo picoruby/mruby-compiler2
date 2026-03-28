@@ -145,7 +145,7 @@ mrc_bin_to_uint8(const uint8_t *bin)
 static inline const char*
 mrc_description(void)
 {
-  return  MRC_VERSION " (" MRC_RELEASE_DATE ") Parser: " RITE_PARSER_NAME ", RITE: " RITE_BINARY_FORMAT_VER;
+  return "RITE" RITE_BINARY_FORMAT_VER " (" MRC_BUILD_INFO ") Parser: " RITE_PARSER_NAME "-" PRISM_VERSION;
 }
 
 MRC_END_DECL

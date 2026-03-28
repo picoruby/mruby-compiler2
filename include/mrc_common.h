@@ -30,18 +30,16 @@
 #endif
 #include "prism.h"
 
-#ifndef PICORUBY_VERSION
-  #define MRC_VERSION "unknown (standalone)"
-#else
-  #define MRC_VERSION PICORUBY_VERSION
+#ifndef MRC_COMMIT_TIMESTAMP
+  #define MRC_COMMIT_TIMESTAMP "unknown"
 #endif
-
-#define MRC_RELEASE_YEAR    2026
-#define MRC_RELEASE_MONTH   1
-#define MRC_RELEASE_DAY     21
-#define MRC_RELEASE_DATE    MRC_STRINGIZE(MRC_RELEASE_YEAR) "-" \
-                            MRC_STRINGIZE(MRC_RELEASE_MONTH) "-" \
-                            MRC_STRINGIZE(MRC_RELEASE_DAY)
+#ifndef MRC_COMMIT_BRANCH
+  #define MRC_COMMIT_BRANCH "unknown"
+#endif
+#ifndef MRC_COMMIT_HASH
+  #define MRC_COMMIT_HASH "unknown"
+#endif
+#define MRC_BUILD_INFO MRC_COMMIT_TIMESTAMP " " MRC_COMMIT_BRANCH " " MRC_COMMIT_HASH
 
 #ifdef MRB_USE_CXX_ABI
 #define MRC_USE_CXX_ABI
