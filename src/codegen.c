@@ -794,7 +794,7 @@ get_int_operand(mrc_codegen_scope *s, struct mrc_insn_data *data, mrc_int *n)
     *n = data->insn - OP_LOADI_0;
     return TRUE;
 
-  case OP_LOADI:
+  case OP_LOADI8:
   case OP_LOADI16:
     *n = (int16_t)data->b;
     return TRUE;
@@ -879,7 +879,7 @@ genjmp2(mrc_codegen_scope *s, mrc_code i, uint16_t a, uint32_t pc, int val)
       }
       break;
     case OP_LOADNIL:
-    case OP_LOADF:
+    case OP_LOADFALSE:
       if (data.a == a || data.a > s->nlocals) {
         s->pc = addr_pc(s, data.addr);
         if (i == OP_JMPNOT || (i == OP_JMPNIL && data.insn == OP_LOADNIL)) {
@@ -890,7 +890,7 @@ genjmp2(mrc_codegen_scope *s, mrc_code i, uint16_t a, uint32_t pc, int val)
         }
       }
       break;
-    case OP_LOADT: case OP_LOADI: case OP_LOADINEG: case OP_LOADI__1:
+    case OP_LOADTRUE: case OP_LOADI8: case OP_LOADINEG: case OP_LOADI__1:
     case OP_LOADI_0: case OP_LOADI_1: case OP_LOADI_2: case OP_LOADI_3:
     case OP_LOADI_4: case OP_LOADI_5: case OP_LOADI_6: case OP_LOADI_7:
       if (data.a == a || data.a > s->nlocals) {
@@ -936,7 +936,7 @@ gen_int(mrc_codegen_scope *s, uint16_t dst, mrc_int i)
     else goto int_lit;
   }
   else if (i < 8) genop_1(s, OP_LOADI_0 + (uint8_t)i, dst);
-  else if (i <= 0xff) genop_2(s, OP_LOADI, dst, (uint16_t)i);
+  else if (i <= 0xff) genop_2(s, OP_LOADI8, dst, (uint16_t)i);
   else if (i <= INT16_MAX) genop_2S(s, OP_LOADI16, dst, (uint16_t)i);
   else if (i <= INT32_MAX) genop_2SS(s, OP_LOADI32, dst, (uint32_t)i);
   else {
@@ -972,7 +972,7 @@ gen_move(mrc_codegen_scope *s, uint16_t dst, uint16_t src, int nopeep)
         return;
       }
       goto normal;
-    case OP_LOADNIL: case OP_LOADSELF: case OP_LOADT: case OP_LOADF:
+    case OP_LOADNIL: case OP_LOADSELF: case OP_LOADTRUE: case OP_LOADFALSE:
     case OP_LOADI__1:
     case OP_LOADI_0: case OP_LOADI_1: case OP_LOADI_2: case OP_LOADI_3:
     case OP_LOADI_4: case OP_LOADI_5: case OP_LOADI_6: case OP_LOADI_7:
@@ -983,7 +983,7 @@ gen_move(mrc_codegen_scope *s, uint16_t dst, uint16_t src, int nopeep)
     case OP_HASH:
       if (data.b != 0) goto normal;
       /* fall through */
-    case OP_LOADI: case OP_LOADINEG:
+    case OP_LOADI8: case OP_LOADINEG:
     case OP_LOADL: case OP_LOADSYM:
     case OP_GETGV: case OP_GETSV: case OP_GETIV: case OP_GETCV:
     case OP_GETCONST: case OP_STRING:
@@ -1032,17 +1032,21 @@ gen_move(mrc_codegen_scope *s, uint16_t dst, uint16_t src, int nopeep)
         s->pc = addr_pc(s, data0.addr);
         if (addr_pc(s, data0.addr) != s->lastlabel) {
           /* constant folding */
-          data0 = mrc_decode_insn(mrc_prev_pc(s, data0.addr));
+          struct mrc_insn_data data1 = mrc_decode_insn(mrc_prev_pc(s, data0.addr));
           mrc_int n;
-          if (data0.a == dst && get_int_operand(s, &data0, &n)) {
+          if (data1.a == dst && get_int_operand(s, &data1, &n)) {
             if ((data.insn == OP_ADDI && !mrc_int_add_overflow(n, data.b, &n)) ||
                 (data.insn == OP_SUBI && !mrc_int_sub_overflow(n, data.b, &n))) {
-              s->pc = addr_pc(s, data0.addr);
+              s->pc = addr_pc(s, data1.addr);
               gen_int(s, dst, n);
               return;
             }
           }
         }
+        /* ADDILV/SUBILV fusion: MOVE temp local; ADDI/SUBI temp imm; MOVE local temp */
+        /* -> ADDILV/SUBILV local temp imm (temp is working space for method fallback) */
+        genop_3(s, data.insn == OP_ADDI ? OP_ADDILV : OP_SUBILV, dst, data.a, data.b);
+        return;
       }
       genop_2(s, data.insn, dst, data.b);
       return;
@@ -1178,7 +1182,28 @@ gen_return(mrc_codegen_scope *s, uint8_t op, uint16_t src)
       rewind_pc(s);
       genop_1(s, op, data.b);
     }
-    else if (data.insn != OP_RETURN) {
+    else if (data.insn == OP_LOADSELF && src == data.a && op == OP_RETURN) {
+      /* LOADSELF + RETURN -> RETSELF */
+      rewind_pc(s);
+      genop_0(s, OP_RETSELF);
+    }
+    else if (data.insn == OP_LOADNIL && src == data.a && op == OP_RETURN) {
+      /* LOADNIL + RETURN -> RETNIL */
+      rewind_pc(s);
+      genop_0(s, OP_RETNIL);
+    }
+    else if (data.insn == OP_LOADTRUE && src == data.a && op == OP_RETURN) {
+      /* LOADTRUE + RETURN -> RETTRUE */
+      rewind_pc(s);
+      genop_0(s, OP_RETTRUE);
+    }
+    else if (data.insn == OP_LOADFALSE && src == data.a && op == OP_RETURN) {
+      /* LOADFALSE + RETURN -> RETFALSE */
+      rewind_pc(s);
+      genop_0(s, OP_RETFALSE);
+    }
+    else if (data.insn != OP_RETURN && data.insn != OP_RETSELF && data.insn != OP_RETNIL &&
+             data.insn != OP_RETTRUE && data.insn != OP_RETFALSE) {
       genop_1(s, op, src);
     }
   }
@@ -1402,6 +1427,16 @@ gen_binop(mrc_codegen_scope *s, mrc_sym op, uint16_t dst)
 {
   if (no_peephole(s)) return FALSE;
   else if (op == MRC_OPSYM_2(aref)) {
+    /* GETIDX0 fusion: MOVE dst arr; LOADI_0 dst+1 -> GETIDX0 dst arr */
+    struct mrc_insn_data data = mrc_last_insn(s);
+    if (data.insn == OP_LOADI_0 && data.a == dst+1 && addr_pc(s, data.addr) != s->lastlabel) {
+      struct mrc_insn_data data0 = mrc_decode_insn(mrc_prev_pc(s, data.addr));
+      if (data0.insn == OP_MOVE && data0.a == dst && data0.b != dst) {
+        s->pc = addr_pc(s, data0.addr);
+        genop_2(s, OP_GETIDX0, dst, data0.b);
+        return TRUE;
+      }
+    }
     genop_1(s, OP_GETIDX, dst);
     return TRUE;
   }

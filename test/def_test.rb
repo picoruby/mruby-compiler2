@@ -171,4 +171,51 @@ class DefTest < Picotest::Test
     actual = run_script(script)
     assert_equal("1\nnil\n[2, 3]", actual)
   end
+
+  def test_return_self
+    script = <<~RUBY
+      class Foo
+        def me
+          self
+        end
+      end
+      foo = Foo.new
+      p foo.me.object_id==foo.object_id
+    RUBY
+    actual = run_script(script)
+    assert_equal("true", actual)
+  end
+
+  def test_return_nil
+    script = <<~RUBY
+      def m
+        nil
+      end
+      p m
+    RUBY
+    actual = run_script(script)
+    assert_equal("nil", actual)
+  end
+
+  def test_return_true
+    script = <<~RUBY
+      def m
+        true
+      end
+      p m
+    RUBY
+    actual = run_script(script)
+    assert_equal("true", actual)
+  end
+
+  def test_return_false
+    script = <<~RUBY
+      def m
+        false
+      end
+      p m
+    RUBY
+    actual = run_script(script)
+    assert_equal("false", actual)
+  end
 end

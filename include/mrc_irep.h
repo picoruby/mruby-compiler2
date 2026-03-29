@@ -92,6 +92,7 @@ void mrc_irep_free(mrc_ccontext *c, mrc_irep *irep);
 #define MRC_ASPEC_KEY(a)          (((a) >> 2) & 0x1f)
 #define MRC_ASPEC_KDICT(a)        (((a) >> 1) & 0x1)
 #define MRC_ASPEC_BLOCK(a)        ((a) & 1)
+#define MRC_ASPEC_NOBLOCK(a)      (((a) >> 23) & 0x1)
 
 MRC_END_DECL
 
