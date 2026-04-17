@@ -312,7 +312,7 @@ static mrc_node *
 mrc_parse_string_cxt(mrc_ccontext *c, const uint8_t **source, size_t length)
 {
   c->filename_table = (mrc_filename_table *)mrc_malloc(c, sizeof(mrc_filename_table));
-  c->filename_table[0].filename = "-e";
+  c->filename_table[0].filename = c->filename ? c->filename : "-e";
   c->filename_table[0].start = 0;
   c->filename_table_length = 1;
   c->current_filename_index = 0;
