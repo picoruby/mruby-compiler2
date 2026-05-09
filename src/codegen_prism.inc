@@ -1027,139 +1027,168 @@ codegen_pattern(mrc_codegen_scope *s, mrc_node *pattern, int target, uint32_t *f
       int hash_reg;
       int num_keys = 0;
 
-      /* Check if **nil is present */
-      int has_double_nil = pat_hash->rest && nint(pat_hash->rest) == PM_NO_KEYWORDS_PARAMETER_NODE;
+      /* Count regular (non-rest) keys */
+      for (size_t i = 0; i < pat_hash->elements.size; i++) {
+        if (nint(pat_hash->elements.nodes[i]) == PM_ASSOC_NODE) num_keys++;
+      }
 
-      /* Save original target for has_key? checks (mruby's deconstruct_keys
-         returns nil for missing keys, so we check against the original).
-         Use genop_2 directly to bypass peephole optimization that would
-         eliminate this copy when chained with the next gen_move. */
-      int orig_target = cursp();
-      genop_2(s, OP_MOVE, orig_target, target);
-      push(); /* protect orig_target */
+      int has_rest = pat_hash->rest != NULL;
+      int has_double_nil = has_rest && nint(pat_hash->rest) == PM_NO_KEYWORDS_PARAMETER_NODE;
 
-      /* Call target.deconstruct_keys(keys_array or nil) */
-      /* Layout: R[recv] = target, R[recv+1] = keys_array, R[recv+2] = block */
-      int recv = cursp();
-      gen_move(s, recv, orig_target, 1);
+      /* Call target.deconstruct_keys(keys_array or nil).
+       * Pass keys_array only when no rest pattern (partial-match optimization).
+       * Pass nil when any ** is present so deconstruct_keys returns all keys. */
+      hash_reg = cursp();
+      gen_move(s, hash_reg, target, 0);
       push(); /* protect receiver */
 
-      if (has_double_nil) {
-        /* For **nil, call deconstruct_keys(nil) to get all keys */
-        int keys_base = cursp();
-        genop_1(s, OP_LOADNIL, keys_base);
-        push(); /* protect nil arg */
-        push(); pop(); /* touch block slot */
-        s->sp = recv;
-        genop_3(s, OP_SEND, recv, new_sym(s, MRC_SYM_1(deconstruct_keys)), 1);
-        /* Count keys for **nil check later */
-        for (size_t i = 0; i < pat_hash->elements.size; i++) {
-          mrc_node *elem = pat_hash->elements.nodes[i];
-          if (nint(elem) == PM_ASSOC_NODE) {
-            num_keys++;
-          }
-        }
-      }
-      else {
-        /* Build keys array at recv+1 */
+      if (!has_rest && num_keys > 0) {
         int keys_base = cursp();
         for (size_t i = 0; i < pat_hash->elements.size; i++) {
           mrc_node *elem = pat_hash->elements.nodes[i];
           if (nint(elem) == PM_ASSOC_NODE) {
             pm_assoc_node_t *assoc = (pm_assoc_node_t *)elem;
             codegen(s, (mrc_node *)assoc->key, VAL);
-            num_keys++;
           }
         }
-        if (num_keys > 0) pop_n(num_keys);
+        pop_n(num_keys);
         genop_2(s, OP_ARRAY, keys_base, num_keys);
         push(); /* protect keys arg */
         push(); pop(); /* touch block slot */
-        s->sp = recv;
-        genop_3(s, OP_SEND, recv, new_sym(s, MRC_SYM_1(deconstruct_keys)), 1);
+        s->sp = hash_reg;
+        genop_3(s, OP_SEND, hash_reg, new_sym(s, MRC_SYM_1(deconstruct_keys)), 1);
       }
-      /* Result (hash) is at recv */
-      hash_reg = recv;
-      push();  /* protect hash_reg */
+      else {
+        genop_1(s, OP_LOADNIL, cursp());
+        push(); /* protect nil arg */
+        push(); pop(); /* touch block slot */
+        s->sp = hash_reg;
+        genop_3(s, OP_SEND, hash_reg, new_sym(s, MRC_SYM_1(deconstruct_keys)), 1);
+      }
+      push(); /* protect hash_reg */
 
-      /* Check if deconstruct_keys returned nil */
+      /* Fail if deconstruct_keys returned nil */
       tmp = genjmp2(s, OP_JMPNIL, hash_reg, *fail_pos, 0);
       *fail_pos = tmp;
 
-      /* Match each key-value pair */
-      int loop_sp = cursp(); /* save sp after hash_reg push */
-      for (size_t i = 0; i < pat_hash->elements.size; i++) {
-        mrc_node *elem = pat_hash->elements.nodes[i];
-        if (nint(elem) == PM_ASSOC_NODE) {
-          pm_assoc_node_t *assoc = (pm_assoc_node_t *)elem;
-          /* Check if original target has key (not deconstructed hash,
-             because mruby's deconstruct_keys returns nil for missing keys) */
-          int val_reg = cursp();
-          gen_move(s, val_reg, orig_target, 0);
-          push();
-          codegen(s, (mrc_node *)assoc->key, VAL);
-          push(); pop();  /* touch block slot */
-          s->sp = val_reg;
-          genop_3(s, OP_SEND, val_reg, new_sym(s, MRC_SYM_2(has_key_p)), 1);
-          tmp = genjmp2(s, OP_JMPNOT, val_reg, *fail_pos, 0);
-          *fail_pos = tmp;
-          s->sp = loop_sp; /* reset sp */
+      /* Check all keys exist and get values via __pat_values.
+       * __pat_values(keys_array) returns an array of values in key order,
+       * or false if any key is missing. */
+      if (num_keys > 0) {
+        int vals_reg = cursp();
+        gen_move(s, vals_reg, hash_reg, 0);
+        push(); /* protect receiver */
 
-          /* Get orig_target[key] */
-          gen_move(s, val_reg, orig_target, 0);
-          push();
-          codegen(s, (mrc_node *)assoc->key, VAL);
-          pop();  /* codegen pushed, pop so key is at val_reg+1 */
-          genop_1(s, OP_GETIDX, val_reg);
-          /* Value is now at val_reg */
-
-          if (assoc->value) {
-            codegen_pattern(s, (mrc_node *)assoc->value, val_reg, fail_pos, -1);
+        int keys_base = cursp();
+        for (size_t i = 0; i < pat_hash->elements.size; i++) {
+          mrc_node *elem = pat_hash->elements.nodes[i];
+          if (nint(elem) == PM_ASSOC_NODE) {
+            pm_assoc_node_t *assoc = (pm_assoc_node_t *)elem;
+            codegen(s, (mrc_node *)assoc->key, VAL);
           }
-          else {
-            /* Shorthand form {a:} - bind to variable with same name as key */
-            if (nint(assoc->key) == PM_SYMBOL_NODE) {
-              pm_symbol_node_t *sym = (pm_symbol_node_t *)assoc->key;
-              mrc_sym var_name = nsym(s->c->p, sym->unescaped.source, sym->unescaped.length);
-              int idx = lv_idx(s, var_name);
-              if (idx > 0) {
-                gen_move(s, idx, val_reg, 1);
+        }
+        pop_n(num_keys);
+        genop_2(s, OP_ARRAY, keys_base, num_keys);
+        push(); /* protect keys arg */
+        push(); pop(); /* touch block slot */
+        s->sp = vals_reg;
+        genop_3(s, OP_SEND, vals_reg, new_sym(s, MRC_SYM_1(__pat_values)), 1);
+        push(); /* protect vals_reg */
+
+        /* __pat_values returns false when a key is missing */
+        tmp = genjmp2(s, OP_JMPNOT, vals_reg, *fail_pos, 1);
+        *fail_pos = tmp;
+
+        /* Match each value against its sub-pattern using vals_reg[i] */
+        int loop_sp = cursp();
+        int key_idx = 0;
+        for (size_t i = 0; i < pat_hash->elements.size; i++) {
+          mrc_node *elem = pat_hash->elements.nodes[i];
+          if (nint(elem) == PM_ASSOC_NODE) {
+            pm_assoc_node_t *assoc = (pm_assoc_node_t *)elem;
+
+            int val_reg = cursp();
+            gen_move(s, val_reg, vals_reg, 0);
+            push(); /* protect receiver */
+            gen_int(s, cursp(), key_idx);
+            push(); pop(); /* touch block slot */
+            s->sp = val_reg;
+            genop_3(s, OP_SEND, val_reg, new_sym(s, MRC_OPSYM_2(aref)), 1);
+
+            if (assoc->value) {
+              codegen_pattern(s, (mrc_node *)assoc->value, val_reg, fail_pos, -1);
+            }
+            else {
+              /* Shorthand form {a:} - bind to variable with same name as key */
+              if (nint(assoc->key) == PM_SYMBOL_NODE) {
+                pm_symbol_node_t *sym_node = (pm_symbol_node_t *)assoc->key;
+                mrc_sym var_name = nsym(s->c->p, sym_node->unescaped.source, sym_node->unescaped.length);
+                int idx = lv_idx(s, var_name);
+                if (idx > 0) {
+                  gen_move(s, idx, val_reg, 1);
+                }
               }
             }
+            s->sp = loop_sp;
+            key_idx++;
           }
-          s->sp = loop_sp; /* reset sp for next iteration */
         }
+        pop(); /* release vals_reg */
       }
 
-      /* Handle rest pattern (**rest or **nil) */
-      if (pat_hash->rest) {
+      /* Handle rest pattern */
+      if (has_double_nil || (!has_rest && num_keys == 0)) {
+        /* **nil or empty {}: exact match - verify hash.size == num_keys */
+        int chk = cursp();
+        gen_move(s, chk, hash_reg, 0);
+        push(); pop(); /* touch block slot */
+        genop_3(s, OP_SEND, chk, new_sym(s, MRC_SYM_1(size)), 0);
+        gen_int(s, chk + 1, num_keys);
+        genop_1(s, OP_EQ, chk);
+        tmp = genjmp2(s, OP_JMPNOT, chk, *fail_pos, 1);
+        *fail_pos = tmp;
+      }
+      else if (has_rest && !has_double_nil) {
         if (nint(pat_hash->rest) == PM_ASSOC_SPLAT_NODE) {
           pm_assoc_splat_node_t *splat = (pm_assoc_splat_node_t *)pat_hash->rest;
-          if (splat->value) {
-            if (nint(splat->value) == PM_LOCAL_VARIABLE_TARGET_NODE) {
-              pm_local_variable_target_node_t *rest_var = (pm_local_variable_target_node_t *)splat->value;
-              int var_idx = lv_idx(s, rest_var->name);
-              if (var_idx > 0) {
-                gen_move(s, var_idx, orig_target, 1);
+          /* Named **var: capture remaining keys via hash.__except(keys_array) */
+          if (splat->value && nint(splat->value) == PM_LOCAL_VARIABLE_TARGET_NODE) {
+            pm_local_variable_target_node_t *rest_var = (pm_local_variable_target_node_t *)splat->value;
+            int var_idx = lv_idx(s, rest_var->name);
+            if (var_idx > 0) {
+              int recv = cursp();
+              gen_move(s, recv, hash_reg, 0);
+              push(); /* protect receiver */
+              if (num_keys > 0) {
+                int keys_base = cursp();
+                for (size_t i = 0; i < pat_hash->elements.size; i++) {
+                  mrc_node *elem = pat_hash->elements.nodes[i];
+                  if (nint(elem) == PM_ASSOC_NODE) {
+                    pm_assoc_node_t *assoc = (pm_assoc_node_t *)elem;
+                    codegen(s, (mrc_node *)assoc->key, VAL);
+                  }
+                }
+                pop_n(num_keys);
+                genop_2(s, OP_ARRAY, keys_base, num_keys);
+                push(); /* protect keys arg */
+                push(); pop(); /* touch block slot */
+                s->sp = recv;
+                genop_3(s, OP_SEND, recv, new_sym(s, MRC_SYM_1(__except)), 1);
               }
+              else {
+                push(); pop(); /* touch block slot */
+                s->sp = recv;
+                genop_3(s, OP_SEND, recv, new_sym(s, MRC_SYM_1(dup)), 0);
+              }
+              gen_move(s, var_idx, recv, 1);
+              pop(); /* release recv */
             }
           }
-        }
-        else if (nint(pat_hash->rest) == PM_NO_KEYWORDS_PARAMETER_NODE) {
-          /* **nil - no extra keys allowed */
-          int chk = cursp();
-          gen_move(s, chk, orig_target, 0);
-          push(); pop();
-          genop_3(s, OP_SEND, chk, new_sym(s, MRC_SYM_1(size)), 0);
-          gen_int(s, chk + 1, num_keys);
-          genop_1(s, OP_EQ, chk);
-          tmp = genjmp2(s, OP_JMPNOT, chk, *fail_pos, 1);
-          *fail_pos = tmp;
+          /* Anonymous **: do nothing */
         }
       }
 
-      pop();  /* release hash_reg */
-      pop();  /* release orig_target */
+      pop(); /* release hash_reg */
     }
     break;
 
