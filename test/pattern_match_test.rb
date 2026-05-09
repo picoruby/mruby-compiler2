@@ -442,7 +442,6 @@ class PatternMatchTest < Picotest::Test
   end
 
   def test_hash_pattern_with_nil_matches_exact_keys
-    skip "Waiting for merging mrubyc#257" if mrubyc?
     script = <<~RUBY
       result = case {a: 1}
       in {a: 1, **nil}
@@ -457,7 +456,6 @@ class PatternMatchTest < Picotest::Test
   end
 
   def test_hash_pattern_with_nil_rejects_extra_keys
-    skip "Waiting for merging mrubyc#257" if mrubyc?
     script = <<~RUBY
       result = case {a: 1, b: 2}
       in {a: 1, **nil}
@@ -472,7 +470,6 @@ class PatternMatchTest < Picotest::Test
   end
 
   def test_hash_pattern_with_missing_key_does_not_match
-    skip "Waiting for merging mrubyc#257" if mrubyc?
     script = <<~RUBY
       result = case {b: 1}
       in {a: nil}
@@ -487,7 +484,6 @@ class PatternMatchTest < Picotest::Test
   end
 
   def test_hash_pattern_with_nil_value_matches
-    skip "Waiting for merging mrubyc#257" if mrubyc?
     script = <<~RUBY
       result = case {a: nil}
       in {a: nil}
@@ -502,7 +498,6 @@ class PatternMatchTest < Picotest::Test
   end
 
   def test_case_with_splat_in_array_literal_predicate
-    skip "Waiting for merging mrubyc#257" if mrubyc?
     script = <<~RUBY
       arr = [2, 3]
       result = case [1, *arr, 4]
@@ -518,7 +513,6 @@ class PatternMatchTest < Picotest::Test
   end
 
   def test_array_pattern_with_rest
-    skip "Waiting for merging mrubyc#257" if mrubyc?
     script = <<~RUBY
       result = case [1, 2, 3, 4, 5]
       in [first, *rest, last]
@@ -531,7 +525,6 @@ class PatternMatchTest < Picotest::Test
   end
 
   def test_array_pattern_nested_simple
-    skip "Waiting for merging mrubyc#257" if mrubyc?
     script = <<~RUBY
       result = case [[1, 2]]
       in [[a, b]]
@@ -544,7 +537,6 @@ class PatternMatchTest < Picotest::Test
   end
 
   def test_array_pattern_nested
-    skip "Waiting for merging mrubyc#257" if mrubyc?
     script = <<~RUBY
       result = case [[1, 2], [3, 4]]
       in [[a, b], [c, d]]
@@ -557,7 +549,6 @@ class PatternMatchTest < Picotest::Test
   end
 
   def test_hash_pattern_simple
-    skip "Waiting for merging mrubyc#257" if mrubyc?
     script = <<~RUBY
       result = case {a: 1, b: 2}
       in {a: 1, b: 2}
@@ -570,7 +561,6 @@ class PatternMatchTest < Picotest::Test
   end
 
   def test_hash_pattern_with_variables
-    skip "Waiting for merging mrubyc#257" if mrubyc?
     script = <<~RUBY
       result = case {a: 1, b: 2}
       in {a: x, b: y}
@@ -583,7 +573,6 @@ class PatternMatchTest < Picotest::Test
   end
 
   def test_hash_pattern_shorthand
-    skip "Waiting for merging mrubyc#257" if mrubyc?
     script = <<~RUBY
       result = case {a: 1, b: 2}
       in {a:, b:}
@@ -596,7 +585,6 @@ class PatternMatchTest < Picotest::Test
   end
 
   def test_hash_pattern_partial_match
-    skip "Waiting for merging mrubyc#257" if mrubyc?
     script = <<~RUBY
       result = case {a: 1, b: 2, c: 3}
       in {a: x}
@@ -609,7 +597,6 @@ class PatternMatchTest < Picotest::Test
   end
 
   def test_hash_pattern_nested
-    skip "Waiting for merging mrubyc#257" if mrubyc?
     script = <<~RUBY
       result = case {a: {x: 1}, b: {y: 2}}
       in {a: {x: n}, b: {y: m}}
@@ -622,7 +609,6 @@ class PatternMatchTest < Picotest::Test
   end
 
   def test_find_pattern_basic
-    skip "Waiting for merging mrubyc#257" if mrubyc?
     script = <<~RUBY
       result = case [1, 2, 3, 4, 5]
       in [*, 2, 3, *]
@@ -635,7 +621,6 @@ class PatternMatchTest < Picotest::Test
   end
 
   def test_find_pattern_with_capture
-    skip "Waiting for merging mrubyc#257" if mrubyc?
     script = <<~RUBY
       result = case [1, 2, 3, 4, 5]
       in [*pre, 2, 3, *post]
@@ -648,7 +633,6 @@ class PatternMatchTest < Picotest::Test
   end
 
   def test_find_pattern_no_match
-    skip "Waiting for merging mrubyc#257" if mrubyc?
     script = <<~RUBY
       result = case [1, 2, 3]
       in [*, 5, 6, *]
@@ -661,7 +645,6 @@ class PatternMatchTest < Picotest::Test
   end
 
   def test_find_pattern_at_beginning
-    skip "Waiting for merging mrubyc#257" if mrubyc?
     script = <<~RUBY
       result = case [1, 2, 3]
       in [*pre, 1, *post]
@@ -674,7 +657,6 @@ class PatternMatchTest < Picotest::Test
   end
 
   def test_find_pattern_at_end
-    skip "Waiting for merging mrubyc#257" if mrubyc?
     script = <<~RUBY
       result = case [1, 2, 3]
       in [*pre, 3, *post]
@@ -687,7 +669,6 @@ class PatternMatchTest < Picotest::Test
   end
 
   def test_find_pattern_multiple_elements
-    skip "Waiting for merging mrubyc#257" if mrubyc?
     script = <<~RUBY
       result = case [1, 2, 3, 4, 5]
       in [*pre, 2, x, *post]
@@ -700,7 +681,6 @@ class PatternMatchTest < Picotest::Test
   end
 
   def test_as_pattern_with_array
-    skip "Waiting for merging mrubyc#257" if mrubyc?
     script = <<~RUBY
       result = case [1, 2, 3]
       in [x, *rest] => whole
@@ -713,7 +693,6 @@ class PatternMatchTest < Picotest::Test
   end
 
   def test_as_pattern_with_hash
-    skip "Waiting for merging mrubyc#257" if mrubyc?
     script = <<~RUBY
       result = case {a: 1, b: 2}
       in {a:} => h
@@ -726,7 +705,6 @@ class PatternMatchTest < Picotest::Test
   end
 
   def test_array_pattern_with_first_element
-    skip "Waiting for merging mrubyc#257" if mrubyc?
     script = <<~RUBY
       result = case [1, 2, 3, 4, 5]
       in [first, *rest]
@@ -739,7 +717,6 @@ class PatternMatchTest < Picotest::Test
   end
 
   def test_deeply_nested_array_and_hash
-    skip "Waiting for merging mrubyc#257" if mrubyc?
     script = <<~RUBY
       result = case {outer: [{inner: [1, 2]}, 3]}
       in {outer: [{inner: [a, b]}, c]}
@@ -752,7 +729,6 @@ class PatternMatchTest < Picotest::Test
   end
 
   def test_complex_pattern_with_all_features
-    skip "Waiting for merging mrubyc#257" if mrubyc?
     script = <<~RUBY
       result = case [1, 2, 3, 4, 5]
       in [1, *rest] => arr if arr.size > 2
