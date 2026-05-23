@@ -3264,10 +3264,9 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
         if (val) pop();
       }
       else {
-        /* No pattern matched - generate nil */
-        if (val) {
-          genop_1(s, OP_LOADNIL, cursp());
-        }
+        /* No pattern matched: raise NoMatchingPatternError */
+        genop_1(s, OP_LOADFALSE, cursp());
+        genop_1(s, OP_MATCHERR, cursp());
       }
 
       /* Dispatch all end jumps */

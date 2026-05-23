@@ -115,18 +115,21 @@ class PatternMatchTest < Picotest::Test
     assert_equal(":other", actual)
   end
 
-  def test_no_match_returns_nil
+  def test_no_match_raises
     script = <<~RUBY
-      result = case 99
-      in 1
-        :one
-      in 2
-        :two
+      begin
+        case 99
+        in 1
+          :one
+        in 2
+          :two
+        end
+      rescue NoMatchingPatternError => e
+        p e.class
       end
-      p result
     RUBY
     actual = run_script(script)
-    assert_equal("nil", actual)
+    assert_equal("NoMatchingPatternError", actual)
   end
 
   def test_alternative_pattern
@@ -634,14 +637,17 @@ class PatternMatchTest < Picotest::Test
 
   def test_find_pattern_no_match
     script = <<~RUBY
-      result = case [1, 2, 3]
-      in [*, 5, 6, *]
-        :match
+      begin
+        case [1, 2, 3]
+        in [*, 5, 6, *]
+          :match
+        end
+      rescue NoMatchingPatternError => e
+        p e.class
       end
-      p result
     RUBY
     actual = run_script(script)
-    assert_equal("nil", actual)
+    assert_equal("NoMatchingPatternError", actual)
   end
 
   def test_find_pattern_at_beginning
