@@ -2734,7 +2734,8 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     case PM_BACK_REFERENCE_READ_NODE:
     {
       if (val) {
-        int sym = new_sym(s, MRC_SYM_2(back_ref));
+        CAST(back_reference_read);
+        int sym = new_sym(s, cast->name);
         genop_2(s, OP_GETGV, cursp(), sym);
         push();
       }
@@ -2744,10 +2745,13 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     {
       if (val) {
         CAST(numbered_reference_read);
-        char buf[100];
+        char buf[16];
         buf[0] = '$';
-        sprintf(buf+1, "%d", cast->number);
-        int sym = new_sym(s, nsym(s->c->p, (const uint8_t *)buf, strlen(buf)));
+        int n = snprintf(buf + 1, sizeof(buf) - 1, "%u", (unsigned int)cast->number);
+        size_t len = (size_t)(1 + n);  // leading '$' + digits
+        uint8_t *name = (uint8_t *)mrc_malloc(s->c, len);
+        memcpy(name, buf, len);
+        int sym = new_sym(s, pm_constant_pool_insert_owned(&s->c->p->constant_pool, name, len));
         genop_2(s, OP_GETGV, cursp(), sym);
         push();
       }
