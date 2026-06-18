@@ -19,7 +19,7 @@ class RestArgTest < Picotest::Test
   end
 
   def test_restarg_in_mruby_mrubyc_doesnt_support_m2_args
-    skip "Not supported on mruby/c" unless mruby?
+    skip "Not supported on mruby/c" unless picoruby?
     script = <<~RUBY
       def a(m, *rest, m2)
         p m, rest, m2
@@ -31,7 +31,7 @@ class RestArgTest < Picotest::Test
   end
 
   def test_anonymous_splat_arguments
-    skip "Not supported on mruby/c" unless mruby?
+    skip "Not supported on mruby/c" unless picoruby?
     script = <<~RUBY
       def my_method(*,**)
         p(*)

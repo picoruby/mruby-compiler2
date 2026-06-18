@@ -12,7 +12,7 @@ class UnaryTest < Picotest::Test
       p 10**-2
     RUBY
     actual = run_script(script)
-    expected = mruby? ? "0.01" : "0"
+    expected = picoruby? ? "0.01" : "0"
     assert_equal(expected, actual)
   end
 

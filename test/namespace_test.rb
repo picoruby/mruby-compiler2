@@ -1,7 +1,7 @@
 class NamespaceTest < Picotest::Test
 
   def test_name_space_1
-    skip "Not supported on mruby/c" unless mruby?
+    skip "Not supported on mruby/c" unless picoruby?
     script = <<~RUBY
       module A
         module B
@@ -15,7 +15,7 @@ class NamespaceTest < Picotest::Test
   end
 
   def test_name_space_2
-    skip "Not supported on mruby/c" unless mruby?
+    skip "Not supported on mruby/c" unless picoruby?
     script = <<~RUBY
       module A
       end
@@ -29,7 +29,7 @@ class NamespaceTest < Picotest::Test
   end
 
   def test_name_space_3
-    skip "Not supported on mruby/c" unless mruby?
+    skip "Not supported on mruby/c" unless picoruby?
     script = <<~RUBY
       module A
         class B
@@ -43,7 +43,7 @@ class NamespaceTest < Picotest::Test
   end
 
   def test_name_space_fail
-    skip "Not supported on mruby/c" unless mruby?
+    skip "Not supported on mruby/c" unless picoruby?
     script = <<~RUBY
       module A
         module B
@@ -61,7 +61,7 @@ class NamespaceTest < Picotest::Test
   end
 
   def test_root_class_inside_nested_class
-    skip "Not supported on mruby/c" unless mruby?
+    skip "Not supported on mruby/c" unless picoruby?
     script = <<~RUBY
       class A
         class ::C
@@ -74,7 +74,7 @@ class NamespaceTest < Picotest::Test
   end
 
   def test_root_module_inside_nested_module
-    skip "Not supported on mruby/c" unless mruby?
+    skip "Not supported on mruby/c" unless picoruby?
     script = <<~RUBY
       module A
         module ::M

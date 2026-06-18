@@ -1,7 +1,7 @@
 class SingletonTest < Picotest::Test
 
   def test_singleton_klass_2
-    skip "Not supported on mruby/c" unless mruby?
+    skip "Not supported on mruby/c" unless picoruby?
     script = <<~RUBY
       class << String
         def a(n)
@@ -15,7 +15,7 @@ class SingletonTest < Picotest::Test
   end
 
   def test_singleton_self
-    skip "Not supported on mruby/c" unless mruby?
+    skip "Not supported on mruby/c" unless picoruby?
     script = <<~RUBY
       def self.a(v)
         p v
@@ -27,7 +27,7 @@ class SingletonTest < Picotest::Test
   end
 
   def test_singleton_lvar
-    skip "Not supported on mruby/c" unless mruby?
+    skip "Not supported on mruby/c" unless picoruby?
     script = <<~RUBY
       lvar = String.new
       def lvar.a(v)
@@ -40,7 +40,7 @@ class SingletonTest < Picotest::Test
   end
 
   def test_singleton_klass_1
-    skip "Not supported on mruby/c" unless mruby?
+    skip "Not supported on mruby/c" unless picoruby?
     script = <<~RUBY
       def Array.a(v)
         p v

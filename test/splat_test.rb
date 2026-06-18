@@ -1,7 +1,7 @@
 class SplatTest < Picotest::Test
 
   def test_splat_in_fcall_1
-    skip "Not supported on mruby/c" unless mruby?
+    skip "Not supported on mruby/c" unless picoruby?
     script = <<~RUBY
       p(*1)
     RUBY
@@ -10,7 +10,7 @@ class SplatTest < Picotest::Test
   end
 
   def test_splat_in_fcall_2
-    skip "Not supported on mruby/c" unless mruby?
+    skip "Not supported on mruby/c" unless picoruby?
     script = <<~RUBY
       p(1, *2)
     RUBY
@@ -19,7 +19,7 @@ class SplatTest < Picotest::Test
   end
 
   def test_splat_in_fcall_3
-    skip "Not supported on mruby/c" unless mruby?
+    skip "Not supported on mruby/c" unless picoruby?
     script = <<~RUBY
       p(*1,2,p([3,4]))
     RUBY
@@ -28,7 +28,7 @@ class SplatTest < Picotest::Test
   end
 
   def test_splat_in_fcall_4
-    skip "Not supported on mruby/c" unless mruby?
+    skip "Not supported on mruby/c" unless picoruby?
     script = <<~RUBY
       p(*1,2,p(*[3,4]))
     RUBY
@@ -37,7 +37,7 @@ class SplatTest < Picotest::Test
   end
 
   def test_splat_in_fcall_5
-    skip "Not supported on mruby/c" unless mruby?
+    skip "Not supported on mruby/c" unless picoruby?
     script = <<~RUBY
       a = *"str"
       p a
@@ -47,7 +47,7 @@ class SplatTest < Picotest::Test
   end
 
   def test_splat_in_fcall_6
-    skip "Not supported on mruby/c" unless mruby?
+    skip "Not supported on mruby/c" unless picoruby?
     script = <<~RUBY
       p(1,2,*3)
     RUBY
@@ -56,7 +56,7 @@ class SplatTest < Picotest::Test
   end
 
   def test_splat_in_fcall_7
-    skip "Not supported on mruby/c" unless mruby?
+    skip "Not supported on mruby/c" unless picoruby?
     script = <<~RUBY
       case 0
       when *[0]

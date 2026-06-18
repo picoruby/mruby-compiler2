@@ -161,7 +161,7 @@ class DefTest < Picotest::Test
   end
 
   def test_multi_target_case
-    skip "Not supported on mruby/c" unless mruby?
+    skip "Not supported on mruby/c" unless picoruby?
     script = <<~RUBY
       def m((a, b), *c)
         p a, b, c

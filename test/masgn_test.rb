@@ -139,7 +139,7 @@ class MasgnTest < Picotest::Test
   end
 
   def test_rhs_has_only_one_item_lhs_has_a_rest_and_a_post
-    skip "Not supported on mruby/c" unless mruby?
+    skip "Not supported on mruby/c" unless picoruby?
     script = <<~RUBY
       a, b, *c, d = 1
       p a, b, c, d
@@ -149,7 +149,7 @@ class MasgnTest < Picotest::Test
   end
 
   def test_rhs_has_only_one_item_which_is_an_array_lhs_has_a_rest_and_a_post
-    skip "Not supported on mruby/c" unless mruby?
+    skip "Not supported on mruby/c" unless picoruby?
     script = <<~RUBY
       ary = [0, 1]
       a, *b, c = ary
@@ -160,7 +160,7 @@ class MasgnTest < Picotest::Test
   end
 
   def test_splat_in_rhs
-    skip "Not supported on mruby/c" unless mruby?
+    skip "Not supported on mruby/c" unless picoruby?
     script = <<~RUBY
       ary = [9, 8]
       a,*b,c,d=1,*ary,3,4
