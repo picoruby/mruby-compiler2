@@ -21,7 +21,9 @@ mrc_sym_dump(mrc_ccontext *c, mrc_sym sym)
     return name;
   }
   else {
+    if (lenp <= 0) return NULL;
     char *buf = (char*)mrc_pool_alloc(c->pool, lenp+1);
+    if (!buf) return NULL;
     memcpy(buf, name, lenp);
     buf[lenp] = '\0';
     return buf;
