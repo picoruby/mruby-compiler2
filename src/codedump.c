@@ -17,15 +17,20 @@ mrc_sym_dump(mrc_ccontext *c, mrc_sym sym)
   if (!name) {
     return NULL;
   }
-  if (strlen(name) == (size_t)lenp) {
-    return name;
+  if (lenp < 0) {
+    return NULL;
   }
-  else {
-    char *buf = (char*)mrc_pool_alloc(c->pool, lenp+1);
-    memcpy(buf, name, lenp);
-    buf[lenp] = '\0';
-    return buf;
+  size_t len = (size_t)lenp;
+  if (len == SIZE_MAX) {
+    return NULL;
   }
+  char *buf = (char*)mrc_pool_alloc(c->pool, len + 1);
+  if (!buf) {
+    return NULL;
+  }
+  memcpy(buf, name, len);
+  buf[len] = '\0';
+  return buf;
 }
 
 static inline const struct mrc_irep_catch_handler *
