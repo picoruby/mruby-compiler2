@@ -73,7 +73,7 @@ class RescueTest < Picotest::Test
   end
 
   def test_splat_error_class
-    skip "Not supported on mruby/c" unless mruby?
+    skip "Not supported on mruby/c" unless picoruby?
     script = <<~RUBY
       errors = [TypeError]
       begin
@@ -87,7 +87,7 @@ class RescueTest < Picotest::Test
   end
 
   def test_splat_error_class_2
-    skip "Not supported on mruby/c" unless mruby?
+    skip "Not supported on mruby/c" unless picoruby?
     script = <<~RUBY
       errors = [TypeError]
       begin
@@ -101,7 +101,7 @@ class RescueTest < Picotest::Test
   end
 
   def test_rescue_no_method_error
-    skip "Not supported on mruby/c" unless mruby?
+    skip "Not supported on mruby/c" unless picoruby?
     script = <<~RUBY
       begin
         method_does_not_exist
@@ -118,7 +118,7 @@ class RescueTest < Picotest::Test
   end
 
   def test_rescue_modifier
-    skip "Not supported on mruby/c" unless mruby?
+    skip "Not supported on mruby/c" unless picoruby?
     script = <<~RUBY
       def my_method
         raise rescue puts "rescued"
@@ -130,7 +130,7 @@ class RescueTest < Picotest::Test
   end
 
   def test_rescue_modifier_with_return_value_no_error
-    skip "Not supported on mruby/c" unless mruby?
+    skip "Not supported on mruby/c" unless picoruby?
     script = <<~RUBY
       def my_method
         42 rescue 0
@@ -142,7 +142,7 @@ class RescueTest < Picotest::Test
   end
 
   def test_rescue_modifier_with_return_value_with_error
-    skip "Not supported on mruby/c" unless mruby?
+    skip "Not supported on mruby/c" unless picoruby?
     script = <<~RUBY
       def my_method
         raise rescue 100
@@ -154,7 +154,7 @@ class RescueTest < Picotest::Test
   end
 
   def test_rescue_modifier_with_assignment
-    skip "Not supported on mruby/c" unless mruby?
+    skip "Not supported on mruby/c" unless picoruby?
     script = <<~RUBY
       x = raise rescue 99
       p x
@@ -164,7 +164,7 @@ class RescueTest < Picotest::Test
   end
 
   def test_rescue_modifier_nested
-    skip "Not supported on mruby/c" unless mruby?
+    skip "Not supported on mruby/c" unless picoruby?
     script = <<~RUBY
       def my_method
         raise rescue (raise rescue "nested")
@@ -176,7 +176,7 @@ class RescueTest < Picotest::Test
   end
 
   def test_rescue_modifier_with_expression
-    skip "Not supported on mruby/c" unless mruby?
+    skip "Not supported on mruby/c" unless picoruby?
     script = <<~RUBY
       result = (1 + 2) rescue 0
       p result
@@ -186,7 +186,7 @@ class RescueTest < Picotest::Test
   end
 
   def test_rescue_modifier_returning_nil
-    skip "Not supported on mruby/c" unless mruby?
+    skip "Not supported on mruby/c" unless picoruby?
     script = <<~RUBY
       def my_method
         raise rescue nil
@@ -198,7 +198,7 @@ class RescueTest < Picotest::Test
   end
 
   def test_rescue_modifier_returning_false
-    skip "Not supported on mruby/c" unless mruby?
+    skip "Not supported on mruby/c" unless picoruby?
     script = <<~RUBY
       def my_method
         raise rescue false

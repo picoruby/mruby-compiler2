@@ -1,7 +1,7 @@
 class LambdaTest < Picotest::Test
 
   def test_lambda_call
-    skip "Not supported on mruby/c" unless mruby?
+    skip "Not supported on mruby/c" unless picoruby?
     script = <<~RUBY
       a = -> (m,o=true,*rest,m2) { p m,o,rest,m2 }
       a.call(1,2,3,4)
@@ -11,7 +11,7 @@ class LambdaTest < Picotest::Test
   end
 
   def test_lambda_shorthand_call
-    skip "Not supported on mruby/c" unless mruby?
+    skip "Not supported on mruby/c" unless picoruby?
     script = <<~RUBY
       a = -> (m) { p m }
       a.(1)

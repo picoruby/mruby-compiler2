@@ -1,7 +1,7 @@
 class ModuleTest < Picotest::Test
 
   def test_include_a_module
-    skip "Not supported on mruby/c" unless mruby?
+    skip "Not supported on mruby/c" unless picoruby?
     script = <<~RUBY
       module A
         def a

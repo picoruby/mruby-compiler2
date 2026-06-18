@@ -1,7 +1,7 @@
 class GenValuesTest < Picotest::Test
 
   def test_gen_values_in_generator_c
-    skip "Not supported on mruby/c" unless mruby?
+    skip "Not supported on mruby/c" unless picoruby?
     script = <<~RUBY
       a = ->(m,*rest,m2,**opts,&block) do
         p m,rest,m2,opts;

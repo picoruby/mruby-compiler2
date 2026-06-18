@@ -118,7 +118,7 @@ class BlockTest < Picotest::Test
   end
 
   def test_block_param_nested_anonymous_splat
-    skip "Not supported on mruby/c" unless mruby?
+    skip "Not supported on mruby/c" unless picoruby?
     script = <<~RUBY
       def m
         yield
@@ -130,7 +130,7 @@ class BlockTest < Picotest::Test
   end
 
   def test_block_param_destructuring_with_anonymous_splat
-    skip "Not supported on mruby/c" unless mruby?
+    skip "Not supported on mruby/c" unless picoruby?
     script = <<~RUBY
       def m
         yield [1, [2, 3]]
@@ -144,7 +144,7 @@ class BlockTest < Picotest::Test
   end
 
   def test_block_param_destructuring_with_named_splat
-    skip "Not supported on mruby/c" unless mruby?
+    skip "Not supported on mruby/c" unless picoruby?
     script = <<~RUBY
       def m
         yield [1, [2, 3, 4]]
