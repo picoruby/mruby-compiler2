@@ -8,7 +8,7 @@
 #include "../include/mrc_presym.h"
 #include "../include/mrc_diagnostic.h"
 
-#if defined(PICORB_VM_MRUBY)
+#if defined(MRC_TARGET_MRUBY)
 #include "../include/mrc_proc.h"
 #endif
 
@@ -74,7 +74,52 @@ partial_hook(void *data, pm_parser_t *p, pm_token_t *token)
   }
 }
 
-#if defined(PICORB_VM_MRUBY)
+#if defined(MRC_TARGET_MRUBY)
+#define MRC_PROC_CFUNC_FL 128
+#define MRC_PROC_CFUNC_P(p) (((p)->flags & MRC_PROC_CFUNC_FL) != 0)
+
+static mrc_bool
+mrc_mruby_lvspace_proc_p(const struct RProc *proc)
+{
+  const struct mrc_irep *irep;
+
+  if (proc == NULL || MRC_PROC_CFUNC_P(proc) || proc->upper == NULL) {
+    return FALSE;
+  }
+  irep = proc->body.irep;
+  return irep && irep->lv == NULL && irep->nlocals == 1;
+}
+
+static size_t
+mrc_mruby_irep_local_count(mrb_state *mrb, const struct mrc_irep *irep)
+{
+  size_t count = 0;
+
+  if (irep && irep->lv) {
+    size_t lv_count = irep->nlocals > 0 ? irep->nlocals - 1 : 0;
+    for (size_t i = 0; i < lv_count; i++) {
+      if (mrb_sym_name(mrb, irep->lv[i])) {
+        count++;
+      }
+    }
+  }
+  return count;
+}
+
+static void
+mrc_mruby_options_scope_local_init(mrc_ccontext *cc, pm_string_t *local, mrc_sym sym)
+{
+  const char *name = mrb_sym_name(cc->mrb, sym);
+  size_t length;
+  uint8_t *copy;
+
+  if (!name) return;
+  length = strlen(name);
+  copy = (uint8_t *)mrc_malloc(cc, length);
+  memcpy(copy, name, length);
+  pm_string_constant_init(local, (const char *)copy, length);
+}
+
 static void
 mrc_pm_options_init(mrc_ccontext *cc)
 {
@@ -87,34 +132,39 @@ mrc_pm_options_init(mrc_ccontext *cc)
   pm_string_t *encoding = &options->encoding;
   pm_string_constant_init(encoding, "UTF-8", 5);
 
-  u = (struct RProc *)cc->upper;
-  size_t scopes_count = 1;
-  while (u->upper) {
-    scopes_count++;
-    u = (struct RProc *)u->upper;
+  size_t scopes_count = 0;
+  for (u = (struct RProc *)cc->upper; u && !MRC_PROC_CFUNC_P(u); u = (struct RProc *)u->upper) {
+    if (!mrc_mruby_lvspace_proc_p(u)) {
+      scopes_count++;
+    }
   }
 
   pm_options_scopes_init(options, scopes_count + 1); // Prism requires one more scope
 
   u = (struct RProc *)cc->upper;
   pm_options_scope_t *scope;
-  size_t nlocals;
-  for (; 0 < scopes_count; scopes_count--) {
-    scope = &options->scopes[scopes_count - 1];
+  size_t scope_index = scopes_count;
+  for (; u && !MRC_PROC_CFUNC_P(u); u = (struct RProc *)u->upper) {
+    if (mrc_mruby_lvspace_proc_p(u)) {
+      continue;
+    }
     const struct mrc_irep *ir = u->body.irep;
-    nlocals = ir->nlocals;
-    pm_options_scope_init(scope, nlocals);
+    size_t lv_count = ir->nlocals > 0 ? ir->nlocals - 1 : 0;
     const mrc_sym *v = ir->lv;
+    size_t locals_count = mrc_mruby_irep_local_count(cc->mrb, ir);
+
+    scope = &options->scopes[--scope_index];
+    pm_options_scope_init(scope, locals_count);
     if (v) {
       const char *name;
-      for (size_t j = 0; j < nlocals; j++, v++) {
-        name = mrb_sym_name(cc->mrb, *v);
-        if (name) { // TODO: This happens in eval?
-          pm_string_constant_init(&scope->locals[j], name, strlen(name));
+      size_t local_index = 0;
+      for (size_t j = 0; j < lv_count; j++) {
+        name = mrb_sym_name(cc->mrb, v[j]);
+        if (name) {
+          mrc_mruby_options_scope_local_init(cc, &scope->locals[local_index++], v[j]);
         }
       }
     }
-    u = (struct RProc *)u->upper;
   }
 
   cc->options = options;
@@ -127,7 +177,7 @@ mrc_pm_parser_init(mrc_parser_state *p, uint8_t **source, size_t size, mrc_ccont
   pm_lex_callback_t *cb = (pm_lex_callback_t *)mrc_malloc(cc, sizeof(pm_lex_callback_t));
   cb->data = cc;
   cb->callback = partial_hook;
-#if defined(PICORB_VM_MRUBY)
+#if defined(MRC_TARGET_MRUBY)
   mrc_pm_options_init(cc);
 #endif
   pm_parser_init(p, *source, size, cc->options);
@@ -337,6 +387,16 @@ mrb_mruby_compiler2_gem_init(mrb_state *mrb)
 
 MRC_API void
 mrb_mruby_compiler2_gem_final(mrb_state *mrb)
+{
+}
+
+MRC_API void
+mrb_mruby_compiler_prism_gem_init(mrb_state *mrb)
+{
+}
+
+MRC_API void
+mrb_mruby_compiler_prism_gem_final(mrb_state *mrb)
 {
 }
 

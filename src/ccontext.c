@@ -6,6 +6,9 @@ MRC_API mrc_ccontext *
 mrc_ccontext_new(mrb_state *mrb)
 {
   mrc_ccontext temp_c = {0};
+#if defined(MRC_TARGET_MRUBY) && !defined(MRC_ALLOC_LIBC)
+  global_mrb = mrb;
+#endif
   temp_c.mrb = mrb;
   mrc_ccontext *c = (mrc_ccontext *)mrc_calloc((&temp_c), 1, sizeof(mrc_ccontext));
   c->p = (mrc_parser_state *)mrc_calloc((&temp_c), 1, sizeof(mrc_parser_state));
