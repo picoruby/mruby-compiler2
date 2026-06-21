@@ -1,55 +1,64 @@
-MRuby::Gem::Specification.new('mruby-compiler2') do |spec|
+MRuby::Gem::Specification.new('mruby-compiler-prism') do |spec|
   spec.license = 'MIT'
-  spec.author  = 'HASUMI Hitoshi'
-  spec.summary = 'mruby compiler using a universal parser'
+  spec.author  = 'mruby and PicoRuby developers'
+  spec.summary = 'mruby compiler using Prism'
+
+  spec.add_conflict 'mruby-compiler'
 
   lib_dir = "#{dir}/lib"
-  cc.include_paths << "#{dir}/include"
-
   prism_dir = "#{lib_dir}/prism"
-  ruby_dir = "#{lib_dir}/ruby"
+  prism_templates_dir = "#{prism_dir}/templates"
+
+  cc.include_paths << "#{dir}/include"
+  cc.include_paths << "#{prism_dir}/include"
 
   cc.defines.flatten!
-
-  cc.defines << "PRISM_XALLOCATOR"
-  if cc.defines.include?("PICORB_VM_MRUBY")
-    cc.defines << "MRC_TARGET_MRUBY"
-  elsif cc.defines.include?("PICORB_VM_MRUBYC")
-    cc.defines << "MRC_TARGET_MRUBYC"
+  cc.defines << 'PRISM_XALLOCATOR'
+  if cc.defines.include?('PICORB_VM_MRUBY')
+    cc.defines << 'MRC_TARGET_MRUBY'
+  elsif cc.defines.include?('PICORB_VM_MRUBYC')
+    cc.defines << 'MRC_TARGET_MRUBYC'
+  elsif !cc.defines.include?('MRB_NO_GEMS')
+    cc.defines << 'MRC_TARGET_MRUBY'
   end
-
-  if cc.defines.include?("PICORB_INT32")
-    cc.defines << "MRC_INT64"
-  end
-  if cc.defines.any? { _1.match? /\A(PICORUBY|MRB)_DEBUG(=|\z)/ }
-    cc.defines << "MRC_DEBUG"
-    cc.defines << "MRC_DUMP_PRETTY"
-  else
-    cc.defines << "PRISM_BUILD_MINIMAL"
-  end
-
-  prism_templates_dir = "#{lib_dir}/prism/templates"
-  cc.include_paths << "#{prism_dir}/include"
+  cc.defines << 'MRC_DEBUG' if cc.defines.any? { _1.match?(/\AMRB_DEBUG(=|\z)/) }
+  cc.defines << 'PRISM_BUILD_MINIMAL' unless cc.defines.include?('MRC_DEBUG')
 
   next if %w(clean deep_clean).include?(Rake.application.top_level_tasks.first)
 
-  directory prism_dir do
+  prism_generated_files = %w[
+    ext/prism/api_node.c
+    include/prism/ast.h
+    include/prism/diagnostic.h
+    src/diagnostic.c
+    src/node.c
+    src/prettyprint.c
+    src/serialize.c
+    src/token_type.c
+  ].map { |path| "#{prism_dir}/#{path}" }
+
+  task :prism_submodule do
+    next if File.exist?("#{prism_dir}/templates/template.rb")
+
     FileUtils.cd dir do
-      sh "git submodule update --init"
+      sh 'git submodule update --init lib/prism'
     end
   end
 
-  task :prism_templates => prism_dir do
+  task prism_templates: :prism_submodule do
+    missing = prism_generated_files.reject { |path| File.exist?(path) }
+    next if missing.empty?
+
     FileUtils.cd prism_dir do
-      sh "templates/template.rb"
+      sh "#{RbConfig.ruby} templates/template.rb"
     end
   end
+
+  Rake::Task[:prism_templates].invoke
 
   %w(node prettyprint serialize token_type).each do |name|
     dst = "#{prism_dir}/src/#{name}.c"
-    # file task does not work when dst does not exist. why?
-    Rake::Task[:prism_templates].invoke unless File.exist?(dst)
-    file dst => ["#{prism_templates_dir}/src/#{name}.c.erb", "#{prism_templates_dir}/template.rb"] do |t|
+    file dst => ["#{prism_templates_dir}/src/#{name}.c.erb", "#{prism_templates_dir}/template.rb"] do
       Rake::Task[:prism_templates].invoke
     end
   end
@@ -61,6 +70,4 @@ MRuby::Gem::Specification.new('mruby-compiler2') do |spec|
       cc.run f.name, f.prerequisites.first
     end
   end
-
 end
-
