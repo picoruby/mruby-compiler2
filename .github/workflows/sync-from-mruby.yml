@@ -1,0 +1,117 @@
+name: Sync from mruby
+
+on:
+  schedule:
+    - cron: "23 17 * * *"
+  workflow_dispatch:
+    inputs:
+      mruby_ref:
+        description: "mruby/mruby ref to sync from"
+        required: false
+        default: master
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: sync-from-mruby
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.repository == 'picoruby/mruby-compiler2'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout mruby-compiler2
+        uses: actions/checkout@v6
+        with:
+          path: mruby-compiler2
+          submodules: recursive
+
+      - name: Checkout mruby
+        uses: actions/checkout@v6
+        with:
+          repository: mruby/mruby
+          ref: ${{ inputs.mruby_ref || 'master' }}
+          path: mruby
+
+      - name: Sync compiler gem
+        id: sync
+        working-directory: mruby-compiler2
+        env:
+          SOURCE_DIR: ../mruby/mrbgems/mruby-compiler-prism
+        run: |
+          set -euo pipefail
+
+          if [ ! -d "$SOURCE_DIR" ]; then
+            echo "mruby-compiler-prism was not found in mruby checkout" >&2
+            exit 1
+          fi
+
+          MRUBY_SHA="$(git -C ../mruby rev-parse HEAD)"
+          PRISM_SHA="$(git -C ../mruby ls-tree HEAD mrbgems/mruby-compiler-prism/lib/prism | awk '{print $3}')"
+
+          rsync -a --delete \
+            --exclude='.git/' \
+            --exclude='.github/' \
+            --exclude='.gitmodules' \
+            --exclude='lib/prism/' \
+            "$SOURCE_DIR/" ./
+
+          if [ -n "$PRISM_SHA" ]; then
+            git -C lib/prism fetch origin "$PRISM_SHA"
+            git -C lib/prism checkout "$PRISM_SHA"
+          fi
+
+          echo "mruby_sha=$MRUBY_SHA" >> "$GITHUB_OUTPUT"
+          echo "mruby_short_sha=${MRUBY_SHA:0:12}" >> "$GITHUB_OUTPUT"
+
+      - name: Create sync pull request
+        working-directory: mruby-compiler2
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MRUBY_SHA: ${{ steps.sync.outputs.mruby_sha }}
+          MRUBY_SHORT_SHA: ${{ steps.sync.outputs.mruby_short_sha }}
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet --exit-code && git diff --cached --quiet --exit-code; then
+            echo "No changes to sync."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          BASE_BRANCH="$(gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name')"
+          SYNC_BRANCH="sync/mruby-compiler-prism-${MRUBY_SHORT_SHA}"
+
+          git switch -C "$SYNC_BRANCH"
+          git add -A
+          git commit -m "Sync mruby-compiler-prism from mruby ${MRUBY_SHORT_SHA}"
+          git push --force-with-lease origin "$SYNC_BRANCH"
+
+          {
+            echo "Synchronize this repository from mruby/mruby@${MRUBY_SHA}."
+            echo
+            echo "Source path:"
+            echo "\`mrbgems/mruby-compiler-prism\`"
+            echo
+            echo "This repository is a downstream mirror for users that need to pin the compiler as an independent mrbgem."
+          } > pr-body.md
+
+          EXISTING_PR="$(gh pr list --head "$SYNC_BRANCH" --state open --json number --jq '.[0].number // empty')"
+          if [ -n "$EXISTING_PR" ]; then
+            gh pr edit "$EXISTING_PR" \
+              --title "Sync mruby-compiler-prism from mruby ${MRUBY_SHORT_SHA}" \
+              --body-file pr-body.md \
+              --base "$BASE_BRANCH"
+          else
+            gh pr create \
+              --title "Sync mruby-compiler-prism from mruby ${MRUBY_SHORT_SHA}" \
+              --body-file pr-body.md \
+              --base "$BASE_BRANCH" \
+              --head "$SYNC_BRANCH"
+          fi
