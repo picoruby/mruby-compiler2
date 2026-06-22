@@ -7,6 +7,7 @@
 #include <mruby/dump.h>
 #include <mruby/error.h>
 #include <mruby/internal.h>
+#include <mruby/opcode.h>
 #include <mruby/proc.h>
 #include <string.h>
 
@@ -544,6 +545,60 @@ mrb_parser_foreach_top_variable(mrb_state *mrb, struct mrb_parser_state *p, mrb_
       if (!func(mrb, sym, user)) return;
     }
   }
+}
+
+/* Decode a single bytecode instruction. Declared in mruby/internal.h and
+   used by tools such as mrdb; provided here so the Prism compiler library
+   exposes the same symbol the legacy compiler did. */
+struct mrb_insn_data
+mrb_decode_insn(const mrb_code *pc)
+{
+  struct mrb_insn_data data = { 0 };
+  if (pc == 0) return data;
+  data.addr = pc;
+  mrb_code insn = READ_B();
+  uint16_t a = 0;
+  uint16_t b = 0;
+  uint16_t c = 0;
+
+  switch (insn) {
+#define OPCODE(i,x) case OP_ ## i: FETCH_ ## x (); break;
+#include <mruby/ops.h>
+#undef OPCODE
+  }
+  switch (insn) {
+  case OP_EXT1:
+    insn = READ_B();
+    switch (insn) {
+#define OPCODE(i,x) case OP_ ## i: FETCH_ ## x ## _1 (); break;
+#include <mruby/ops.h>
+#undef OPCODE
+    }
+    break;
+  case OP_EXT2:
+    insn = READ_B();
+    switch (insn) {
+#define OPCODE(i,x) case OP_ ## i: FETCH_ ## x ## _2 (); break;
+#include <mruby/ops.h>
+#undef OPCODE
+    }
+    break;
+  case OP_EXT3:
+    insn = READ_B();
+    switch (insn) {
+#define OPCODE(i,x) case OP_ ## i: FETCH_ ## x ## _3 (); break;
+#include <mruby/ops.h>
+#undef OPCODE
+    }
+    break;
+  default:
+    break;
+  }
+  data.insn = insn;
+  data.a = a;
+  data.b = b;
+  data.c = c;
+  return data;
 }
 
 #endif

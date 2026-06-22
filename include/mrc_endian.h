@@ -42,4 +42,3 @@ check_little_endian(void)
 MRC_END_DECL
 
 #endif  /* MRC_ENDIAN_H */
-

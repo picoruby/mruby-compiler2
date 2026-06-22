@@ -391,12 +391,12 @@ mrb_mruby_compiler2_gem_final(mrb_state *mrb)
 }
 
 MRC_API void
-mrb_mruby_compiler_prism_gem_init(mrb_state *mrb)
+mrb_mruby_compiler_gem_init(mrb_state *mrb)
 {
 }
 
 MRC_API void
-mrb_mruby_compiler_prism_gem_final(mrb_state *mrb)
+mrb_mruby_compiler_gem_final(mrb_state *mrb)
 {
 }
 

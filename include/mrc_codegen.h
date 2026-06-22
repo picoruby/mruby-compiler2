@@ -12,4 +12,3 @@ mrc_irep *mrc_generate_code(mrc_ccontext *c, mrc_node *node);
 MRC_END_DECL
 
 #endif // MRC_CODEGEN_H
-

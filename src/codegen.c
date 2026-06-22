@@ -1832,8 +1832,16 @@ static void codegen_pattern(mrc_codegen_scope *s, mrc_node *pattern, int target,
 static mrc_sym
 nsym(mrc_parser_state *p, const uint8_t *start, size_t length)
 {
-  mrc_sym sym = pm_constant_pool_insert_constant(&p->constant_pool, start, length);
-  return sym;
+  if (length == 0 || (start >= p->start && start < p->end)) {
+    /* Source-backed bytes stay valid for the parser's lifetime. */
+    return pm_constant_pool_insert_constant(&p->constant_pool, start, length);
+  }
+  /* Node-owned bytes (e.g. an unescaped symbol name containing escapes) are
+     freed together with the AST, before the generated irep is dumped; copy
+     them into pool-owned memory so the constant id stays valid. */
+  uint8_t *copy = (uint8_t *)xmalloc(length);
+  memcpy(copy, start, length);
+  return pm_constant_pool_insert_owned(&p->constant_pool, copy, length);
 }
 
 static int32_t
@@ -2366,11 +2374,106 @@ mrc_mruby_numbered_parameter_upvar(mrc_codegen_scope *s, mrc_sym id, int *lv, in
 }
 #endif
 
+/* Attribute assignment (`recv.attr = v`, `recv[i] = v`) as an expression.
+   Prism bundles the RHS as the last positional argument of the call node.
+   The whole expression must evaluate to that RHS, not to the setter's
+   return value, so the RHS is copied into a reserved slot below the call
+   frame and used as the result while the SEND result is discarded. */
+static void
+gen_call_assign(mrc_codegen_scope *s, mrc_node *tree, int val, int safe)
+{
+  CAST(call);
+  const mrc_sym sym = cast->name;
+  int skip = 0, n = 0, noself = 0, noop = no_optimize(s);
+  int top, callsp, opt_op = 0;
+
+  if (!noop && sym == MRC_OPSYM_2(aset)) opt_op = OP_SETIDX;
+
+  top = cursp();
+  push();                    /* room for retval */
+  callsp = cursp();
+
+  /* receiver (an attribute write always has an explicit receiver; an
+     explicit `self` must be materialized so OP_SETIDX can read it) */
+  if (cast->receiver == NULL) {
+    noself = 1;
+    push();
+  }
+  else {
+    codegen(s, cast->receiver, VAL);
+  }
+  if (safe) {
+    int recv = cursp()-1;
+    gen_move(s, cursp(), recv, 1);
+    skip = genjmp2_0(s, OP_JMPNIL, cursp(), val);
+  }
+
+  /* positional arguments, the last of which is the RHS */
+  CAST3(arguments, cast->arguments, arguments);
+  if (arguments) {
+    for (size_t i = 0; i < arguments->arguments.size; i++) {
+      codegen(s, (mrc_node *)arguments->arguments.nodes[i], VAL);
+      n++;
+    }
+  }
+  if (val) {
+    /* nopeep: keep the RHS in its argument slot for the SEND, while also
+       copying it to the reserved result slot */
+    gen_move(s, top, cursp()-1, 1);   /* preserve the RHS as the result */
+  }
+
+  push(); pop();
+  s->sp = callsp;
+
+  if (opt_op == OP_SETIDX && n == 2) {
+    genop_1(s, OP_SETIDX, cursp());
+  }
+  else if (noself) {
+    genop_3(s, OP_SSEND, cursp(), new_sym(s, sym), n);
+  }
+  else {
+    genop_3(s, OP_SEND, cursp(), new_sym(s, sym), n);
+  }
+
+  if (safe) {
+    dispatch(s, skip);
+  }
+
+  s->sp = top;
+  if (val) {
+    push();
+  }
+}
+
+/* Are the call arguments simple enough for gen_call_assign (no splat,
+   keyword hash, or forwarding that would obscure the RHS position)? */
+static mrc_bool
+attr_assign_simple_args(pm_call_node_t *cast)
+{
+  if (cast->arguments == NULL) return FALSE;
+  pm_arguments_node_t *arguments = (pm_arguments_node_t *)cast->arguments;
+  if (arguments->arguments.size == 0) return FALSE;
+  for (size_t i = 0; i < arguments->arguments.size; i++) {
+    int t = nint((mrc_node *)arguments->arguments.nodes[i]);
+    if (t == PM_SPLAT_NODE || t == PM_KEYWORD_HASH_NODE ||
+        t == PM_FORWARDING_ARGUMENTS_NODE) {
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+
 static void
 gen_call(mrc_codegen_scope *s, mrc_node *tree, int val, int safe)
 {
   CAST(call);
   const mrc_sym sym = cast->name;
+
+  if (val && (cast->base.flags & PM_CALL_NODE_FLAGS_ATTRIBUTE_WRITE) &&
+      attr_assign_simple_args(cast)) {
+    gen_call_assign(s, tree, val, safe);
+    return;
+  }
   int skip = 0, n = 0, nk = 0, noop = no_optimize(s), noself = 0, blk = 0, sp_save = cursp();
 
 #if defined(MRC_TARGET_MRUBY)
@@ -2595,7 +2698,13 @@ codegen_pattern(mrc_codegen_scope *s, mrc_node *pattern, int target, uint32_t *f
   case PM_RATIONAL_NODE:
   case PM_IMAGINARY_NODE:
   case PM_STRING_NODE:
+  case PM_INTERPOLATED_STRING_NODE:
+  case PM_X_STRING_NODE:
   case PM_SYMBOL_NODE:
+  case PM_INTERPOLATED_SYMBOL_NODE:
+  case PM_REGULAR_EXPRESSION_NODE:
+  case PM_INTERPOLATED_REGULAR_EXPRESSION_NODE:
+  case PM_RANGE_NODE:
   case PM_TRUE_NODE:
   case PM_FALSE_NODE:
   case PM_NIL_NODE:
@@ -4545,7 +4654,8 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       genop_2(s, OP_STRING, cursp(), off);
       push(); push();
       pop_n(3);
-      genop_3(s, OP_SEND, cursp(), sym, 1);
+      /* SSEND: backtick is a private Kernel method, call it on self */
+      genop_3(s, OP_SSEND, cursp(), sym, 1);
       if (val) push();
       break;
     }
@@ -4779,7 +4889,8 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       push();
       pop_n(3);
       sym = new_sym(s, MRC_OPSYM_2(tick));
-      genop_3(s, OP_SEND, cursp(), sym, 1);
+      /* SSEND: backtick is a private Kernel method, call it on self */
+      genop_3(s, OP_SSEND, cursp(), sym, 1);
       if (val) push();
       break;
     }
@@ -5169,6 +5280,15 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       }
       break;
     }
+    case PM_MATCH_WRITE_NODE:
+    {
+      /* `regexp =~ string` whose regexp has named captures. mruby does not
+         bind the named captures to local variables (the bison compiler does
+         not either), so just emit the underlying =~ call and run the match. */
+      CAST(match_write);
+      codegen(s, (mrc_node *)cast->call, val);
+      break;
+    }
     case PM_MATCH_PREDICATE_NODE:
     {
       /* one-line `expr in pattern` -> true / false */
@@ -5495,7 +5615,11 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
         }
       }
       else { /* `super()` parentheses without argument */
-        if (s2) gen_blkmove(s, s2->ainfo, lv);
+        /* block argument */
+        if (cast->block) {
+          codegen(s, (mrc_node *)cast->block, VAL);
+        }
+        else if (s2) gen_blkmove(s, s2->ainfo, lv);
         else {
           genop_1(s, OP_LOADNIL, cursp());
           push();

@@ -20,4 +20,3 @@ MRC_API void *mrc_pool_realloc(mrc_pool *pool, void *p, size_t oldlen, size_t ne
 MRC_END_DECL
 
 #endif // MRC_POOL_H
-
