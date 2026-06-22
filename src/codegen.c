@@ -1134,12 +1134,10 @@ search_upvar(mrc_codegen_scope *s, mrc_sym id, int *idx)
 }
 
 static void
-gen_getupvar(mrc_codegen_scope *s, uint16_t dst, mrc_sym id, int depth)
+gen_getupvar(mrc_codegen_scope *s, uint16_t dst, mrc_sym id)
 {
   int idx;
   int lv = search_upvar(s, id, &idx);
-
-  mrc_assert(lv == depth-1);
 
   if (!no_peephole(s)) {
     struct mrc_insn_data data = mrc_last_insn(s);
@@ -1152,12 +1150,10 @@ gen_getupvar(mrc_codegen_scope *s, uint16_t dst, mrc_sym id, int depth)
 }
 
 static void
-gen_setupvar(mrc_codegen_scope *s, uint16_t dst, mrc_sym id, int depth)
+gen_setupvar(mrc_codegen_scope *s, uint16_t dst, mrc_sym id)
 {
   int idx;
   int lv = search_upvar(s, id, &idx);
-
-  mrc_assert(lv == depth-1);
 
   if (!no_peephole(s)) {
     struct mrc_insn_data data = mrc_last_insn(s);
@@ -1564,7 +1560,9 @@ new_lit_str(mrc_codegen_scope *s, const char *str, mrc_int len)
     if (pv->tt & IREP_TT_NFLAG) continue;
     mrc_int plen = pv->tt>>2;
     if (len != plen) continue;
-    if (memcmp(pv->u.str, str, plen) == 0)
+    /* plen==0 means both are empty; skip memcmp so a NULL str (empty string
+       literal) is not passed to its nonnull argument (UB clang miscompiles). */
+    if (plen == 0 || memcmp(pv->u.str, str, plen) == 0)
       return i;
   }
 
@@ -1578,7 +1576,7 @@ new_lit_str(mrc_codegen_scope *s, const char *str, mrc_int len)
     char *p;
     pv->tt = (uint32_t)(len<<2) | IREP_TT_STR;
     p = (char*)mrc_realloc(s->c, NULL, len+1);
-    memcpy(p, str, len);
+    if (len) memcpy(p, str, len);   /* str may be NULL for an empty literal */
     p[len] = '\0';
     pv->u.str = p;
   //}
@@ -1928,7 +1926,23 @@ gen_assignment_lvar(mrc_codegen_scope *s, int sp, mrc_sym name, int depth, int v
     }
   }
   else {
-    gen_setupvar(s, sp, name, depth);
+    gen_setupvar(s, sp, name);
+  }
+}
+
+/* Load the anonymous forwarding variable `sym` (one of `*`, `**`, `&`) into
+   cursp(). When `...` is forwarded from inside a block the variable lives in
+   an enclosing method scope, so fall back to an upvar load instead of asserting
+   it is a local of the current scope. */
+static void
+gen_forward_arg(mrc_codegen_scope *s, mrc_sym sym, int val)
+{
+  int idx = lv_idx(s, sym);
+  if (idx > 0) {
+    gen_move(s, cursp(), idx, val);
+  }
+  else {
+    gen_getupvar(s, cursp(), sym);
   }
 }
 
@@ -1995,27 +2009,20 @@ gen_values(mrc_codegen_scope *s, mrc_node *tree, int val, int limit)
       push();
     }
     else if (is_forwarding) {
-      int idx;
       /* ARYCAT rest args (*) into the flushed array */
-      idx = lv_idx(s, MRC_OPSYM_2(mul));
-      assert(idx != 0);
-      gen_move(s, cursp(), idx, val);
+      gen_forward_arg(s, MRC_OPSYM_2(mul), val);
       pop();
       genop_1(s, OP_ARYCAT, cursp());
       push();
       /* ** keyword hash */
       genop_2(s, OP_HASH, cursp(), 0);
       push();
-      idx = lv_idx(s, MRC_OPSYM_2(pow));
-      assert(idx != 0);
-      gen_move(s, cursp(), idx, val);
+      gen_forward_arg(s, MRC_OPSYM_2(pow), val);
       pop();
       genop_1(s, OP_HASHCAT, cursp());
       push();
       /* & block */
-      idx = lv_idx(s, MRC_OPSYM_2(and));
-      assert(idx != 0);
-      gen_move(s, cursp(), idx, val);
+      gen_forward_arg(s, MRC_OPSYM_2(and), val);
       break;
     }
     else {
@@ -2082,7 +2089,12 @@ gen_assignment(mrc_codegen_scope *s, mrc_node *tree, mrc_node *rhs, int sp, int 
     case PM_REQUIRED_PARAMETER_NODE:
     {
       CAST(local_variable_write);
-      gen_assignment_lvar(s, sp, cast->name, cast->depth + s->for_depth, val);
+      /* pm_required_parameter_node_t has no `depth` field (a parameter is
+         always a local in the current scope); reading cast->depth on it would
+         read past the node, yielding a garbage depth that sends the lookup to
+         search_upvar and fails with "Can't find local variables". */
+      int depth = (nint(tree) == PM_REQUIRED_PARAMETER_NODE) ? 0 : (int)cast->depth;
+      gen_assignment_lvar(s, sp, cast->name, depth + s->for_depth, val);
       break;
     }
     case PM_INSTANCE_VARIABLE_WRITE_NODE:
@@ -3097,6 +3109,7 @@ codegen_pattern(mrc_codegen_scope *s, mrc_node *pattern, int target, uint32_t *f
             gen_move(s, val_reg, vals_reg, 0);
             push(); /* protect receiver */
             gen_int(s, cursp(), key_idx);
+            push(); /* protect index arg */
             push(); pop(); /* touch block slot */
             s->sp = val_reg;
             genop_3(s, OP_SEND, val_reg, new_sym(s, MRC_OPSYM_2(aref)), 1);
@@ -3429,7 +3442,11 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id
   forwarding = 0;
   int block_reg = 0;
   pm_constant_id_list_t *lv = (pm_constant_id_list_t *)codegen_palloc(s, sizeof(pm_constant_id_list_t));
-  pm_constant_id_t null_mark = pm_constant_pool_insert_constant(&s->c->p->constant_pool, NULL, 0);
+  /* Use a non-NULL zero-length pointer: pm_constant_pool_insert feeds it to
+     memcmp/memcpy, whose nonnull attribute makes a NULL argument undefined
+     behavior that clang miscompiles (the constant pool then misbehaves and
+     codegen reports a spurious "Can't find local variables"). */
+  pm_constant_id_t null_mark = pm_constant_pool_insert_constant(&s->c->p->constant_pool, (const uint8_t *)"", 0);
 
   // Create lv regs from Prism's locals
   if (parameters == NULL) {
@@ -3751,7 +3768,7 @@ gen_lvar(mrc_codegen_scope *s, mrc_sym name, int depth)
     gen_move(s, cursp(), lv_idx(s, name), 1);
   }
   else {
-    gen_getupvar(s, cursp(), name, depth);
+    gen_getupvar(s, cursp(), name);
   }
   push();
 }
@@ -3927,12 +3944,15 @@ gen_pm_integer(mrc_codegen_scope *s, const pm_integer_t *iv)
   {
     pm_buffer_t buf = {0};
     pm_integer_string(&buf, iv);
-    buf.value[buf.length] = '\0';
+    /* pm_integer_string writes exactly buf.length bytes and reserves no room
+       for a terminator; append the NUL through the buffer API so it grows the
+       allocation instead of writing one byte past it. */
+    pm_buffer_append_byte(&buf, '\0');
+    const char *digits = buf.value;
     if (iv->negative) {
-      memmove(buf.value, buf.value+1, buf.length);
-      buf.length--;
+      digits++;   /* skip the leading '-'; new_litbint takes the sign separately */
     }
-    int off = new_litbint(s, buf.value, 10, iv->negative);
+    int off = new_litbint(s, digits, 10, iv->negative);
     genop_2(s, OP_LOADL, cursp(), off);
     pm_buffer_free(&buf);
   }
@@ -4533,6 +4553,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
         push();                                  /* receiver (self) slot */
         gen_pm_integer(s, &cast->numerator); push();
         gen_pm_integer(s, &cast->denominator); push();
+        push(); pop();                           /* reserve OP_SSEND block slot */
         pop_n(3);
         genop_3(s, OP_SSEND, recv,
                 new_sym(s, nsym(s->c->p, (const uint8_t*)"Rational", 8)), 2);
@@ -4549,6 +4570,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
         push();                                  /* receiver (self) slot */
         gen_int(s, cursp(), 0); push();          /* real part */
         codegen(s, (mrc_node*)cast->numeric, VAL); /* imaginary part */
+        push(); pop();                           /* reserve OP_SSEND block slot */
         pop_n(3);
         genop_3(s, OP_SSEND, recv,
                 new_sym(s, nsym(s->c->p, (const uint8_t*)"Complex", 7)), 2);
@@ -5917,8 +5939,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
         mrc_sym and = MRC_OPSYM_2(and);
         int idx = lv_idx(s, and);
         if (idx == 0) {
-          int depth = search_upvar(s, and, &idx);
-          gen_getupvar(s, cursp(), and, depth + 1);
+          gen_getupvar(s, cursp(), and);
         }
         else {
           gen_move(s, cursp(), idx, val);

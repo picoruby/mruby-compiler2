@@ -599,7 +599,10 @@ write_section_debug(mrc_ccontext *c, const mrc_irep *irep, uint8_t *cur, mrc_sym
 static void
 create_lv_sym_table(mrc_ccontext *c, const mrc_irep *irep, mrc_sym **syms, uint32_t *syms_len)
 {
-  pm_constant_id_t null_mark = pm_constant_pool_find(&c->p->constant_pool, NULL, 0);
+  /* Match the non-NULL zero-length marker inserted by the code generator;
+     a NULL argument here is undefined behavior (memcmp nonnull) that clang
+     miscompiles. */
+  pm_constant_id_t null_mark = pm_constant_pool_find(&c->p->constant_pool, (const uint8_t *)"", 0);
 
   if (*syms == NULL) {
     *syms = (mrc_sym*)mrc_malloc(c, sizeof(mrc_sym) * 1);
@@ -646,7 +649,10 @@ write_lv_record(mrc_ccontext *c, const mrc_irep *irep, uint8_t **start, mrc_sym 
 {
   uint8_t *cur = *start;
 
-  pm_constant_id_t null_mark = pm_constant_pool_find(&c->p->constant_pool, NULL, 0);
+  /* Match the non-NULL zero-length marker inserted by the code generator;
+     a NULL argument here is undefined behavior (memcmp nonnull) that clang
+     miscompiles. */
+  pm_constant_id_t null_mark = pm_constant_pool_find(&c->p->constant_pool, (const uint8_t *)"", 0);
 
   for (int i = 0; i + 1 < irep->nlocals; i++) {
     if (irep->lv[i] == 0 || irep->lv[i] == null_mark) {
@@ -761,7 +767,11 @@ debug_info_defined_p(const mrc_irep *irep)
 static mrc_bool
 lv_defined_p(const mrc_irep *irep)
 {
-  if (irep->lv && 0 < ((pm_constant_id_list_t *)irep->lv)->size) { return TRUE; }
+  /* irep->lv is an mrc_sym array (NULL when the scope has no named locals);
+     the old `((pm_constant_id_list_t *)irep->lv)->size` reinterpreted it as a
+     different struct, an out-of-bounds read and a strict-aliasing violation
+     that clang miscompiles. A plain NULL check matches the bytecode dumper. */
+  if (irep->lv) { return TRUE; }
   for (int i = 0; i < irep->rlen; i++) {
     if (lv_defined_p(irep->reps[i])) { return TRUE; }
   }
