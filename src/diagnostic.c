@@ -113,4 +113,3 @@ mrc_diagnostic_list_free(mrc_ccontext *c)
   }
   c->diagnostic_list = NULL;
 }
-

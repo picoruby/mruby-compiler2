@@ -23,4 +23,3 @@ mrc_sym mrc_sym_offset(mrc_sym sym);
 MRC_END_DECL
 
 #endif // MRC_PRESYM_H
-

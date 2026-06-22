@@ -14,4 +14,3 @@ void mrc_codedump_all(mrc_ccontext *c, mrc_irep *irep);
 MRC_END_DECL
 
 #endif // MRC_CODEDUMP_H
-

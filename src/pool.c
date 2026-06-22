@@ -149,4 +149,3 @@ mrc_pool_realloc(mrc_pool *pool, void *p, size_t oldlen, size_t newlen)
   memcpy(np, p, oldlen);
   return np;
 }
-

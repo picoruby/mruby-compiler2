@@ -2,6 +2,15 @@
 #include "../include/mrc_ccontext.h"
 #include "../include/mrc_parser_util.h"
 
+#if defined(MRC_TARGET_MRUBY)
+/* The Prism xallocator routes allocations through this mrb_state. Define it
+   in the compiler library so every executable that links libmruby (not just
+   the mrbc/mruby/mirb front-ends) resolves the symbol. The front-ends assign
+   it unconditionally for the mruby target, so it must exist regardless of
+   MRC_ALLOC_LIBC even though only the non-libc allocator dereferences it. */
+mrb_state *global_mrb = NULL;
+#endif
+
 MRC_API mrc_ccontext *
 mrc_ccontext_new(mrb_state *mrb)
 {

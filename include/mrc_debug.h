@@ -75,4 +75,3 @@ void mrc_debug_info_free(mrc_ccontext *c, mrc_irep_debug_info *d);
 MRC_END_DECL
 
 #endif /* MRC_DEBUG_H */
-
