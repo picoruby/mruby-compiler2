@@ -1319,6 +1319,13 @@ new_sym(mrc_codegen_scope *s, mrc_sym sym)
   return s->irep->slen++;
 }
 
+/* Intern a static method-name string into the irep symbol table. */
+static int
+new_method_sym(mrc_codegen_scope *s, const char *name, size_t len)
+{
+  return new_sym(s, pm_constant_pool_insert_constant(&s->c->p->constant_pool, (const uint8_t *)name, len));
+}
+
 static void
 gen_addsub(mrc_codegen_scope *s, uint8_t op, uint16_t dst)
 {
@@ -6018,13 +6025,56 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     }
     case PM_DEFINED_NODE:
     {
-      CAST(defined);
-      push();
-      codegen(s, cast->value, VAL);
-      pop();
-      pop();
-      genop_3(s, OP_SSEND, cursp(), new_sym(s, MRC_SYM_2(defined_p)), 1);
-      push();
+      /* defined? returns a truthy value when the operand is defined, nil/false
+       * otherwise. We lower it to boolean predicate sends for the operand
+       * shapes that can actually be undefined (constants, ivars, bare method
+       * calls) and to `true` for shapes that are always defined. This is
+       * functionally equivalent in boolean contexts (the common use) and
+       * avoids calling a nonexistent `defined?` method. */
+      if (val) {
+        CAST(defined);
+        mrc_node *value = (mrc_node *)cast->value;
+        switch (nint(value)) {
+        case PM_CONSTANT_READ_NODE: {
+          /* Object.const_defined?(:Name) */
+          pm_constant_read_node_t *c = (pm_constant_read_node_t *)value;
+          genop_1(s, OP_OCLASS, cursp()); push();
+          genop_2(s, OP_LOADSYM, cursp(), new_sym(s, c->name)); push();
+          pop(); pop();
+          genop_3(s, OP_SEND, cursp(), new_method_sym(s, "const_defined?", 14), 1);
+          break;
+        }
+        case PM_INSTANCE_VARIABLE_READ_NODE: {
+          /* instance_variable_defined?(:@name) */
+          pm_instance_variable_read_node_t *c = (pm_instance_variable_read_node_t *)value;
+          genop_1(s, OP_LOADSELF, cursp()); push();
+          genop_2(s, OP_LOADSYM, cursp(), new_sym(s, c->name)); push();
+          pop(); pop();
+          genop_3(s, OP_SSEND, cursp(), new_method_sym(s, "instance_variable_defined?", 26), 1);
+          break;
+        }
+        case PM_CALL_NODE: {
+          pm_call_node_t *c = (pm_call_node_t *)value;
+          if (c->receiver == NULL && c->arguments == NULL && c->block == NULL) {
+            /* bare method call: respond_to?(:name, true) */
+            genop_1(s, OP_LOADSELF, cursp()); push();
+            genop_2(s, OP_LOADSYM, cursp(), new_sym(s, c->name)); push();
+            genop_1(s, OP_LOADTRUE, cursp()); push();
+            pop(); pop(); pop();
+            genop_3(s, OP_SSEND, cursp(), new_method_sym(s, "respond_to?", 11), 2);
+          }
+          else {
+            genop_1(s, OP_LOADTRUE, cursp());
+          }
+          break;
+        }
+        default:
+          /* locals, self, literals, assignments, etc. are always defined */
+          genop_1(s, OP_LOADTRUE, cursp());
+          break;
+        }
+        push();
+      }
       break;
     }
     default:
