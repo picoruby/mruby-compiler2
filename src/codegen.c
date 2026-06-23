@@ -5713,25 +5713,38 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
         ainfo = (int)s2->ainfo;
       }
       if (ainfo < 0) codegen_error(s, "invalid yield (SyntaxError)");
-      push();
+      int nk = 0;
+      int sp_save = cursp();
+      push(); /* slot for the block (call receiver) */
       if (cast->arguments) {
-        n = gen_values(s, (mrc_node *)cast->arguments, VAL, 14);
-        if (n < 0) {
-          n = sendv = 1;
-          push();
+        CAST3(arguments, cast->arguments, args);
+        if (args && args->arguments.size > 0) {
+          n = gen_values(s, (mrc_node *)cast->arguments, VAL, 14);
+          if (n < 0) {
+            n = sendv = 1;
+            push();
+          }
+          /* keyword arguments: gather like a normal call so the block's
+           * keyword parameters bind (yield(label: x) -> { |label:| }) */
+          for (size_t i = 0; i < args->arguments.size; i++) {
+            if (nint(args->arguments.nodes[i]) == PM_KEYWORD_HASH_NODE) {
+              nk = gen_hash(s, (mrc_node *)args->arguments.nodes[i], VAL, 14);
+              if (nk < 0) nk = 15;
+            }
+          }
         }
       }
-      push(); pop(); /* space for a block */
-      pop_n(n+1);
+      push(); pop();
+      s->sp = sp_save;
       genop_2S(s, OP_BLKPUSH, cursp(), (ainfo<<4)|(lv & 0xf));
       if (sendv) n = CALL_MAXARGS;
-      if (n < 15) {
+      if (nk == 0 && !sendv && n < 15) {
         /* fast path: direct block call without method dispatch */
         genop_2(s, OP_BLKCALL, cursp(), n);
       }
       else {
-        /* fallback: use SEND for splat */
-        genop_3(s, OP_SEND, cursp(), new_sym(s, MRC_SYM_1(call)), n);
+        /* fallback: SEND #call (handles keyword args and splat) */
+        genop_3(s, OP_SEND, cursp(), new_sym(s, MRC_SYM_1(call)), n|(nk<<4));
       }
       if (val) push();
       break;
