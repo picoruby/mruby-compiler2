@@ -258,14 +258,15 @@ codegen_error(mrc_codegen_scope *s, const char *message)
   mrc_diagnostic_list_append(s->c, 0, message, MRC_GENERATOR_ERROR);
 
 #ifndef MRC_NO_STDIO
-  if (s->filename && s->lineno) {
-    const char *filename = (const char *)s->filename;
-    fprintf(stderr, "%s:%d: %s\n", filename, s->lineno, message);
+  if (!s->c->quiet_errors) {
+    if (s->filename && s->lineno) {
+      const char *filename = (const char *)s->filename;
+      fprintf(stderr, "%s:%d: %s\n", filename, s->lineno, message);
+    }
+    else {
+      fprintf(stderr, "%s\n", message);
+    }
   }
-  else {
-    fprintf(stderr, "%s\n", message);
-  }
-
 #endif
   while (s->prev) {
     mrc_codegen_scope *tmp = s->prev;
@@ -1855,6 +1856,34 @@ node_lineno(mrc_ccontext *c, mrc_node *node)
   if (file_start == 0) return abs_line + line_offset;
   int32_t file_start_line = pm_newline_list_line(&c->p->newline_list, c->p->start + file_start, 1);
   return abs_line - file_start_line + 1 + line_offset;
+}
+
+/* `alias` and `undef` take compile-time symbol indices, but prism hands them a
+   SymbolNode *or* an InterpolatedSymbolNode (`alias :"#{x}" :y`), plus
+   GlobalVariableReadNode / MissingNode on a parse error. Resolve the ones whose
+   name is known at compile time and report the rest instead of reading the
+   wrong node layout. */
+static mrc_sym
+alias_sym(mrc_codegen_scope *s, mrc_node *tree)
+{
+  switch (nint(tree)) {
+  case PM_SYMBOL_NODE:
+    {
+      CAST3(symbol, tree, sym);
+      return new_sym(s, nsym(s->c->p, sym->unescaped.source, sym->unescaped.length));
+    }
+  case PM_INTERPOLATED_SYMBOL_NODE:
+    /* The name is only known at run time, but OP_ALIAS and OP_UNDEF carry a
+       symbol index. Supporting it would mean interning and dispatching at run
+       time, which is a separate feature. */
+    codegen_error(s, "dynamic symbol is not supported by alias/undef");
+    return 0;
+  default:
+    /* GlobalVariableReadNode / MissingNode: prism produces these for
+       `alias a $b` and `alias a 42` and has already reported the error. */
+    codegen_error(s, "invalid alias/undef argument");
+    return 0;
+  }
 }
 
 static mrc_bool
@@ -4555,7 +4584,12 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       switch (nt) {
         case PM_LOCAL_VARIABLE_OR_WRITE_NODE:
         case PM_LOCAL_VARIABLE_AND_WRITE_NODE:
+          /* gen_assignment_lvar() only moves, so the result has to be pushed
+             here the way the other branches do below. Without it the
+             expression yields nothing and every later register is off by
+             one, which shows up as `bidx < irep->nregs` in the VM. */
           gen_assignment_lvar(s, cursp(), name, depth, val);
+          push();
           break;
         case PM_GLOBAL_VARIABLE_OR_WRITE_NODE:
         case PM_GLOBAL_VARIABLE_AND_WRITE_NODE:
@@ -4847,6 +4881,15 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     {
       CAST(embedded_statements);
       codegen(s, (mrc_node *)cast->statements, val);
+      break;
+    }
+    case PM_EMBEDDED_VARIABLE_NODE:
+    {
+      /* `"#@iv"`, the brace-less form of `"#{@iv}"`. The variable read is an
+         ordinary expression and OP_STRCAT converts it, so there is nothing to
+         do beyond generating it. */
+      CAST(embedded_variable);
+      codegen(s, (mrc_node *)cast->variable, val);
       break;
     }
     case PM_INTERPOLATED_STRING_NODE:
@@ -5610,10 +5653,8 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     case PM_ALIAS_METHOD_NODE:
     {
       CAST(alias_method);
-      CAST3(symbol, cast->new_name, new_name);
-      CAST3(symbol, cast->old_name, old_name);
-      int a = new_sym(s, nsym(s->c->p, new_name->unescaped.source, new_name->unescaped.length));
-      int b = new_sym(s, nsym(s->c->p, old_name->unescaped.source, old_name->unescaped.length));
+      int a = alias_sym(s, (mrc_node *)cast->new_name);
+      int b = alias_sym(s, (mrc_node *)cast->old_name);
       genop_2(s, OP_ALIAS, a, b);
       if (val) {
         genop_1(s, OP_LOADNIL, cursp());
@@ -5625,9 +5666,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     {
       CAST(undef);
       for (size_t i = 0; i < cast->names.size; i++) {
-        CAST3(symbol, cast->names.nodes[i], name);
-        int symbol = new_sym(s, nsym(s->c->p, name->unescaped.source, name->unescaped.length));
-        genop_1(s, OP_UNDEF, symbol);
+        genop_1(s, OP_UNDEF, alias_sym(s, (mrc_node *)cast->names.nodes[i]));
       }
       if (val) {
         genop_1(s, OP_LOADNIL, cursp());
