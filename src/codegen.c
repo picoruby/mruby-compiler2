@@ -1842,6 +1842,11 @@ mrc_generate_code(mrc_ccontext *c, mrc_node *node)
 
 #define nint(node) PM_NODE_TYPE(node)
 
+/* Names `defined?` will name in one constant path.  The walk holds them on
+   the stack of a recursive codegen, so the bound stays well under what
+   OP_ARRAY could carry; a path deeper than this is answered nil. */
+#define DEFINED_PATH_MAX 32
+
 #define CAST3(name, from, to) \
   pm_##name##_node_t *to = (pm_##name##_node_t *)from
 #define CAST(name) CAST3(name,tree,cast)
@@ -3189,6 +3194,7 @@ codegen_pattern(mrc_codegen_scope *s, mrc_node *pattern, int target, uint32_t *f
             genop_3(s, OP_SEND, val_reg, new_sym(s, MRC_OPSYM_2(aref)), 1);
 
             if (assoc->value) {
+              push(); /* keep the value below cursp() for the sub-pattern */
               codegen_pattern(s, (mrc_node *)assoc->value, val_reg, fail_pos, -1);
             }
             else {
@@ -6258,8 +6264,21 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       const char *type = NULL;
       int helper = 0;             /* runtime helper symbol, 0 = none */
       pm_constant_id_t arg = 0;   /* symbol operand for the helper, 0 = none */
-      pm_constant_id_t arg2 = 0;  /* second symbol operand (A::B), 0 = none */
-      switch (nint(cast->value)) {
+      pm_constant_id_t path[DEFINED_PATH_MAX];  /* A::B::C, root first */
+      int path_len = 0;           /* names in `path`, 0 = not a constant path */
+      mrc_bool path_toplevel = FALSE;           /* ::A, so rooted at Object */
+      /* parentheses around a single expression are transparent here, so
+         `defined?((x))` answers what `defined?(x)` does; parentheses holding
+         no statement or several fall through to the "expression" cases */
+      mrc_node *value = cast->value;
+      while (nint(value) == PM_PARENTHESES_NODE) {
+        mrc_node *body = (mrc_node *)((pm_parentheses_node_t *)value)->body;
+        if (body == NULL || nint(body) != PM_STATEMENTS_NODE) break;
+        pm_node_list_t *stmts = &((pm_statements_node_t *)body)->body;
+        if (stmts->size != 1) break;
+        value = (mrc_node *)stmts->nodes[0];
+      }
+      switch (nint(value)) {
       case PM_INTEGER_NODE: case PM_FLOAT_NODE:
       case PM_RATIONAL_NODE: case PM_IMAGINARY_NODE:
       case PM_STRING_NODE: case PM_INTERPOLATED_STRING_NODE:
@@ -6270,6 +6289,18 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       case PM_NIL_NODE: case PM_TRUE_NODE: case PM_FALSE_NODE:
       case PM_RANGE_NODE: case PM_LAMBDA_NODE: case PM_DEFINED_NODE:
       case PM_SOURCE_FILE_NODE: case PM_SOURCE_LINE_NODE: case PM_SOURCE_ENCODING_NODE:
+      /* control flow, jumps and definitions: CRuby answers "expression" for
+         every one of these without looking inside them */
+      case PM_AND_NODE: case PM_OR_NODE:
+      case PM_IF_NODE: case PM_UNLESS_NODE:
+      case PM_CASE_NODE: case PM_CASE_MATCH_NODE:
+      case PM_WHILE_NODE: case PM_UNTIL_NODE: case PM_FOR_NODE:
+      case PM_BEGIN_NODE: case PM_PARENTHESES_NODE:
+      case PM_RETURN_NODE: case PM_BREAK_NODE: case PM_NEXT_NODE:
+      case PM_REDO_NODE: case PM_RETRY_NODE:
+      case PM_DEF_NODE: case PM_CLASS_NODE: case PM_MODULE_NODE:
+      case PM_SINGLETON_CLASS_NODE:
+      case PM_MATCH_PREDICATE_NODE: case PM_MATCH_REQUIRED_NODE:
         type = "expression";
         break;
       case PM_SELF_NODE:
@@ -6302,31 +6333,52 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
         break;
       case PM_INSTANCE_VARIABLE_READ_NODE:
         helper = MRC_SYM_2(defined_ivar_q);
-        arg = ((pm_instance_variable_read_node_t *)cast->value)->name;
+        arg = ((pm_instance_variable_read_node_t *)value)->name;
         break;
       case PM_CONSTANT_READ_NODE:
         helper = MRC_SYM_2(defined_const_q);
-        arg = ((pm_constant_read_node_t *)cast->value)->name;
+        arg = ((pm_constant_read_node_t *)value)->name;
         break;
       case PM_CONSTANT_PATH_NODE:
-        /* only A::B where A is a plain constant; nested/toplevel/expression
-           parents are left to fall through to nil */
+        /* Walk the path to its root, collecting the names leaf first.  The
+           root is either a plain constant, so the first name resolves in the
+           lexical scope, or nothing at all, so `::A` starts at Object.  A
+           root that is any other expression would have to be evaluated, and
+           falls through to nil. */
         {
-          pm_constant_path_node_t *cp = (pm_constant_path_node_t *)cast->value;
-          if (cp->parent && nint(cp->parent) == PM_CONSTANT_READ_NODE) {
+          mrc_node *seg = value;
+          pm_constant_id_t names[DEFINED_PATH_MAX];
+          int n = 0;
+          mrc_bool rooted = FALSE;
+
+          while (nint(seg) == PM_CONSTANT_PATH_NODE && n < DEFINED_PATH_MAX) {
+            names[n++] = ((pm_constant_path_node_t *)seg)->name;
+            seg = (mrc_node *)((pm_constant_path_node_t *)seg)->parent;
+            if (seg == NULL) {      /* ::A, rooted at Object */
+              path_toplevel = TRUE;
+              rooted = TRUE;
+              break;
+            }
+          }
+          if (!rooted && seg != NULL && nint(seg) == PM_CONSTANT_READ_NODE &&
+              n < DEFINED_PATH_MAX) {
+            names[n++] = ((pm_constant_read_node_t *)seg)->name;
+            rooted = TRUE;
+          }
+          if (rooted) {
             helper = MRC_SYM_2(defined_const_path_q);
-            arg = ((pm_constant_read_node_t *)cp->parent)->name;
-            arg2 = cp->name;
+            path_len = n;
+            for (int i = 0; i < n; i++) path[i] = names[n - 1 - i];
           }
         }
         break;
       case PM_GLOBAL_VARIABLE_READ_NODE:
         helper = MRC_SYM_2(defined_gvar_q);
-        arg = ((pm_global_variable_read_node_t *)cast->value)->name;
+        arg = ((pm_global_variable_read_node_t *)value)->name;
         break;
       case PM_CLASS_VARIABLE_READ_NODE:
         helper = MRC_SYM_2(defined_cvar_q);
-        arg = ((pm_class_variable_read_node_t *)cast->value)->name;
+        arg = ((pm_class_variable_read_node_t *)value)->name;
         break;
       case PM_YIELD_NODE:
         helper = MRC_SYM_2(defined_yield_q);
@@ -6335,13 +6387,22 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
         helper = MRC_SYM_2(defined_super_q);
         break;
       case PM_CALL_NODE:
+      {
+        pm_call_node_t *call = (pm_call_node_t *)value;
+        /* CRuby answers "expression" for a call carrying a literal block,
+           without asking whether the method is there; a block passed as
+           `&arg` keeps the call an ordinary one */
+        if (call->block != NULL && nint(call->block) == PM_BLOCK_NODE) {
+          type = "expression";
+        }
         /* a bare method call on self (no explicit receiver, so no operand to
            evaluate); a call with a receiver would need to evaluate it */
-        if (((pm_call_node_t *)cast->value)->receiver == NULL) {
+        else if (call->receiver == NULL) {
           helper = MRC_SYM_2(defined_method_q);
-          arg = ((pm_call_node_t *)cast->value)->name;
+          arg = call->name;
         }
         break;
+      }
       default:
         break;
       }
@@ -6352,11 +6413,17 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
         }
         else if (helper) {
           genop_1(s, OP_LOADSELF, cursp());   /* receiver slot for the SSEND */
-          if (arg2 != 0) {          /* A::B: two symbol operands */
+          if (path_len > 0) {       /* A::B::C: where to start, then the names */
             push();
-            genop_2(s, OP_LOADSYM, cursp(), new_sym(s, arg));
+            if (path_toplevel) genop_1(s, OP_OCLASS, cursp());
+            else genop_1(s, OP_LOADNIL, cursp());
             push();
-            genop_2(s, OP_LOADSYM, cursp(), new_sym(s, arg2));
+            for (int i = 0; i < path_len; i++) {
+              genop_2(s, OP_LOADSYM, cursp(), new_sym(s, path[i]));
+              push();
+            }
+            pop_n(path_len);
+            genop_2(s, OP_ARRAY, cursp(), path_len);
             push(); push();         /* reserve args + block slots (nregs) */
             pop_n(4);
             genop_3(s, OP_SSEND, cursp(), new_sym(s, helper), 2);
