@@ -969,11 +969,6 @@ lv_idx(mrc_codegen_scope *s, mrc_sym id)
 }
 
 
-#define MRC_PROC_CFUNC_FL 128
-#define MRC_PROC_CFUNC_P(p) (((p)->flags & MRC_PROC_CFUNC_FL) != 0)
-#define MRC_PROC_SCOPE 2048
-#define MRC_PROC_SCOPE_P(p) (((p)->flags & MRC_PROC_SCOPE) != 0)
-
 static int
 search_upvar(mrc_codegen_scope *s, mrc_sym id, int *idx)
 {
@@ -1010,7 +1005,7 @@ search_upvar(mrc_codegen_scope *s, mrc_sym id, int *idx)
           }
         }
       }
-      if (MRC_PROC_SCOPE_P(u)) break;
+      if (MRC_PROC_LVAR_BOUNDARY_P(u)) break;
       u = u->upper;
       lv++;
     }
@@ -1581,9 +1576,80 @@ gen_blkmove(mrc_codegen_scope *s, uint16_t ainfo, int lv)
     gen_move(s, cursp(), off, 0);
   }
   else {
-    genop_3(s, OP_GETUPVAR, cursp(), off, lv);
+    /* `lv` counts the scopes between here and the method, while `OP_GETUPVAR`
+       counts the envs above this frame's own, and the method's env is the
+       first of those: one level fewer. */
+    genop_3(s, OP_GETUPVAR, cursp(), off, lv-1);
   }
   push();
+}
+
+/* Whether a `return` here leaves a method that is not part of this compile
+   unit.  A string compiled for `eval` holds no method scope of its own, and
+   `return` in it leaves the method that encloses the `eval` call, which is
+   the frame the proc chain reaches and the one `OP_RETURN_BLK` unwinds to. */
+static mrc_bool
+return_leaves_upper_p(mrc_codegen_scope *s)
+{
+#if defined(MRC_TARGET_MRUBY)
+  if (!s->c->upper) return FALSE;
+  for (mrc_codegen_scope *s2 = s; s2; s2 = s2->prev) {
+    if (s2->mscope) return FALSE;
+  }
+  return TRUE;
+#else
+  (void)s;
+  return FALSE;
+#endif
+}
+
+/* Find the method scope that a `super`, a `zsuper` or a `yield` belongs to.
+   Answers its `ainfo`, the argument layout that the forwarded arguments and
+   the block are read by, and sets `lvp` to the number of levels between it
+   and `s`.  Answers -1 when there is no method scope to find. */
+static int
+search_mscope(mrc_codegen_scope *s, int *lvp)
+{
+  mrc_codegen_scope *s2 = s;
+  int lv = 0;
+
+  while (!s2->mscope) {
+    lv++;
+    s2 = s2->prev;
+    if (!s2) break;
+  }
+  *lvp = lv;
+  if (s2) return (int)s2->ainfo;
+
+#if defined(MRC_TARGET_MRUBY)
+  /* A string compiled for `eval` has a scope chain of its own, and the method
+     that encloses the `eval` call is not on it: it is on the proc chain the
+     context carries.  The walk above ended on the scope `generate_code()`
+     wraps a compile unit in, which is one level more than the string's own
+     scope and stands for no frame, so `c->upper` is the proc the level count
+     has now reached.  Restate the `OP_ENTER` that the method scope emitted
+     for itself as the `ainfo` it would have answered. */
+  const struct RProc *u = s->c->upper;
+
+  (*lvp)--;
+
+  while (u && !MRC_PROC_CFUNC_P(u)) {
+    if (MRC_PROC_SCOPE_P(u)) {
+      const struct mrc_irep *ir = (const struct mrc_irep *)u->body.irep;
+      if (!ir || ir->ilen == 0 || ir->iseq[0] != OP_ENTER) break;
+      uint32_t a = PEEK_W(ir->iseq + 1);
+      uint32_t ma = MRC_ASPEC_REQ(a) + MRC_ASPEC_OPT(a);
+      return (int)(((ma & 0x3f) << 7)
+                   | (MRC_ASPEC_REST(a) << 6)
+                   | ((MRC_ASPEC_POST(a) & 0x1f) << 1)
+                   | ((MRC_ASPEC_KEY(a) || MRC_ASPEC_KDICT(a)) ? 1 : 0));
+    }
+    u = u->upper;
+    (*lvp)++;
+  }
+#endif
+
+  return -1;
 }
 
 static void
@@ -1820,8 +1886,12 @@ gen_forward_arg(mrc_codegen_scope *s, mrc_sym sym, int val)
   }
 }
 
+/* The first `upto` of the arguments, which is all of them for gen_values()
+   below.  An attribute write asks for one fewer: the last of its arguments
+   is the value being assigned, which it has to hold on to rather than let
+   into the array a splat gathers the rest into. */
 static int
-gen_values(mrc_codegen_scope *s, mrc_node *tree, int val, int limit)
+gen_values_upto(mrc_codegen_scope *s, mrc_node *tree, int val, int limit, size_t upto)
 {
   if (tree == NULL) return 0;   /* no arguments (e.g. empty index `a[]`) */
   CAST(arguments);
@@ -1835,7 +1905,7 @@ gen_values(mrc_codegen_scope *s, mrc_node *tree, int val, int limit)
   if (cursp() >= slimit) slimit = INT16_MAX;
 
   if (!val) {
-    for (size_t i = 0; i < cast->arguments.size; i++) {
+    for (size_t i = 0; i < upto; i++) {
       t = (mrc_node *)cast->arguments.nodes[i];
       codegen(s, t, NOVAL);
       n++;
@@ -1843,7 +1913,7 @@ gen_values(mrc_codegen_scope *s, mrc_node *tree, int val, int limit)
     return n;
   }
 
-  for (size_t i = 0; i < cast->arguments.size; i++) {
+  for (size_t i = 0; i < upto; i++) {
     t = (mrc_node *)cast->arguments.nodes[i];
     if (nint(t) == PM_KEYWORD_HASH_NODE) break;
     int is_splat = nint(t) == PM_SPLAT_NODE;
@@ -1919,6 +1989,14 @@ gen_values(mrc_codegen_scope *s, mrc_node *tree, int val, int limit)
     return -1;
   }
   return n;
+}
+
+static int
+gen_values(mrc_codegen_scope *s, mrc_node *tree, int val, int limit)
+{
+  if (tree == NULL) return 0;
+  CAST(arguments);
+  return gen_values_upto(s, tree, val, limit, cast->arguments.size);
 }
 
 static void
@@ -2035,7 +2113,24 @@ gen_assignment(mrc_codegen_scope *s, mrc_node *tree, mrc_node *rhs, int sp, int 
     {
       CAST(index_target);
       codegen(s, cast->receiver, VAL);
-      int n = gen_values(s, (mrc_node *)cast->arguments, VAL, 14);
+      /* 13 rather than 14: the value to assign is an argument too, and a
+         count that reaches CALL_MAXARGS is the mark for arguments gathered
+         in an array rather than a count of them. */
+      int n = gen_values(s, (mrc_node *)cast->arguments, VAL, 13);
+      if (n < 0) {
+        /* More indices than a count carries: gen_values() gathered them into
+           an array at cursp(), and the value joins them there. */
+        push();
+        genop_2(s, OP_MOVE, cursp(), sp);
+        push();          /* the value, which is also the block slot the send
+                            reads after the array */
+        pop();
+        pop();
+        genop_2(s, OP_ARYPUSH, cursp(), 1);
+        pop();
+        genop_3(s, OP_SEND, cursp(), new_sym(s, MRC_OPSYM_2(aset)), CALL_MAXARGS);
+        break;
+      }
       /* the value to assign lives in sp (set by the caller for multiple
          assignment); cursp()-n*2+1 would point at an index register */
       genop_2(s, OP_MOVE, cursp(), sp);
@@ -2229,48 +2324,6 @@ gen_hash(mrc_codegen_scope *s, mrc_node *tree, int val, int limit)
   return len;
 }
 
-#if defined(MRC_TARGET_MRUBY)
-static mrc_bool
-mrc_mruby_numbered_parameter_upvar(mrc_codegen_scope *s, mrc_sym id, int *lv, int *idx)
-{
-  if (id == PM_CONSTANT_ID_UNSET || id > s->c->p->constant_pool.size) {
-    return FALSE;
-  }
-
-  pm_constant_t *constant = pm_constant_pool_id_to_constant(&s->c->p->constant_pool, id);
-  if (constant->length != 2 || constant->start[0] != '_' ||
-      constant->start[1] < '1' || constant->start[1] > '9') {
-    return FALSE;
-  }
-
-  mrc_sym intern = mrb_intern(s->c->mrb, (const char *)constant->start, constant->length);
-  const struct RProc *u = s->c->upper;
-  *lv = 0;
-  while (u && !MRC_PROC_CFUNC_P(u)) {
-    const struct mrc_irep *ir = (const struct mrc_irep *)u->body.irep;
-    uint_fast16_t n = ir->nlocals;
-    const mrc_sym *v = ir->lv;
-    int number = constant->start[1] - '0';
-    if (v) {
-      for (int i = 1; n > 1; n--, v++, i++) {
-        if (*v == intern) {
-          *idx = i;
-          return TRUE;
-        }
-      }
-    }
-    else if (number < ir->nlocals) {
-      *idx = number;
-      return TRUE;
-    }
-    if (MRC_PROC_SCOPE_P(u)) break;
-    u = u->upper;
-    (*lv)++;
-  }
-  return FALSE;
-}
-#endif
-
 /* Attribute assignment (`recv.attr = v`, `recv[i] = v`) as an expression.
    Prism bundles the RHS as the last positional argument of the call node.
    The whole expression must evaluate to that RHS, not to the setter's
@@ -2317,18 +2370,37 @@ gen_call_assign(mrc_codegen_scope *s, mrc_node *tree, int val, int safe, int rec
     skip = genjmp2_0(s, OP_JMPNIL, cursp(), val);
   }
 
-  /* positional arguments, the last of which is the RHS */
+  /* The indices, then the RHS, which is the last of the arguments and is
+     generated apart from them: a splat among the indices gathers them into
+     an array, and the RHS has to be held back from it until it has been
+     copied to the result slot.  13 leaves room for the RHS under
+     CALL_MAXARGS, which is the mark for arguments gathered in an array
+     rather than a count of them. */
   CAST3(arguments, cast->arguments, arguments);
-  if (arguments) {
-    for (size_t i = 0; i < arguments->arguments.size; i++) {
-      codegen(s, (mrc_node *)arguments->arguments.nodes[i], VAL);
-      n++;
+  int gathered = 0;
+  if (arguments && 0 < arguments->arguments.size) {
+    size_t last = arguments->arguments.size - 1;
+    n = gen_values_upto(s, (mrc_node *)arguments, VAL, 13, last);
+    if (n < 0) {                /* the indices are in an array at cursp() */
+      gathered = 1;
+      push();
     }
+    codegen(s, (mrc_node *)arguments->arguments.nodes[last], VAL);
+    if (!gathered) n++;
   }
   if (val) {
     /* nopeep: keep the RHS in its argument slot for the SEND, while also
        copying it to the reserved result slot */
     gen_move(s, top, cursp()-1, 1);   /* preserve the RHS as the result */
+  }
+
+  if (gathered) {
+    /* the RHS joins the indices in their array, which is the one argument */
+    pop();
+    pop();
+    genop_2(s, OP_ARYPUSH, cursp(), 1);
+    push();
+    n = CALL_MAXARGS;
   }
 
   push(); pop();
@@ -2364,8 +2436,9 @@ attr_assign_simple_args(pm_call_node_t *cast)
   if (arguments->arguments.size == 0) return FALSE;
   for (size_t i = 0; i < arguments->arguments.size; i++) {
     int t = nint((mrc_node *)arguments->arguments.nodes[i]);
-    if (t == PM_SPLAT_NODE || t == PM_KEYWORD_HASH_NODE ||
-        t == PM_FORWARDING_ARGUMENTS_NODE) {
+    /* A splat is gathered by gen_values_upto(); keywords and forwarding are
+       not what an index assignment can be written with. */
+    if (t == PM_KEYWORD_HASH_NODE || t == PM_FORWARDING_ARGUMENTS_NODE) {
       return FALSE;
     }
   }
@@ -2385,19 +2458,6 @@ gen_call(mrc_codegen_scope *s, mrc_node *tree, int val, int safe, int recv_ready
   }
   int skip = 0, n = 0, nk = 0, noop = no_optimize(s), noself = 0, blk = 0;
   int sp_save = recv_ready ? cursp()-1 : cursp();
-
-#if defined(MRC_TARGET_MRUBY)
-  if (cast->receiver == NULL && cast->arguments == NULL && cast->block == NULL) {
-    int lv, idx;
-    if (mrc_mruby_numbered_parameter_upvar(s, sym, &lv, &idx)) {
-      if (val) {
-        genop_3(s, OP_GETUPVAR, cursp(), idx, lv);
-        push();
-      }
-      return;
-    }
-  }
-#endif
 
   if (recv_ready) {
     /* the receiver has been evaluated already and sits at cursp()-1 */
@@ -2544,6 +2604,37 @@ gen_massignment(mrc_codegen_scope *s, mrc_node *tree, int rhs, int val)
   }
 }
 
+/* Fail the match unless `value` answers `===` for the value at `target`: the
+   test the constant of `Const[...]` and `Const(...)` makes, and the one a pin
+   pattern makes over what `^` names. */
+static void
+gen_pattern_eqq(mrc_codegen_scope *s, mrc_node *value, int target, uint32_t *fail_pos)
+{
+  codegen(s, value, VAL);
+  gen_move(s, cursp(), target, 0);
+  push(); push(); pop(); pop(); pop();
+  genop_3(s, OP_SEND, cursp(), new_sym(s, MRC_OPSYM_2(eqq)), 1);
+  *fail_pos = genjmp2(s, OP_JMPNOT, cursp(), *fail_pos, 1);
+}
+
+/* Fail the match unless the value at `target` answers `mid`.  A pattern asks
+   before it sends, so a subject with no deconstruction hook simply does not
+   match, the way CRuby has it, rather than raising NoMethodError. */
+static void
+gen_pattern_respond_to(mrc_codegen_scope *s, int target, mrc_sym mid, uint32_t *fail_pos)
+{
+  int reg = cursp();
+
+  gen_move(s, reg, target, 0);
+  push();                       /* protect receiver */
+  genop_2(s, OP_LOADSYM, cursp(), new_sym(s, mid));
+  push();                       /* protect the argument */
+  push(); pop();                /* touch block slot */
+  s->sp = reg;
+  genop_3(s, OP_SEND, reg, new_sym(s, MRC_SYM_2(respond_to_p)), 1);
+  *fail_pos = genjmp2(s, OP_JMPNOT, reg, *fail_pos, 1);
+}
+
 /* Generate pattern matching code for a single pattern.
  * target: stack position of the value being matched
  * fail_pos: linked list of jump positions for pattern match failure
@@ -2553,6 +2644,13 @@ static void
 codegen_pattern(mrc_codegen_scope *s, mrc_node *pattern, int target, uint32_t *fail_pos, int known_array_len)
 {
   uint32_t tmp;
+
+  /* A pattern reads `target` more than once: it asks whether the value answers
+     the deconstruction hook before sending it, and a later alternative or a
+     later `in` clause reads it again.  The instruction that produced the value
+     is therefore not the last use the peephole would take this pattern's first
+     read for, so label the point before generating any of the pattern. */
+  new_label(s);
 
   /* Handle guard clause wrapper (PM_IF_NODE wrapping the actual pattern) */
   if (nint(pattern) == PM_IF_NODE) {
@@ -2717,42 +2815,21 @@ codegen_pattern(mrc_codegen_scope *s, mrc_node *pattern, int target, uint32_t *f
     }
     break;
 
+  /* `^x`, `^@x`, `^@@x`, `^$x` and `^(expression)`: what the pin names is
+     read the way any other expression is read, then asked `===`.  Reading it
+     through codegen is what lets the pin reach a variable of an enclosing
+     scope, an instance, class or global variable, and an expression. */
   case PM_PINNED_VARIABLE_NODE:
     {
       CAST3(pinned_variable, pattern, pat_pin);
-      /* Get the variable based on its type */
-      mrc_node *var_node = (mrc_node *)pat_pin->variable;
-      mrc_sym var_name = 0;
+      gen_pattern_eqq(s, (mrc_node *)pat_pin->variable, target, fail_pos);
+    }
+    break;
 
-      if (nint(var_node) == PM_LOCAL_VARIABLE_READ_NODE) {
-        pm_local_variable_read_node_t *lvar = (pm_local_variable_read_node_t *)var_node;
-        var_name = lvar->name;
-      }
-
-      if (var_name) {
-        int idx = lv_idx(s, var_name);
-        if (idx > 0) {
-          /* Compare: pinned_value === target */
-          gen_move(s, cursp(), idx, 0);  /* Load pinned variable */
-          push();
-          gen_move(s, cursp(), target, 0);  /* Load target */
-          push(); push(); pop(); pop(); pop();
-          genop_3(s, OP_SEND, cursp(), new_sym(s, MRC_OPSYM_2(eqq)), 1);
-          /* Jump to fail if not matched */
-          tmp = genjmp2(s, OP_JMPNOT, cursp(), *fail_pos, 1);
-          *fail_pos = tmp;
-        }
-        else {
-          /* Variable not found - fail the match */
-          tmp = genjmp(s, OP_JMP, *fail_pos);
-          *fail_pos = tmp;
-        }
-      }
-      else {
-        /* Unable to extract variable name - fail the match */
-        tmp = genjmp(s, OP_JMP, *fail_pos);
-        *fail_pos = tmp;
-      }
+  case PM_PINNED_EXPRESSION_NODE:
+    {
+      CAST3(pinned_expression, pattern, pat_pin);
+      gen_pattern_eqq(s, (mrc_node *)pat_pin->expression, target, fail_pos);
     }
     break;
 
@@ -2763,6 +2840,10 @@ codegen_pattern(mrc_codegen_scope *s, mrc_node *pattern, int target, uint32_t *f
       int post_len = pat_arr->posts.size;
       int arr_reg;
       int i;
+
+      if (pat_arr->constant) {
+        gen_pattern_eqq(s, (mrc_node *)pat_arr->constant, target, fail_pos);
+      }
 
       /* Optimization: if we know the target is an array, skip deconstruct */
       if (known_array_len >= 0) {
@@ -2846,6 +2927,8 @@ codegen_pattern(mrc_codegen_scope *s, mrc_node *pattern, int target, uint32_t *f
         }
       }
       else {
+        gen_pattern_respond_to(s, target, MRC_SYM_1(deconstruct), fail_pos);
+
         /* Call target.deconstruct() */
         gen_move(s, cursp(), target, 0);
         push_n(2); pop_n(2);  /* space for receiver and a block */
@@ -2933,6 +3016,10 @@ codegen_pattern(mrc_codegen_scope *s, mrc_node *pattern, int target, uint32_t *f
       int hash_reg;
       int num_keys = 0;
 
+      if (pat_hash->constant) {
+        gen_pattern_eqq(s, (mrc_node *)pat_hash->constant, target, fail_pos);
+      }
+
       /* Count regular (non-rest) keys */
       for (size_t i = 0; i < pat_hash->elements.size; i++) {
         if (nint(pat_hash->elements.nodes[i]) == PM_ASSOC_NODE) num_keys++;
@@ -2944,6 +3031,8 @@ codegen_pattern(mrc_codegen_scope *s, mrc_node *pattern, int target, uint32_t *f
       /* Call target.deconstruct_keys(keys_array or nil).
        * Pass keys_array only when no rest pattern (partial-match optimization).
        * Pass nil when any ** is present so deconstruct_keys returns all keys. */
+      gen_pattern_respond_to(s, target, MRC_SYM_1(deconstruct_keys), fail_pos);
+
       hash_reg = cursp();
       gen_move(s, hash_reg, target, 0);
       push(); /* protect receiver */
@@ -2973,14 +3062,13 @@ codegen_pattern(mrc_codegen_scope *s, mrc_node *pattern, int target, uint32_t *f
       }
       push(); /* protect hash_reg */
 
-      /* Fail if deconstruct_keys returned nil */
-      tmp = genjmp2(s, OP_JMPNIL, hash_reg, *fail_pos, 0);
-      *fail_pos = tmp;
-
       /* Check all keys exist and get values via __pat_values.
        * __pat_values(keys_array) returns an array of values in key order,
-       * or false if any key is missing. */
-      if (num_keys > 0) {
+       * or false if any key is missing.  It runs even for a pattern with no
+       * keys, since it is also the type check: __pat_values is Hash's, and
+       * Object's raises the TypeError CRuby raises when #deconstruct_keys
+       * answers anything but a Hash, a nil included. */
+      {
         int vals_reg = cursp();
         gen_move(s, vals_reg, hash_reg, 0);
         push(); /* protect receiver */
@@ -3109,6 +3197,12 @@ codegen_pattern(mrc_codegen_scope *s, mrc_node *pattern, int target, uint32_t *f
       int arr_reg = cursp();
       int idx_reg;
       uint32_t loop_start, match_fail, loop_end;
+
+      if (pat_find->constant) {
+        gen_pattern_eqq(s, (mrc_node *)pat_find->constant, target, fail_pos);
+      }
+
+      gen_pattern_respond_to(s, target, MRC_SYM_1(deconstruct), fail_pos);
 
       /* Call deconstruct on target */
       gen_move(s, cursp(), target, 0);
@@ -6176,16 +6270,11 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     case PM_SUPER_NODE:
     {
       CAST(super);
-      mrc_codegen_scope *s2 = s;
-      int lv = 0;
+      int lv;
+      int ainfo = search_mscope(s, &lv);
       int n = 0, nk = 0, st = 0;
 
       push();
-      while (!s2->mscope) {
-        lv++;
-        s2 = s2->prev;
-        if (!s2) break;
-      }
       CAST3(arguments, cast->arguments, arguments);
       if (arguments) {
         st = n = gen_values(s, (mrc_node *)arguments, VAL, 14);
@@ -6207,7 +6296,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
         if (cast->block) {
           codegen(s, (mrc_node *)cast->block, VAL);
         }
-        else if (s2) gen_blkmove(s, s2->ainfo, lv);
+        else if (ainfo >= 0) gen_blkmove(s, (uint16_t)ainfo, lv);
         else {
           genop_1(s, OP_LOADNIL, cursp());
           push();
@@ -6218,7 +6307,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
         if (cast->block) {
           codegen(s, (mrc_node *)cast->block, VAL);
         }
-        else if (s2) gen_blkmove(s, s2->ainfo, lv);
+        else if (ainfo >= 0) gen_blkmove(s, (uint16_t)ainfo, lv);
         else {
           genop_1(s, OP_LOADNIL, cursp());
           push();
@@ -6233,21 +6322,12 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     case PM_FORWARDING_SUPER_NODE:
     {
       CAST(forwarding_super);
-      mrc_codegen_scope *s2 = s;
-      int lv = 0;
-      uint16_t ainfo = 0;
+      int lv;
+      int ainfo = search_mscope(s, &lv);
       int n = CALL_MAXARGS;
       int sp = cursp();
 
       push();        /* room for receiver */
-      while (!s2->mscope) {
-        lv++;
-        s2 = s2->prev;
-        if (!s2) break;
-      }
-      if (s2 && s2->ainfo > 0) {
-        ainfo = s2->ainfo;
-      }
       if (ainfo > 0) {
         genop_2S(s, OP_ARGARY, cursp(), (ainfo<<4)|(lv & 0xf));
         push(); push(); push();   /* ARGARY pushes 3 values at most */
@@ -6268,13 +6348,13 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
         if (cast->block) {
           codegen(s, (mrc_node *)cast->block, VAL);
         }
-        else if (s2) {
+        else if (ainfo >= 0) {
           gen_blkmove(s, 0, lv);
         }
         else {
-          /* The walk above found no method scope, so `lv` counts past the
-             outermost one and there is no block to forward: a `super` here
-             raises rather than call anything. PM_SUPER_NODE says the same. */
+          /* There is no method scope to belong to, so there is no block to
+             forward: a `super` here raises rather than call anything.
+             PM_SUPER_NODE says the same. */
           genop_1(s, OP_LOADNIL, cursp());
           push();
         }
@@ -6294,7 +6374,7 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
       else {
         genop_1(s, OP_LOADNIL, cursp());
       }
-      if (s->loop) {
+      if (s->loop || return_leaves_upper_p(s)) {
         gen_return(s, OP_RETURN_BLK, cursp());
       }
       else {
@@ -6306,18 +6386,10 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     case PM_YIELD_NODE:
     {
       CAST(yield);
-      mrc_codegen_scope *s2 = s;
-      int lv = 0, ainfo = -1;
+      int lv;
+      int ainfo = search_mscope(s, &lv);
       int n = 0, nk = 0, st = 0;
 
-      while (!s2->mscope) {
-        lv++;
-        s2 = s2->prev;
-        if (!s2) break;
-      }
-      if (s2) {
-        ainfo = (int)s2->ainfo;
-      }
       if (ainfo < 0) codegen_error(s, "invalid yield (SyntaxError)");
       push();
       CAST3(arguments, cast->arguments, arguments);
