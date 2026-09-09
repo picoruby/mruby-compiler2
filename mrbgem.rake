@@ -31,6 +31,18 @@ MRuby::Gem::Specification.new('mruby-compiler') do |spec|
   elsif !cc.defines.include?('MRB_NO_GEMS')
     cc.defines << 'MRC_TARGET_MRUBY'
   end
+  # Prism allocates the tree it parses, and the walk that gives the tree back
+  # costs a C frame per level of it; a tree deep enough to run that off the
+  # stack is written in ordinary source, so the tree is taken from an arena
+  # and given back in one piece instead (see include/prism_xallocator.h).
+  #
+  # A C++ ABI build takes the arena's blocks from libc.  Prism is compiled as
+  # C there, so it reaches the arena through the C linkage the header gives
+  # it; what it must not reach is mrb_malloc(), which raises on failure and
+  # would throw through Prism's frames.  Nothing is lost by it: that build
+  # already had every Prism allocation outside mrb_malloc().
+  cc.defines << 'MRC_PRISM_ARENA'
+  cc.defines << 'MRC_PRISM_ARENA_LIBC' if build.cxx_abi_enabled?
   cc.defines << 'MRC_DEBUG' if cc.has_define?('MRB_DEBUG')
   cc.defines << 'PRISM_BUILD_MINIMAL' unless cc.defines.include?('MRC_DEBUG')
   # PRISM_BUILD_MINIMAL stubs out pm_prettyprint(), so `mruby -v` can only dump
@@ -117,9 +129,9 @@ MRuby::Gem::Specification.new('mruby-compiler') do |spec|
   # MRB_USE_CXX_ABI build the rest of mruby compiles as C++, so strip the C++
   # compile flag here to keep these sources on the C compiler; mrc_common.h
   # wraps the Prism header in extern "C" so the C++ glue links against them.
-  # Route Prism's allocator to libc there too: the C++ core exports mrb_malloc
-  # with C++ linkage, which the C-compiled Prism objects could not resolve, and
-  # Prism's parse memory is transient and freed through the same libc path.
+  # Prism's allocator is the arena, which the header declares with C linkage
+  # so that these C objects resolve it; its blocks come from libc there, so
+  # nothing here reaches a C++-linkage symbol (see MRC_PRISM_ARENA_LIBC).
   # The compiler is derived when a rule is first resolved (not here) so cc is
   # already fully populated with the build's generated-header include flags.
   #
@@ -132,7 +144,7 @@ MRuby::Gem::Specification.new('mruby-compiler') do |spec|
     prism_cc ||= if build.cxx_abi_enabled?
       cc.clone.tap do |c|
         c.flags = cc.flags.flatten - [cc.cxx_compile_flag].flatten
-        c.defines = cc.defines + %w(MRC_ALLOC_LIBC)
+        c.defines = cc.defines
       end
     else
       cc
@@ -143,7 +155,7 @@ MRuby::Gem::Specification.new('mruby-compiler') do |spec|
     prism_cc ||= if build.cxx_abi_enabled?
       cc.clone.tap do |c|
         c.flags = cc.flags.flatten - [cc.cxx_compile_flag].flatten
-        c.defines = cc.defines + %w(MRC_ALLOC_LIBC)
+        c.defines = cc.defines
       end
     else
       cc

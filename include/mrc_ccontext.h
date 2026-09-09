@@ -61,6 +61,17 @@ typedef struct mrc_ccontext {
   uint16_t filename_table_length;
   uint16_t current_filename_index;
 #endif
+
+  /* The arena everything Prism allocates for this context is taken from, and
+     the arena of the context this one was made inside of, put back when this
+     one is freed. Unused where Prism allocates through libc; see
+     prism_xallocator.h for what the arena is for. */
+  void *prism_arena;
+  void *prism_arena_outer;
+
+  /* How deep the brackets stand where the lexer is, so that a nesting Prism
+     would recurse through is refused instead. See src/compile.c. */
+  uint32_t nesting;
 } mrc_ccontext;                 /* compiler context */
 
 #ifdef MRC_TARGET_MRUBY
