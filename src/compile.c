@@ -55,10 +55,53 @@ mrc_load_exec(mrc_ccontext *c, mrc_node *ast)
   return irep;
 }
 
+/* Refuse a nesting deeper than Prism means to parse.
+ *
+ * Prism counts how deep it is and refuses to go past PRISM_DEPTH_MAXIMUM,
+ * but only where it parses an expression: the walk over a pattern carries
+ * the count and never reads it, so a pattern nested as deep as it is
+ * written recurses until the C stack runs out.  The count kept here is of
+ * the brackets the lexer has opened, which is what such a nesting is made
+ * of, and the token that would open one past the limit is handed to the
+ * parser as the end of the input instead, which every part of Prism is
+ * written to stop at.
+ *
+ * The limit is Prism's own, so a program it would have parsed is parsed
+ * still: a nesting it accepts never reaches this, and one it refuses was
+ * refused before, only now before the recursion rather than during it.
+ */
+static void
+lex_nesting_check(mrc_ccontext *c, pm_token_t *token)
+{
+  switch (token->type) {
+  case PM_TOKEN_BRACKET_LEFT: case PM_TOKEN_BRACKET_LEFT_ARRAY:
+  case PM_TOKEN_BRACE_LEFT: case PM_TOKEN_PARENTHESIS_LEFT:
+  case PM_TOKEN_EMBEXPR_BEGIN:
+    if (c->nesting > PRISM_DEPTH_MAXIMUM) {
+      /* The parser stops at the end of the input wherever it stands, and
+         reports what it was waiting for; the tree it built so far goes back
+         with the arena. */
+      token->type = PM_TOKEN_EOF;
+      token->end = token->start;
+      return;
+    }
+    c->nesting++;
+    break;
+  case PM_TOKEN_BRACKET_RIGHT: case PM_TOKEN_BRACE_RIGHT:
+  case PM_TOKEN_PARENTHESIS_RIGHT: case PM_TOKEN_EMBEXPR_END:
+    if (c->nesting > 0) c->nesting--;
+    break;
+  default:
+    break;
+  }
+}
+
 static void
 partial_hook(void *data, pm_parser_t *p, pm_token_t *token)
 {
   mrc_ccontext *c = (mrc_ccontext *)data;
+
+  lex_nesting_check(c, token);
   if (c->current_filename_index + 1 == c->filename_table_length) {
     return;
   }
@@ -189,6 +232,7 @@ mrc_pm_parser_init(mrc_parser_state *p, uint8_t **source, size_t size, mrc_ccont
 #if defined(MRC_TARGET_MRUBY)
   mrc_pm_options_init(cc);
 #endif
+  cc->nesting = 0;
   pm_parser_init(p, *source, size, cc->options);
   p->lex_callback = cb;
   mrc_init_presym(&p->constant_pool);
@@ -409,6 +453,21 @@ mrc_parse_file_cxt(mrc_ccontext *c, const char **filenames, uint8_t **source)
   return mrc_pm_parse(c);
 }
 
+/* Give back the tree.  Where the arena is in use nothing is done here: the
+   parser is still holding what it allocated from the same arena, and the
+   whole of it is given back at mrc_ccontext_free() instead.  Where the arena
+   is not in use, which is a build with its own allocator, the tree is walked
+   as prism walks it. */
+static void
+mrc_prism_release_tree(mrc_ccontext *c, mrc_node *root)
+{
+#if defined(MRC_TARGET_MRUBY) && defined(MRC_PRISM_ARENA)
+  (void)c; (void)root;
+#else
+  if (root) pm_node_destroy(c->p, root);
+#endif
+}
+
 MRC_API mrc_irep *
 mrc_load_file_cxt(mrc_ccontext *c, const char **filenames, uint8_t **source)
 {
@@ -417,7 +476,10 @@ mrc_load_file_cxt(mrc_ccontext *c, const char **filenames, uint8_t **source)
     return NULL;
   }
   mrc_irep *irep = mrc_load_exec(c, root);
-  pm_node_destroy(c->p, root);
+  /* The tree is given back with the arena it was parsed into rather than
+     walked: see prism_xallocator.h.  Everything prism allocated for this
+     parse goes with it, so nothing is left behind. */
+  mrc_prism_release_tree(c, root);
   return irep;
 }
 #endif
@@ -439,7 +501,10 @@ mrc_load_string_cxt(mrc_ccontext *c, const uint8_t **source, size_t length)
 {
   mrc_node *root = mrc_parse_string_cxt(c, source, length);
   mrc_irep *irep = mrc_load_exec(c, root);
-  pm_node_destroy(c->p, root);
+  /* The tree is given back with the arena it was parsed into rather than
+     walked: see prism_xallocator.h.  Everything prism allocated for this
+     parse goes with it, so nothing is left behind. */
+  mrc_prism_release_tree(c, root);
   return irep;
 }
 
