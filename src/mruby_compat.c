@@ -58,6 +58,11 @@ copy_context_to_mrc(mrc_ccontext *dst, const mrb_ccontext *src)
     pm_options_scopes_init(options, 1);
     scope = &options->scopes[0];
     pm_options_scope_init(scope, (size_t)src->slen);
+    /* Before the names are copied: those allocations raise when they fail,
+       and mrc_ccontext_free() then gives back the copies made so far.  Not
+       before the two calls above, which set a count ahead of allocating the
+       array it counts. */
+    dst->options = options;
     for (int i = 0; i < src->slen; i++) {
       const char *name = mrb_sym_name(dst->mrb, src->syms[i]);
       if (name) {
@@ -67,7 +72,6 @@ copy_context_to_mrc(mrc_ccontext *dst, const mrb_ccontext *src)
         pm_string_constant_init(&scope->locals[i], copy, len);
       }
     }
-    dst->options = options;
     mrc_ccontext_arena_restore(dst, arena_prev);
   }
 }
@@ -153,12 +157,11 @@ copy_diagnostics_to_parser(mrb_state *mrb, struct mrb_parser_state *p, const mrc
   }
 }
 
-static struct mrb_parser_state*
-parser_alloc(mrb_state *mrb, mrb_ccontext *c)
+/* p->mrb is set before anything that can raise, so mrb_parser_free() can
+   take a state that was only partly set up. */
+static void
+parser_init(struct mrb_parser_state *p, mrb_state *mrb, mrb_ccontext *c)
 {
-  struct mrb_parser_state *p;
-
-  p = (struct mrb_parser_state*)mrb_calloc(mrb, 1, sizeof(struct mrb_parser_state));
   p->mrb = mrb;
   p->cxt = c;
   p->capture_errors = c ? c->capture_errors : FALSE;
@@ -168,19 +171,29 @@ parser_alloc(mrb_state *mrb, mrb_ccontext *c)
   if (c && c->filename) {
     p->filename_sym = mrb_intern_cstr(mrb, c->filename);
   }
-  return p;
 }
 
 static struct mrb_parser_state*
-parse_source(mrb_state *mrb, const char *s, size_t len, mrb_ccontext *c)
+parser_alloc(mrb_state *mrb, mrb_ccontext *c)
 {
   struct mrb_parser_state *p;
+
+  p = (struct mrb_parser_state*)mrb_calloc(mrb, 1, sizeof(struct mrb_parser_state));
+  parser_init(p, mrb, c);
+  return p;
+}
+
+/* Everything allocated here is attached to p as soon as it exists, so that
+   mrb_parser_free(p) releases it if a later allocation fails. */
+static void
+parse_into(struct mrb_parser_state *p, const char *s, size_t len, mrb_ccontext *c)
+{
+  mrb_state *mrb = p->mrb;
   mrc_ccontext *mc;
   uint8_t *source;
   const uint8_t *parse_source;
   mrc_irep *irep;
 
-  p = parser_alloc(mrb, c);
   source = (uint8_t*)mrb_malloc(mrb, len + 1);
   memcpy(source, s, len);
   source[len] = '\0';
@@ -188,14 +201,59 @@ parse_source(mrb_state *mrb, const char *s, size_t len, mrb_ccontext *c)
   p->send = (const char*)source + len;
 
   mc = mrc_ccontext_new(mrb);
-  copy_context_to_mrc(mc, c);
   p->ylval = mc;
+  copy_context_to_mrc(mc, c);
 
   parse_source = source;
   irep = mrc_load_string_cxt(mc, &parse_source, len);
-  update_context_locals_from_irep(mrb, c, mc, irep);
   p->tree = (mrb_ast_node*)irep;
+  update_context_locals_from_irep(mrb, c, mc, irep);
   copy_diagnostics_to_parser(mrb, p, mc);
+}
+
+/* Answers NULL when memory runs out, with the NoMemoryError left in
+   mrb->exc. Compiling allocates through mrb_malloc(), which raises when it
+   fails; with no handler around the load (mrb_load_string() called from C)
+   that raise has nowhere to go and aborts, and with one (eval) the partly
+   built state was lost. The lrama parser caught it in mrb_parser_parse()
+   the same way. */
+struct parse_args {
+  struct mrb_parser_state *p;
+  const char *s;
+  size_t len;
+  mrb_ccontext *c;
+};
+
+static mrb_value
+parse_body(mrb_state *mrb, void *data)
+{
+  struct parse_args *a = (struct parse_args*)data;
+
+  a->p = (struct mrb_parser_state*)mrb_calloc(mrb, 1, sizeof(struct mrb_parser_state));
+  parser_init(a->p, mrb, a->c);
+  parse_into(a->p, a->s, a->len, a->c);
+  return mrb_nil_value();
+}
+
+static struct mrb_parser_state*
+parse_source(mrb_state *mrb, const char *s, size_t len, mrb_ccontext *c)
+{
+  struct parse_args a = { NULL, s, len, c };
+  struct mrb_parser_state *p;
+  mrb_bool failed;
+  mrb_value exc;
+
+  /* mrb_protect_error() rather than MRB_TRY, which is C++ where mruby is
+     built with C++ exceptions and this file is not. It takes the error out
+     of mrb->exc, and here is where it is left. */
+  exc = mrb_protect_error(mrb, parse_body, &a, &failed);
+  if (failed) {
+    mrb_parser_free(a.p);
+    mrb->exc = mrb_obj_ptr(exc);
+    return NULL;
+  }
+  p = a.p;
+
   if (c) {
     c->parser_nerr = p->nerr;
   }
@@ -206,6 +264,7 @@ parse_source(mrb_state *mrb, const char *s, size_t len, mrb_ccontext *c)
      through `quiet_errors`. */
   if (!c || !c->capture_errors) {
     const char *fn = (c && c->filename) ? c->filename : "(string)";
+    const mrc_ccontext *mc = (const mrc_ccontext*)p->ylval;
     const mrc_diagnostic_list *d;
     for (d = mc->diagnostic_list; d; d = d->next) {
       if (d->code == MRC_PARSER_ERROR && d->message) {
@@ -361,6 +420,13 @@ mrb_parser_parse(struct mrb_parser_state *p, mrb_ccontext *c)
   if (!p || !p->s || p->tree || p->nerr) return;
   len = (size_t)(p->send - p->s);
   parsed = parse_source(p->mrb, p->s, len, c);
+  if (!parsed) {
+    /* Out of memory: mrb->exc holds the NoMemoryError. p->s is still the
+       caller's buffer, which mrb_parser_free() must not free. */
+    p->s = p->send = NULL;
+    p->nerr++;
+    return;
+  }
   p->tree = parsed->tree;
   p->ylval = parsed->ylval;
   p->nerr = parsed->nerr;
@@ -450,38 +516,76 @@ report_roundtrip_error(mrc_ccontext *mc, const char *message)
 #endif
 }
 
-MRB_API struct RProc*
-mrb_generate_code(mrb_state *mrb, struct mrb_parser_state *p)
-{
+/* What the dump and reload below hold on the way, where a raise can find it. */
+struct roundtrip {
   mrc_ccontext *mc;
   mrc_irep *irep;
+  uint8_t *bin;
   mrb_irep *mir;
-  struct RProc *proc;
-  uint8_t *bin = NULL;
+};
+
+static mrb_value
+roundtrip(mrb_state *mrb, void *data)
+{
+  struct roundtrip *rt = (struct roundtrip*)data;
+  mrc_ccontext *mc = rt->mc;
   size_t bin_size = 0;
+  struct RProc *proc;
   /* Always carry debug info across the dump/reload that turns the mrc_irep
      into an mrb_irep: without it runtime backtraces lose the file name and
      line number, and mruby reports those even when compiled without -g. */
   uint8_t flags = MRC_DUMP_DEBUG_INFO;
 
-  if (!p || !p->tree || p->nerr) return NULL;
-  mc = (mrc_ccontext*)p->ylval;
-  irep = (mrc_irep*)p->tree;
-  if (mrc_dump_irep(mc, irep, flags, &bin, &bin_size) != MRC_DUMP_OK) {
+  if (mrc_dump_irep(mc, rt->irep, flags, &rt->bin, &bin_size) != MRC_DUMP_OK) {
     report_roundtrip_error(mc, "irep dump error");
-    return NULL;
+    return mrb_nil_value();
   }
-  mir = mrb_read_irep_buf(mrb, bin, bin_size);
-  mrc_free(mc, bin);
-  if (!mir) {
+  rt->mir = mrb_read_irep_buf(mrb, rt->bin, bin_size);
+  mrc_free(mc, rt->bin);
+  rt->bin = NULL;
+  if (!rt->mir) {
     report_roundtrip_error(mc, "irep load error");
+    return mrb_nil_value();
+  }
+  proc = mrb_proc_new(mrb, rt->mir);
+  mrb_irep_decref(mrb, rt->mir);
+  rt->mir = NULL;
+  return mrb_obj_value(proc);
+}
+
+/* Every step of the dump and reload allocates, and each raises when it
+   fails, which a load called from C has nothing to catch: the process
+   aborted. Caught here, through mrb_protect_error() as parse_source() does,
+   what was taken is given back and the error is left in mrb->exc, as
+   parse_source() leaves one, with NULL for the answer. It is not passed on
+   even where a handler waits: every caller frees the parser state once this
+   returns, and a raise past them lost it. */
+MRB_API struct RProc*
+mrb_generate_code(mrb_state *mrb, struct mrb_parser_state *p)
+{
+  struct roundtrip rt;
+  struct RProc *proc;
+  mrb_bool failed;
+  mrb_value result;
+
+  if (!p || !p->tree || p->nerr) return NULL;
+  rt.mc = (mrc_ccontext*)p->ylval;
+  rt.irep = (mrc_irep*)p->tree;
+  rt.bin = NULL;
+  rt.mir = NULL;
+
+  result = mrb_protect_error(mrb, roundtrip, &rt, &failed);
+  if (failed) {
+    mrc_free(rt.mc, rt.bin);
+    if (rt.mir) mrb_irep_decref(mrb, rt.mir);
+    mrb->exc = mrb_obj_ptr(result);
     return NULL;
   }
-  proc = mrb_proc_new(mrb, mir);
-  mrb_irep_decref(mrb, mir);
+  if (mrb_nil_p(result)) return NULL;
+  proc = mrb_proc_ptr(result);
   proc->c = NULL;
   proc->upper = p->upper;
-  mrc_irep_free(mc, irep);
+  mrc_irep_free(rt.mc, rt.irep);
   p->tree = NULL;
   return proc;
 }
