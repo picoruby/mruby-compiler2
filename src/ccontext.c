@@ -9,6 +9,7 @@
    it unconditionally for the mruby target, so it must exist regardless of
    MRC_ALLOC_LIBC even though only the non-libc allocator dereferences it. */
 #include <stddef.h>
+#include <mruby/error.h>
 
 mrb_state *global_mrb = NULL;
 
@@ -145,6 +146,27 @@ arena_close(mrc_ccontext *c)
 #endif
 #endif
 
+static void
+ccontext_init(mrc_ccontext *c)
+{
+  c->p = (mrc_parser_state *)mrc_calloc(c, 1, sizeof(mrc_parser_state));
+#if defined(MRC_TARGET_MRUBY) && defined(MRC_PRISM_ARENA)
+  /* Before Prism is asked for anything on this context's behalf, so that
+     every pointer its allocator sees for this context is arena memory. */
+  arena_open(c);
+#endif
+}
+
+#if defined(MRC_TARGET_MRUBY)
+static mrb_value
+ccontext_init_body(mrb_state *mrb, void *c)
+{
+  (void)mrb;
+  ccontext_init((mrc_ccontext *)c);
+  return mrb_nil_value();
+}
+#endif
+
 MRC_API mrc_ccontext *
 mrc_ccontext_new(mrb_state *mrb)
 {
@@ -154,13 +176,33 @@ mrc_ccontext_new(mrb_state *mrb)
 #endif
   temp_c.mrb = mrb;
   mrc_ccontext *c = (mrc_ccontext *)mrc_calloc((&temp_c), 1, sizeof(mrc_ccontext));
-  c->p = (mrc_parser_state *)mrc_calloc((&temp_c), 1, sizeof(mrc_parser_state));
   c->mrb = temp_c.mrb;
-#if defined(MRC_TARGET_MRUBY) && defined(MRC_PRISM_ARENA)
-  /* Before Prism is asked for anything on this context's behalf, so that
-     every pointer its allocator sees for this context is arena memory. */
-  arena_open(c);
+#if defined(MRC_TARGET_MRUBY)
+  if (mrb && mrb->jmp) {
+    /* The allocations after the first raise NoMemoryError when they fail:
+       give back what was taken before passing the error on, or c is lost.
+       Caught through mrb_protect_error() rather than MRB_TRY, which is C++
+       where mruby is built with C++ exceptions and this file is not. */
+    mrb_bool failed;
+    mrb_value exc;
+#if defined(MRC_PRISM_ARENA)
+    /* arena_open() leaves the current arena unset if its block cannot be had */
+    struct mrc_prism_arena_block *prev_arena = mrc_prism_arena;
 #endif
+
+    exc = mrb_protect_error(mrb, ccontext_init_body, c, &failed);
+    if (failed) {
+#if defined(MRC_PRISM_ARENA)
+      mrc_prism_arena = prev_arena;
+#endif
+      if (c->p) mrc_free(c, c->p);
+      mrc_free(c, c);
+      mrb_exc_raise(mrb, exc);
+    }
+    return c;
+  }
+#endif
+  ccontext_init(c);
   return c;
 }
 
