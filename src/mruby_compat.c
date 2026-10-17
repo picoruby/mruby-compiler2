@@ -759,7 +759,7 @@ mrb_decode_insn(const mrb_code *pc)
   if (pc == 0) return data;
   data.addr = pc;
   mrb_code insn = READ_B();
-  uint16_t a = 0;
+  uint32_t a = 0;
   uint16_t b = 0;
   uint16_t c = 0;
 
@@ -800,6 +800,7 @@ mrb_decode_insn(const mrb_code *pc)
   data.a = a;
   data.b = b;
   data.c = c;
+  data.next = pc;
   return data;
 }
 
