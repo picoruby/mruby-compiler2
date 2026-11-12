@@ -4131,6 +4131,9 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id
       if (nint(parameters->requireds.nodes[i]) == PM_MULTI_TARGET_NODE) {
         CAST3(multi_target, parameters->requireds.nodes[i], m);
         for (size_t j = 0; j < m->lefts.size; j++) {
+          /* a nested pattern or a splat has no name of its own; the names
+             inside it come in with Prism's locals below */
+          if (nint(m->lefts.nodes[j]) != PM_REQUIRED_PARAMETER_NODE) continue;
           mrc_constant_id_list_append(s, lv, ((pm_required_parameter_node_t *)m->lefts.nodes[j])->name);
         }
       }
@@ -4139,6 +4142,9 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id
       if (nint(parameters->posts.nodes[i]) == PM_MULTI_TARGET_NODE) {
         CAST3(multi_target, parameters->posts.nodes[i], m);
         for (size_t j = 0; j < m->lefts.size; j++) {
+          /* a nested pattern or a splat has no name of its own; the names
+             inside it come in with Prism's locals below */
+          if (nint(m->lefts.nodes[j]) != PM_REQUIRED_PARAMETER_NODE) continue;
           mrc_constant_id_list_append(s, lv, ((pm_required_parameter_node_t *)m->lefts.nodes[j])->name);
         }
       }
@@ -4304,6 +4310,11 @@ lambda_body(mrc_codegen_scope *s, mrc_node *tree, mrc_node *body, pm_constant_id
     }
   }
 
+  if (blk) {
+    /* `redo` restarts the body, not OP_ENTER: entering twice would take the
+       already rearranged registers for the arguments again */
+    s->loop->pc1 = new_label(s);
+  }
   codegen(s, body, VAL);
   pop();
   if (s->pc > 0) {
@@ -6555,11 +6566,36 @@ codegen(mrc_codegen_scope *s, mrc_node *tree, int val)
     }
     case PM_MATCH_WRITE_NODE:
     {
-      /* `regexp =~ string` whose regexp has named captures. mruby does not
-         bind the named captures to local variables (the bison compiler does
-         not either), so just emit the underlying =~ call and run the match. */
+      /* `/(?<name>..)/ =~ string`: each name is a local, bound to
+         `$~[:name]` when the match leaves a `$~` and to nil when it does
+         not, as CRuby decides it: on `$~`, not on what `=~` answers. */
       CAST(match_write);
-      codegen(s, (mrc_node *)cast->call, val);
+      codegen(s, (mrc_node *)cast->call, VAL);
+      int md = cursp();
+      genop_2(s, OP_GETGV, md, new_sym(s, MRC_SYM_2(last_match)));
+      push();
+      uint32_t nomatch = genjmp2_0(s, OP_JMPNIL, md, VAL);
+      for (size_t i = 0; i < cast->targets.size; i++) {
+        pm_local_variable_target_node_t *var = (pm_local_variable_target_node_t *)cast->targets.nodes[i];
+        genop_2(s, OP_MOVE, cursp(), md);
+        push();
+        genop_2(s, OP_LOADSYM, cursp(), new_sym(s, var->name));
+        push();
+        push(); pop();          /* space for a block */
+        pop_n(2);
+        genop_3(s, OP_SEND, cursp(), new_sym(s, MRC_OPSYM_2(aref)), 1);
+        gen_pattern_bind(s, var, cursp());
+      }
+      uint32_t done = genjmp(s, OP_JMP, JMPLINK_START);
+      dispatch(s, nomatch);
+      for (size_t i = 0; i < cast->targets.size; i++) {
+        pm_local_variable_target_node_t *var = (pm_local_variable_target_node_t *)cast->targets.nodes[i];
+        genop_1(s, OP_LOADNIL, cursp());
+        gen_pattern_bind(s, var, cursp());
+      }
+      dispatch(s, done);
+      pop();                    /* $~ */
+      if (!val) pop();
       break;
     }
     case PM_MATCH_PREDICATE_NODE:
